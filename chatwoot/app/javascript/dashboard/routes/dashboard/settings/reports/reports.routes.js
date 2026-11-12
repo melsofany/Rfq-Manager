@@ -1,0 +1,179 @@
+import { INSTALLATION_TYPES } from 'dashboard/constants/installationTypes';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { frontendURL } from '../../../../helper/URLHelper';
+
+import ReportsWrapper from './components/ReportsWrapper.vue';
+import Index from './Index.vue';
+
+import AgentReportsIndex from './AgentReportsIndex.vue';
+import InboxReportsIndex from './InboxReportsIndex.vue';
+import LabelReportsIndex from './LabelReportsIndex.vue';
+import TeamReportsIndex from './TeamReportsIndex.vue';
+
+import AgentReportsShow from './AgentReportsShow.vue';
+import InboxReportsShow from './InboxReportsShow.vue';
+import LabelReportsShow from './LabelReportsShow.vue';
+import TeamReportsShow from './TeamReportsShow.vue';
+
+import AgentReports from './AgentReports.vue';
+import InboxReports from './InboxReports.vue';
+import LabelReports from './LabelReports.vue';
+import TeamReports from './TeamReports.vue';
+
+import BotReports from './BotReports.vue';
+import CsatResponses from './CsatResponses.vue';
+import LiveReports from './LiveReports.vue';
+import MonitorShow from './monitors/MonitorShow.vue';
+import MonitorsIndex from './monitors/MonitorsIndex.vue';
+import SLAReports from './SLAReports.vue';
+
+const meta = {
+  featureFlag: FEATURE_FLAGS.REPORTS,
+  permissions: ['administrator', 'report_manage'],
+};
+
+const monitorsMeta = {
+  ...meta,
+  featureFlag: FEATURE_FLAGS.CONVERSATION_MONITORS,
+  installationTypes: [INSTALLATION_TYPES.ENTERPRISE, INSTALLATION_TYPES.CLOUD],
+};
+
+const oldReportRoutes = [
+  {
+    path: 'agent',
+    name: 'agent_reports',
+    meta,
+    component: AgentReports,
+  },
+  {
+    path: 'inboxes',
+    name: 'inbox_reports',
+    meta,
+    component: InboxReports,
+  },
+  {
+    path: 'label',
+    name: 'label_reports',
+    meta,
+    component: LabelReports,
+  },
+  {
+    path: 'teams',
+    name: 'team_reports',
+    meta,
+    component: TeamReports,
+  },
+];
+
+const revisedReportRoutes = [
+  {
+    path: 'agents_overview',
+    name: 'agent_reports_index',
+    meta,
+    component: AgentReportsIndex,
+  },
+  {
+    path: 'agents/:id',
+    name: 'agent_reports_show',
+    meta,
+    component: AgentReportsShow,
+  },
+
+  {
+    path: 'inboxes_overview',
+    name: 'inbox_reports_index',
+    meta,
+    component: InboxReportsIndex,
+  },
+  {
+    path: 'inboxes/:id',
+    name: 'inbox_reports_show',
+    meta,
+    component: InboxReportsShow,
+  },
+  {
+    path: 'teams_overview',
+    name: 'team_reports_index',
+    meta,
+    component: TeamReportsIndex,
+  },
+  {
+    path: 'teams/:id',
+    name: 'team_reports_show',
+    meta,
+    component: TeamReportsShow,
+  },
+  {
+    path: 'labels_overview',
+    name: 'label_reports_index',
+    meta,
+    component: LabelReportsIndex,
+  },
+  {
+    path: 'labels/:id',
+    name: 'label_reports_show',
+    meta,
+    component: LabelReportsShow,
+  },
+];
+
+export default {
+  routes: [
+    {
+      path: frontendURL('accounts/:accountId/reports/monitors'),
+      name: 'monitor_reports_index',
+      meta: monitorsMeta,
+      component: MonitorsIndex,
+    },
+    {
+      path: frontendURL('accounts/:accountId/reports'),
+      component: ReportsWrapper,
+      children: [
+        {
+          path: 'monitors/:monitorId',
+          name: 'monitor_reports_show',
+          meta: monitorsMeta,
+          component: MonitorShow,
+        },
+        {
+          path: '',
+          redirect: to => {
+            return { name: 'account_overview_reports', params: to.params };
+          },
+        },
+        {
+          path: 'overview',
+          name: 'account_overview_reports',
+          meta,
+          component: LiveReports,
+        },
+        {
+          path: 'conversation',
+          name: 'conversation_reports',
+          meta,
+          component: Index,
+        },
+        ...oldReportRoutes,
+        ...revisedReportRoutes,
+        {
+          path: 'sla',
+          name: 'sla_reports',
+          meta,
+          component: SLAReports,
+        },
+        {
+          path: 'csat',
+          name: 'csat_reports',
+          meta,
+          component: CsatResponses,
+        },
+        {
+          path: 'bot',
+          name: 'bot_reports',
+          meta,
+          component: BotReports,
+        },
+      ],
+    },
+  ],
+};

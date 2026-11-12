@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "Nuk është në dispozicion",
+    "EMAIL_ADDRESS": "Email Address",
+    "PHONE_NUMBER": "Numri i telefonit",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Identifikuesi",
+    "COPY_SUCCESSFUL": "Kopjuar në kujtesën e përkohshme me sukses",
+    "COMPANY": "Kompania",
+    "LOCATION": "Vendndodhja",
+    "BROWSER_LANGUAGE": "Gjuha e shfletuesit",
+    "CONVERSATION_TITLE": "Detajet e Bisedës",
+    "VIEW_PROFILE": "Shiko Profilin",
+    "BROWSER": "Shfletuesi",
+    "OS": "Sistemi Operativ",
+    "INITIATED_FROM": "Initiated from",
+    "INITIATED_AT": "Initiated at",
+    "IP_ADDRESS": "Adresa IP",
+    "CREATED_AT_LABEL": "Krijuar",
+    "NEW_MESSAGE": "Mesazh i ri",
+    "CALL": "Telefono",
+    "CALL_INITIATED": "Duke thirrur kontaktin…",
+    "CALL_FAILED": "Nuk mund të fillohet thirrja. Ju lutemi provoni përsëri.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Zgjidhni një inbox të zërit"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "Nuk ka biseda të mëparshme të lidhura me këtë kontakt.",
+      "TITLE": "Bisedat e Mëparshme",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Etiketat e kontaktit",
+        "ERROR": "Couldn't update labels"
+      },
+      "CONVERSATION": {
+        "TITLE": "Etiketat e bisedës",
+        "ADD_BUTTON": "Shto Etiketa"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "Shto Etiketa",
+        "PLACEHOLDER": "Kërko etiketa",
+        "NO_RESULT": "Nuk u gjetën etiketa",
+        "CREATE_LABEL": "Krijo etiketë të re"
+      }
+    },
+    "MERGE_CONTACT": "Bashko kontaktin",
+    "CONTACT_ACTIONS": "Veprimet e kontaktit",
+    "MUTE_CONTACT": "Blloko Kontaktin",
+    "UNMUTE_CONTACT": "Zhblloko Kontaktin",
+    "MUTED_SUCCESS": "Ky kontakt është bllokuar me sukses. Nuk do të njoftoheni për bisedat e ardhshme.",
+    "UNMUTED_SUCCESS": "Ky kontakt është zhbllokuar me sukses.",
+    "SEND_TRANSCRIPT": "Send Transcript",
+    "EDIT_LABEL": "Ndrysho",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "Atribute të personalizuara",
+      "CONTACT_LABELS": "Etiketat e kontaktit",
+      "PREVIOUS_CONVERSATIONS": "Bisedat e mëparshme",
+      "NO_RECORDS_FOUND": "Nuk u gjetën atribute"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "Ndrysho Kontaktin",
+    "TITLE": "Ndrysho kontaktin",
+    "DESC": "Ndrysho detajet e kontaktit"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "Fshi Kontaktin",
+    "TITLE": "Fshi kontaktin",
+    "DESC": "Fshi detajet e kontaktit",
+    "CONFIRM": {
+      "TITLE": "Konfirmo fshirjen",
+      "MESSAGE": "A jeni i sigurt që dëshironi ta fshini ",
+      "YES": "Po, Fshi",
+      "NO": "Jo, Ruaj"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Kontakti u fshi me sukses",
+      "ERROR_MESSAGE": "Nuk mund të fshihet kontakti. Ju lutemi provoni përsëri më vonë."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "Dërgo",
+      "CANCEL": "Anulo",
+      "AVATAR": {
+        "LABEL": "Contact Avatar"
+      },
+      "NAME": {
+        "PLACEHOLDER": "Shkruaj emrin e plotë të kontaktit",
+        "LABEL": "Emri i plotë"
+      },
+      "BIO": {
+        "PLACEHOLDER": "Shkruaj biografinë e kontaktit",
+        "LABEL": "Biografi"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "Enter the email address of the contact",
+        "LABEL": "Email Address",
+        "DUPLICATE": "This email address is in use for another contact.",
+        "ERROR": "Please enter a valid email address."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "Shkruani numrin e telefonit të kontaktit",
+        "LABEL": "Numri i Telefonit",
+        "HELP": "Numri i telefonit duhet të jetë në formatin E.164 p.sh: +1415555555 [+][kodi i vendit][kodi i zonës][numri lokal i telefonit]. Mund të zgjidhni kodin e thirrjes nga lista rënëse.",
+        "ERROR": "Numri i telefonit duhet të jetë bosh ose në formatin E.164",
+        "DIAL_CODE_ERROR": "Ju lutemi zgjidhni një kod thirrjeje nga lista",
+        "DUPLICATE": "Ky numër telefoni përdoret për një kontakt tjetër."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "Shkruani vendndodhjen e kontaktit",
+        "LABEL": "Vendndodhja"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "Shkruani emrin e kompanisë",
+        "LABEL": "Emri i Kompanisë"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Shkruani emrin e vendit",
+        "LABEL": "Emri i vendit",
+        "SELECT_PLACEHOLDER": "Zgjidh",
+        "REMOVE": "Hiq",
+        "SELECT_COUNTRY": "Zgjidh vendin"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Shkruani emrin e qytetit",
+        "LABEL": "Emri i qytetit"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Enter the Facebook username",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Enter the Twitter username",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Enter the LinkedIn username",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Enter the Github username",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Contact avatar deleted successfully",
+        "ERROR_MESSAGE": "Nuk mund të fshihej fotoja e kontaktit. Ju lutemi provoni përsëri më vonë."
+      }
+    },
+    "SUCCESS_MESSAGE": "Kontakti u ruajt me sukses",
+    "ERROR_MESSAGE": "Ndodhi një gabim, ju lutemi provoni përsëri"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "Filloni bisedën",
+    "TITLE": "Bisedë e re",
+    "DESC": "Filloni një bisedë të re duke dërguar një mesazh të ri.",
+    "NO_INBOX": "Nuk u gjet asnjë kutia postare për të nisur një bisedë të re me këtë kontakt.",
+    "FORM": {
+      "TO": {
+        "LABEL": "Drejtuar"
+      },
+      "INBOX": {
+        "LABEL": "Via Inbox",
+        "PLACEHOLDER": "Zgjidhni kutinë hyrëse të burimit",
+        "ERROR": "Zgjidhni një postë hyrëse"
+      },
+      "SUBJECT": {
+        "LABEL": "Subjekti",
+        "PLACEHOLDER": "Subjekti",
+        "ERROR": "Subjekti nuk mund të jetë bosh"
+      },
+      "MESSAGE": {
+        "LABEL": "Mesazh",
+        "PLACEHOLDER": "Shkruani mesazhin tuaj këtu",
+        "ERROR": "Mesazhi nuk mund të jetë bosh"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Zgjidh skedarët",
+        "HELP_TEXT": "Tërhiq dhe lësho skedarë këtu ose zgjidh skedarë për t’i bashkangjitur"
+      },
+      "SUBMIT": "Dërgo mesazh",
+      "CANCEL": "Anulo",
+      "SUCCESS_MESSAGE": "Mesazhi u dërgua!",
+      "GO_TO_CONVERSATION": "Shiko",
+      "ERROR_MESSAGE": "Nuk u mund të dërgohet! provo përsëri"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "Profile Sociale"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Shto atribut të personalizuar",
+    "COPY_SUCCESSFUL": "U kopjua me sukses në kujtesën e përkohshme",
+    "SHOW_MORE": "Trego të gjitha atributet",
+    "SHOW_LESS": "Trego më pak atribute",
+    "ACTIONS": {
+      "COPY": "Kopjo atributin",
+      "DELETE": "Fshi atributin",
+      "EDIT": "Ndrysho atributin"
+    },
+    "ADD": {
+      "TITLE": "Krijo atribut të personalizuar",
+      "DESC": "Shto informacion shtesë për këtë kontakt."
+    },
+    "FORM": {
+      "CREATE": "Shto atribut",
+      "CANCEL": "Anulo",
+      "NAME": {
+        "LABEL": "Emri i atributit të personalizuar",
+        "PLACEHOLDER": "Shembull: shopify id",
+        "ERROR": "Emri i atributit të personalizuar është i pavlefshëm"
+      },
+      "VALUE": {
+        "LABEL": "Vlera e atributit",
+        "PLACEHOLDER": "Eg: 11901 "
+      },
+      "ADD": {
+        "TITLE": "Krijo atribut të ri ",
+        "SUCCESS": "Atributi u shtua me sukses",
+        "ERROR": "Nuk mund të shtohet atributi. Ju lutemi provoni përsëri më vonë"
+      },
+      "UPDATE": {
+        "SUCCESS": "Atributi u përditësua me sukses",
+        "ERROR": "Nuk mund të përditësohet atributi. Ju lutemi provoni përsëri më vonë"
+      },
+      "DELETE": {
+        "SUCCESS": "Atributi u fshi me sukses",
+        "ERROR": "Nuk mund të fshihet atributi. Ju lutemi provoni përsëri më vonë"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Shto atribute",
+        "PLACEHOLDER": "Kërko atribute",
+        "NO_RESULT": "Nuk u gjetën atribute"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Zgjidh vlerën",
+          "SEARCH_INPUT_PLACEHOLDER": "Kërko vlerën",
+          "NO_RESULT": "Nuk u gjet asnjë rezultat"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Kërkohet një vlerë e vlefshme",
+      "INVALID_URL": "URL e pavlefshme",
+      "INVALID_INPUT": "Hyrje e pavlefshme"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Bashko kontaktet",
+    "DESCRIPTION": "Bashkoni kontaktet për të kombinuar dy profile në një, duke përfshirë të gjitha atributet dhe bisedat. Në rast konflikti, atributet e kontaktit kryesor do të kenë përparësi.",
+    "PRIMARY": {
+      "TITLE": "Kontakti kryesor",
+      "HELP_LABEL": "Për t'u fshirë"
+    },
+    "PARENT": {
+      "TITLE": "Kontakti për t'u bashkuar",
+      "PLACEHOLDER": "Kërko për një kontakt",
+      "HELP_LABEL": "Të mbahet"
+    },
+    "SUMMARY": {
+      "TITLE": "Përmbledhje",
+      "DELETE_WARNING": "Kontakti i <strong>{primaryContactName}</strong> do të fshihet.",
+      "ATTRIBUTE_WARNING": "Detajet e kontaktit të <strong>{primaryContactName}</strong> do të kopjohen tek <strong>{parentContactName}</strong>."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "Diçka shkoi keq. Ju lutemi provoni përsëri më vonë."
+    },
+    "FORM": {
+      "SUBMIT": " Bashko kontaktet",
+      "CANCEL": "Anulo",
+      "CHILD_CONTACT": {
+        "ERROR": "Zgjidhni një kontakt fëmijë për t'u bashkuar"
+      },
+      "SUCCESS_MESSAGE": "Kontakti u bashkua me sukses",
+      "ERROR_MESSAGE": "Nuk mund të bashkohen kontaktet, provo përsëri!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "Kontaktet",
+      "SEARCH_TITLE": "Kërko kontakte",
+      "ACTIVE_TITLE": "Kontaktet aktive",
+      "SEARCH_PLACEHOLDER": "Kërko...",
+      "MESSAGE_BUTTON": "Mesazh",
+      "SEND_MESSAGE": "Dërgo mesazh",
+      "BLOCK_CONTACT": "Blloko kontaktin",
+      "UNBLOCK_CONTACT": "Zhblloko kontaktin",
+      "BREADCRUMB": {
+        "CONTACTS": "Kontakte"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Shto kontakt",
+          "EXPORT_CONTACT": "Eksporto kontaktet",
+          "IMPORT_CONTACT": "Importo kontaktet",
+          "SAVE_CONTACT": "Ruaj kontaktin",
+          "EMAIL_ADDRESS_DUPLICATE": "Kjo adresë email është përdorur për një kontakt tjetër.",
+          "PHONE_NUMBER_DUPLICATE": "Ky numër telefoni është përdorur për një kontakt tjetër.",
+          "SUCCESS_MESSAGE": "Kontakti u ruajt me sukses",
+          "ERROR_MESSAGE": "Nuk mund të ruhet kontakti. Ju lutemi provoni përsëri më vonë."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "Ky kontakt është bllokuar me sukses",
+        "BLOCK_ERROR_MESSAGE": "Nuk mund të bllokohet kontakti. Ju lutemi provoni përsëri më vonë.",
+        "UNBLOCK_SUCCESS_MESSAGE": "Ky kontakt është zhbllokuar me sukses",
+        "UNBLOCK_ERROR_MESSAGE": "Nuk mund të zhbllokohet kontakti. Ju lutemi provoni përsëri më vonë.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Importo kontaktet",
+          "DESCRIPTION": "Importo kontaktet përmes një skedari CSV.",
+          "DOWNLOAD_LABEL": "Download a sample csv.",
+          "LABEL": "Skedari CSV:",
+          "CHOOSE_FILE": "Zgjidh skedarin",
+          "CHANGE": "Ndrysho",
+          "CANCEL": "Anulo",
+          "IMPORT": "Importo",
+          "SUCCESS_MESSAGE": "Do të njoftoheni me email kur importimi të përfundojë.",
+          "ERROR_MESSAGE": "Ndodhi një gabim, ju lutemi provoni përsëri"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "Eksporto kontaktet",
+          "DESCRIPTION": "Eksporto shpejt një skedar csv me detaje të plota të kontakteve tuaja",
+          "CONFIRM": "Eksporto",
+          "SUCCESS_MESSAGE": "Eksportimi është në proces. Do të njoftoheni me email kur skedari i eksportit të jetë gati për shkarkim.",
+          "ERROR_MESSAGE": "Ndodhi një gabim, ju lutemi provoni përsëri"
+        },
+        "SORT_BY": {
+          "LABEL": "Rendit sipas",
+          "OPTIONS": {
+            "NAME": "Emri",
+            "EMAIL": "Email",
+            "PHONE_NUMBER": "Numri i telefonit",
+            "COMPANY": "Kompania",
+            "COUNTRY": "Shteti",
+            "CITY": "Qyteti",
+            "LAST_ACTIVITY": "Aktiviteti i fundit",
+            "CREATED_AT": "Krijuar më"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Renditja",
+          "OPTIONS": {
+            "ASCENDING": "Në rritje",
+            "DESCENDING": "Në zbritje"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "Dëshironi të ruani këtë filtër?",
+            "CONFIRM": "Ruaj filtrin",
+            "LABEL": "Emri",
+            "PLACEHOLDER": "Shkruani emrin e filtrit",
+            "ERROR": "Shkruani një emër të vlefshëm",
+            "SUCCESS_MESSAGE": "Filtri u ruajt me sukses",
+            "ERROR_MESSAGE": "Nuk mund të ruhet filtri. Ju lutemi provoni përsëri më vonë."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "Konfirmo Fshirjen",
+            "DESCRIPTION": "Are you sure you want to delete this filter?",
+            "CONFIRM": "Po, Fshi",
+            "CANCEL": "Jo, Anulo",
+            "SUCCESS_MESSAGE": "Filtri u fshi me sukses",
+            "ERROR_MESSAGE": "Nuk mund të fshihet filtri. Ju lutemi provoni përsëri më vonë."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "Emri",
+      "EMAIL": "Email",
+      "PHONE_NUMBER": "Numri i telefonit",
+      "IDENTIFIER": "Identifikuesi",
+      "COUNTRY": "Shteti",
+      "CITY": "Qyteti",
+      "COMPANY": "Kompania",
+      "CREATED_AT": "Krijuar më",
+      "LAST_ACTIVITY": "Aktiviteti i fundit",
+      "REFERER_LINK": "Lidhja referuese",
+      "BLOCKED": "Bllokuar",
+      "BLOCKED_TRUE": "E vërtetë",
+      "BLOCKED_FALSE": "E pavërtetë",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "Pastro filtrat",
+        "UPDATE_SEGMENT": "Përditëso segmentin",
+        "APPLY_FILTERS": "Zbato filtrat",
+        "ADD_FILTER": "Shto filtër"
+      },
+      "TITLE": "Filtro kontaktet",
+      "EDIT_SEGMENT": "Ndrysho segmentin",
+      "SEGMENT": {
+        "LABEL": "Emri i segmentit",
+        "INPUT_PLACEHOLDER": "Shkruani emrin e segmentit"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} filtra të tjerë",
+        "CLEAR_FILTERS": "Pastro filtrat"
+      }
+    },
+    "CARD": {
+      "OF": "e",
+      "VIEW_DETAILS": "Shiko detajet",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "Ndrysho detajet e kontaktit",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Shkruaj emrin"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Shkruaj mbiemrin"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Enter the email address",
+            "DUPLICATE": "Kjo adresë email është në përdorim për një kontakt tjetër."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Futni numrin e telefonit",
+            "DUPLICATE": "Ky numër telefoni është në përdorim për një kontakt tjetër."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Futni emrin e qytetit"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Zgjidhni vendin"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Futni biografinë"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "Shkruani emrin e kompanisë"
+          }
+        },
+        "UPDATE_BUTTON": "Përditëso kontaktin",
+        "SUCCESS_MESSAGE": "Kontakti u përditësua me sukses",
+        "ERROR_MESSAGE": "Nuk mund të përditësohet kontakti. Ju lutemi provoni përsëri më vonë."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "Ndrysho lidhjet sociale",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Add Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Add Github"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Add Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Shto Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Add TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Add LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Add Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "Ky veprim është i përhershëm dhe i pakthyeshëm.",
+        "BUTTON": "Fshi tani"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Krijuar më {date}",
+      "LAST_ACTIVITY": "Aktiv i fundit {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Fshij përgjithmonë këtë kontakt. Kjo veprim është i pakthyeshëm",
+      "DELETE_CONTACT": "Fshi kontaktin",
+      "DELETE_DIALOG": {
+        "TITLE": "Konfirmo Fshirjen",
+        "DESCRIPTION": "A jeni i sigurt se doni ta fshini këtë kontakt?",
+        "CONFIRM": "Po, Fshi",
+        "API": {
+          "SUCCESS_MESSAGE": "Kontakti u fshi me sukses",
+          "ERROR_MESSAGE": "Nuk mund të fshihet kontakti. Ju lutemi provoni përsëri më vonë."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Nuk mund të ngarkohej fotoja. Ju lutemi provoni përsëri më vonë.",
+          "SUCCESS_MESSAGE": "Avatar uploaded successfully"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Avatar deleted successfully",
+          "ERROR_MESSAGE": "Nuk mund të fshihej fotoja. Ju lutemi provoni përsëri më vonë."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Karakteristika",
+        "HISTORY": "Historia",
+        "NOTES": "Shënime",
+        "MEDIA": "Media",
+        "MERGE": "Bashko"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "Nuk ka biseda të mëparshme të lidhura me këtë kontakt"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Kërko për atribute",
+        "UNUSED_ATTRIBUTES": "{count} atribut i përdorur | {count} atribute të papërdorura",
+        "EMPTY_STATE": "Nuk ka atribute të personalizuara kontakti në këtë llogari. Mund të krijoni një atribut të personalizuar në cilësime.",
+        "YES": "Po",
+        "NO": "Jo",
+        "TRIGGER": {
+          "SELECT": "Zgjidh vlerën",
+          "INPUT": "Fut vlerën"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Numër i pavlefshëm",
+          "REQUIRED": "Kërkohet një vlerë e vlefshme",
+          "INVALID_INPUT": "Hyrje e pavlefshme",
+          "INVALID_URL": "URL e pavlefshme",
+          "INVALID_DATE": "Datë e pavlefshme"
+        },
+        "NO_ATTRIBUTES": "Nuk u gjetën atribute",
+        "API": {
+          "SUCCESS_MESSAGE": "Atributi u përditësua me sukses",
+          "DELETE_SUCCESS_MESSAGE": "Atributi u fshi me sukses",
+          "UPDATE_ERROR": "Nuk mund të përditësohet atributi. Ju lutemi provoni përsëri më vonë",
+          "DELETE_ERROR": "Nuk mund të fshihet atributi. Ju lutemi provoni përsëri më vonë"
+        }
+      },
+      "MERGE": {
+        "TITLE": "Bashko kontaktin",
+        "DESCRIPTION": "Kombino dy profile në një, duke përfshirë të gjitha atributet dhe bisedat. Në rast konflikti, atributet e kontaktit kryesor do të kenë përparësi.",
+        "PRIMARY": "Kontakti kryesor",
+        "PRIMARY_HELP_LABEL": "Për t'u ruajtur",
+        "PRIMARY_REQUIRED_ERROR": "Ju lutemi zgjidhni një kontakt për t'u bashkuar para se të vazhdoni",
+        "PARENT": "Për t'u bashkuar",
+        "PARENT_HELP_LABEL": "Për t'u fshirë",
+        "EMPTY_STATE": "Nuk u gjetën kontakte",
+        "PLACEHOLDER": "Kërko për kontaktin kryesor",
+        "SEARCH_PLACEHOLDER": "Kërko për një kontakt",
+        "SEARCH_ERROR_MESSAGE": "Nuk u mund të kërkohen kontaktet. Ju lutemi provoni përsëri më vonë.",
+        "SUCCESS_MESSAGE": "Kontakti u bashkua me sukses",
+        "ERROR_MESSAGE": "Nuk u mund të bashkohen kontaktet, provoni përsëri!",
+        "IS_SEARCHING": "Duke kërkuar...",
+        "BUTTONS": {
+          "CANCEL": "Anulo",
+          "CONFIRM": "Bashko kontaktin"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Shto një shënim",
+        "WROTE": "shkroi",
+        "YOU": "Ju",
+        "SAVE": "Ruaj shënimin",
+        "ADD_NOTE": "Shto shënim kontakti",
+        "EXPAND": "Zgjero",
+        "COLLAPSE": "Palos",
+        "NO_NOTES": "Nuk ka shënime, mund të shtoni shënime nga faqja e detajeve të kontaktit.",
+        "EMPTY_STATE": "Nuk ka shënime të lidhura me këtë kontakt. Mund të shtoni një shënim duke shkruar në kutinë më sipër.",
+        "CONVERSATION_EMPTY_STATE": "Nuk ka ende shënime. Përdorni butonin Shto shënim për të krijuar një."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "Nuk u gjetën kontakte në këtë llogari",
+      "SUBTITLE": "Filloni të shtoni kontakte të reja duke klikuar butonin më poshtë",
+      "BUTTON_LABEL": "Shto kontakt",
+      "SEARCH_EMPTY_STATE_TITLE": "Asnjë kontakt nuk përputhet me kërkimin tuaj 🔍",
+      "LIST_EMPTY_STATE_TITLE": "Nuk ka kontakte të disponueshme në këtë pamje 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "Asnjë kontakt nuk është aktiv për momentin 🌙"
+    },
+    "LOAD_MORE": "Ngarko më shumë"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Cakto Etiketa",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Etiketat u caktuan me sukses.",
+    "ASSIGN_LABELS_FAILED": "Dështoi caktimi i etiketave",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Zgjidhni etiketat që dëshironi të shtoni te kontaktet e zgjedhura.",
+    "NO_LABELS_FOUND": "Nuk ka etiketa të disponueshme ende.",
+    "SELECTED_COUNT": "{count} i/e zgjedhur",
+    "CLEAR_SELECTION": "Pastro përzgjedhjen",
+    "SELECT_ALL": "Zgjidh të gjitha ({count})",
+    "DELETE_CONTACTS": "Fshi",
+    "DELETE_SUCCESS": "Kontaktet u fshinë me sukses.",
+    "DELETE_FAILED": "Dështoi fshirja e kontakteve.",
+    "DELETE_DIALOG": {
+      "TITLE": "Fshi kontaktet e zgjedhura",
+      "SINGULAR_TITLE": "Fshi kontaktin e zgjedhur",
+      "DESCRIPTION": "Kjo do të fshijë përgjithmonë {count} kontakte të zgjedhura. Kjo veprim nuk mund të zhbëhet.",
+      "SINGULAR_DESCRIPTION": "Kjo do të fshijë përgjithmonë kontaktin e zgjedhur. Kjo veprim nuk mund të zhbëhet.",
+      "CONFIRM_MULTIPLE": "Fshi kontaktet",
+      "CONFIRM_SINGLE": "Fshi kontaktin"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "Nuk mundëm të përfundojmë kërkimin. Ju lutemi provoni përsëri."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "Shiko",
+      "SUCCESS_MESSAGE": "Mesazhi u dërgua me sukses!",
+      "ERROR_MESSAGE": "Ndodhi një gabim gjatë krijimit të bisedës. Ju lutemi provoni përsëri më vonë.",
+      "NO_INBOX_ALERT": "Nuk ka kutitë hyrëse të disponueshme për të nisur një bisedë me këtë kontakt.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "Për:",
+        "TAG_INPUT_PLACEHOLDER": "Shkruaj të paktën 2 karaktere për të kërkuar me emër, email, ose numër telefoni",
+        "CONTACT_CREATING": "Duke krijuar kontakt..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Përmes:",
+        "BUTTON": "Trego kutitë hyrëse"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Subjekti :",
+        "SUBJECT_PLACEHOLDER": "Enter your email subject here",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Shkruaj të paktën 2 karaktere për të kërkuar me email",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Shkruani të paktën 2 karaktere për të kërkuar me email",
+        "BCC_BUTTON": "Bcc"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "Shkruani mesazhin tuaj këtu..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Zgjidhni modelin",
+        "SEARCH_PLACEHOLDER": "Kërkoni modele",
+        "EMPTY_STATE": "Nuk u gjetën modele",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "Shabllon për mesazhe: {templateName}",
+          "VARIABLES": "Variables",
+          "BACK": "Kthehu mbrapsht",
+          "SEND_MESSAGE": "Dërgo mesazh"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Zgjidhni modelin",
+        "SEARCH_PLACEHOLDER": "Kërko modele",
+        "EMPTY_STATE": "Nuk u gjetën modele",
+        "TEMPLATE_PARSER": {
+          "BACK": "Kthehu mbrapsht",
+          "SEND_MESSAGE": "Dërgo mesazh"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Hidh poshtë",
+        "SEND": "Dërgo ({keyCode})"
+      }
+    }
+  }
+}

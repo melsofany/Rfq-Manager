@@ -1,0 +1,362 @@
+<script setup>
+import { computed, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { useStore } from 'vuex';
+import { useI18n } from 'vue-i18n';
+import QRCode from 'qrcode';
+import EmptyState from '../../../../components/widgets/EmptyState.vue';
+import NextButton from 'dashboard/components-next/button/Button.vue';
+import DuplicateInboxBanner from './channels/instagram/DuplicateInboxBanner.vue';
+import EmailInboxFinish from './channels/emailChannels/EmailInboxFinish.vue';
+import WhatsappChannelAPI from 'dashboard/api/channel/whatsappChannel';
+import { useAlert } from 'dashboard/composables';
+import { useInbox } from 'dashboard/composables/useInbox';
+import { INBOX_TYPES } from 'dashboard/helper/inbox';
+
+const { t } = useI18n();
+const route = useRoute();
+const store = useStore();
+
+const qrCodes = reactive({
+  sms: '',
+  whatsapp: '',
+  messenger: '',
+  telegram: '',
+});
+const isRetryingWebhook = ref(false);
+
+const currentInbox = computed(() =>
+  store.getters['inboxes/getInbox'](route.params.inbox_id)
+);
+
+// Use useInbox composable with the inbox ID
+const {
+  isAWhatsAppCloudChannel,
+  isAWhatsAppChannel,
+  isASmsInbox,
+  isALineChannel,
+  isAnEmailChannel,
+  isAFacebookInbox,
+  isATelegramChannel,
+  isATwilioChannel,
+  isATwilioSMSChannel,
+} = useInbox(route.params.inbox_id);
+
+const hasDuplicateInstagramInbox = computed(() => {
+  const instagramId = currentInbox.value.instagram_id;
+  const facebookInbox =
+    store.getters['inboxes/getFacebookInboxByInstagramId'](instagramId);
+
+  return (
+    currentInbox.value.channel_type === INBOX_TYPES.INSTAGRAM && facebookInbox
+  );
+});
+
+const shouldShowWhatsAppWebhookDetails = computed(() => {
+  const source = currentInbox.value.provider_config?.source;
+  return isAWhatsAppCloudChannel.value && source !== 'embedded_signup';
+});
+
+const isWhatsAppManualSetup = computed(() => {
+  return (
+    isAWhatsAppCloudChannel.value &&
+    currentInbox.value.provider_config?.source === 'manual_setup_v2'
+  );
+});
+
+const whatsappPhoneNumber = computed(() => {
+  return (currentInbox.value?.phone_number || '').replace('whatsapp:', '');
+});
+
+const shouldShowWhatsAppQr = computed(() => {
+  return isAWhatsAppChannel.value && Boolean(whatsappPhoneNumber.value);
+});
+
+const shouldShowSmsQr = computed(() => {
+  return (
+    isATwilioSMSChannel.value &&
+    !currentInbox.value?.voice_enabled &&
+    Boolean(currentInbox.value?.phone_number)
+  );
+});
+
+const shouldShowTwilioCallbackFallback = computed(() => {
+  return isATwilioChannel.value && !currentInbox.value?.voice_enabled;
+});
+
+const shouldShowBandwidthCallback = computed(() => {
+  return isASmsInbox.value && !isATwilioChannel.value;
+});
+
+const message = computed(() => {
+  if (shouldShowWhatsAppWebhookDetails.value) {
+    return `${t('INBOX_MGMT.FINISH.MESSAGE')}. ${t(
+      'INBOX_MGMT.ADD.WHATSAPP.API_CALLBACK.SUBTITLE'
+    )}`;
+  }
+
+  if (isALineChannel.value) {
+    return `${t('INBOX_MGMT.FINISH.MESSAGE')}. ${t(
+      'INBOX_MGMT.ADD.LINE_CHANNEL.API_CALLBACK.SUBTITLE'
+    )}`;
+  }
+
+  if (currentInbox.value.web_widget_script) {
+    return t('INBOX_MGMT.FINISH.WEBSITE_SUCCESS');
+  }
+
+  return t('INBOX_MGMT.FINISH.MESSAGE');
+});
+
+async function generateQRCode(platform, identifier) {
+  if (!identifier || !identifier.trim()) {
+    // eslint-disable-next-line no-console
+    console.warn(`Invalid identifier for ${platform} QR code`);
+    return;
+  }
+
+  try {
+    const platformUrls = {
+      sms: id => `sms:${id}`,
+      whatsapp: id => `https://wa.me/${id}`,
+      messenger: id => `https://m.me/${id}`,
+      telegram: id => `https://t.me/${id}`,
+    };
+
+    const url = platformUrls[platform](identifier);
+    const qrDataUrl = await QRCode.toDataURL(url);
+    qrCodes[platform] = qrDataUrl;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`Error generating ${platform} QR code:`, error);
+    qrCodes[platform] = '';
+  }
+}
+
+async function generateQRCodes() {
+  if (!currentInbox.value) return;
+
+  // WhatsApp
+  if (shouldShowWhatsAppQr.value) {
+    await generateQRCode('whatsapp', whatsappPhoneNumber.value);
+  }
+
+  if (shouldShowSmsQr.value) {
+    await generateQRCode('sms', currentInbox.value.phone_number);
+  }
+
+  // Facebook Messenger
+  if (currentInbox.value.page_id && isAFacebookInbox.value) {
+    await generateQRCode('messenger', currentInbox.value.page_id);
+  }
+
+  // Telegram
+  if (isATelegramChannel.value && currentInbox.value.bot_name) {
+    await generateQRCode('telegram', currentInbox.value.bot_name);
+  }
+}
+
+async function retryWhatsAppWebhookSetup() {
+  isRetryingWebhook.value = true;
+  try {
+    await WhatsappChannelAPI.setupManualWebhook(route.params.inbox_id);
+    useAlert(t('INBOX_MGMT.ADD.WHATSAPP.MANUAL_SETUP.VERIFY.RETRY_SUCCESS'));
+  } catch (error) {
+    useAlert(
+      error.response?.data?.message ||
+        t('INBOX_MGMT.ADD.WHATSAPP.MANUAL_SETUP.VERIFY.RETRY_ERROR')
+    );
+  } finally {
+    isRetryingWebhook.value = false;
+  }
+}
+
+// Watch for currentInbox changes and regenerate QR codes when available
+watch(
+  currentInbox,
+  newInbox => {
+    if (newInbox) {
+      generateQRCodes();
+    }
+  },
+  { immediate: true }
+);
+</script>
+
+<template>
+  <div class="overflow-auto col-span-6 p-6 w-full h-full">
+    <DuplicateInboxBanner
+      v-if="hasDuplicateInstagramInbox"
+      :content="$t('INBOX_MGMT.ADD.INSTAGRAM.NEW_INBOX_SUGGESTION')"
+    />
+    <EmptyState
+      :title="$t('INBOX_MGMT.FINISH.TITLE')"
+      :message="isAnEmailChannel && !currentInbox.provider ? '' : message"
+      :button-text="$t('INBOX_MGMT.FINISH.BUTTON_TEXT')"
+    >
+      <div class="w-full text-center">
+        <div class="my-4 mx-auto max-w-[70%]">
+          <woot-code
+            v-if="currentInbox.web_widget_script"
+            :script="currentInbox.web_widget_script"
+          />
+        </div>
+        <div
+          v-if="shouldShowWhatsAppWebhookDetails"
+          class="w-[50%] max-w-[50%] ml-[25%]"
+        >
+          <p class="mt-8 font-medium text-n-slate-11">
+            {{ $t('INBOX_MGMT.ADD.WHATSAPP.API_CALLBACK.WEBHOOK_URL') }}
+          </p>
+          <woot-code lang="html" :script="currentInbox.callback_webhook_url" />
+          <p class="mt-8 font-medium text-n-slate-11">
+            {{
+              $t(
+                'INBOX_MGMT.ADD.WHATSAPP.API_CALLBACK.WEBHOOK_VERIFICATION_TOKEN'
+              )
+            }}
+          </p>
+          <woot-code
+            lang="html"
+            :script="currentInbox.provider_config.webhook_verify_token"
+          />
+          <NextButton
+            v-if="isWhatsAppManualSetup"
+            class="mt-4"
+            outline
+            slate
+            :is-loading="isRetryingWebhook"
+            :disabled="isRetryingWebhook"
+            :label="
+              $t('INBOX_MGMT.ADD.WHATSAPP.MANUAL_SETUP.ACTIONS.RETRY_WEBHOOK')
+            "
+            @click="retryWhatsAppWebhookSetup"
+          />
+        </div>
+        <div class="w-[50%] max-w-[50%] ml-[25%]">
+          <woot-code
+            v-if="isALineChannel"
+            lang="html"
+            :script="currentInbox.callback_webhook_url"
+          />
+        </div>
+        <div
+          v-if="shouldShowBandwidthCallback"
+          class="w-[50%] max-w-[50%] ml-[25%]"
+        >
+          <p class="mt-8 font-medium text-n-slate-11">
+            {{ $t('INBOX_MGMT.ADD.SMS.BANDWIDTH.API_CALLBACK.TITLE') }}
+          </p>
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.ADD.SMS.BANDWIDTH.API_CALLBACK.SUBTITLE') }}
+          </p>
+          <woot-code lang="html" :script="currentInbox.callback_webhook_url" />
+        </div>
+        <div
+          v-if="shouldShowTwilioCallbackFallback"
+          class="w-[50%] max-w-[50%] ml-[25%]"
+        >
+          <p class="mt-8 font-medium text-n-slate-11">
+            {{ $t('INBOX_MGMT.ADD.TWILIO.API_CALLBACK.TITLE') }}
+          </p>
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.FINISH.TWILIO_CALLBACK_FALLBACK') }}
+          </p>
+          <woot-code lang="html" :script="currentInbox.callback_webhook_url" />
+        </div>
+        <div
+          v-if="shouldShowSmsQr && qrCodes.sms"
+          class="flex flex-col gap-3 items-center mt-8"
+        >
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.FINISH.SMS_QR_INSTRUCTION') }}
+          </p>
+          <div class="rounded-lg shadow outline-1 outline-n-strong outline">
+            <img
+              :src="qrCodes.sms"
+              :alt="$t('INBOX_MGMT.FINISH.SMS_QR_ALT')"
+              class="rounded-lg size-48 dark:invert"
+            />
+          </div>
+        </div>
+        <EmailInboxFinish
+          v-if="isAnEmailChannel && !currentInbox.provider"
+          :inbox="currentInbox"
+          :inbox-id="$route.params.inbox_id"
+        />
+        <div
+          v-if="shouldShowWhatsAppQr && qrCodes.whatsapp"
+          class="flex flex-col gap-3 items-center mt-8"
+        >
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.FINISH.WHATSAPP_QR_INSTRUCTION') }}
+          </p>
+          <div class="rounded-lg shadow outline-1 outline-n-strong outline">
+            <img
+              :src="qrCodes.whatsapp"
+              alt="WhatsApp QR Code"
+              class="rounded-lg size-48 dark:invert"
+            />
+          </div>
+        </div>
+        <div
+          v-if="isAFacebookInbox && qrCodes.messenger"
+          class="flex flex-col gap-3 items-center mt-8"
+        >
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.FINISH.MESSENGER_QR_INSTRUCTION') }}
+          </p>
+          <div class="rounded-lg shadow outline-1 outline-n-strong outline">
+            <img
+              :src="qrCodes.messenger"
+              alt="Messenger QR Code"
+              class="rounded-lg size-48 dark:invert"
+            />
+          </div>
+        </div>
+        <div
+          v-if="isATelegramChannel && qrCodes.telegram"
+          class="flex flex-col gap-4 items-center mt-8"
+        >
+          <p class="mt-2 text-sm text-n-slate-9">
+            {{ $t('INBOX_MGMT.FINISH.TELEGRAM_QR_INSTRUCTION') }}
+          </p>
+
+          <div class="rounded-lg shadow outline-1 outline-n-strong outline">
+            <img
+              :src="qrCodes.telegram"
+              alt="Telegram QR Code"
+              class="rounded-lg size-48 dark:invert"
+            />
+          </div>
+        </div>
+        <div class="flex gap-2 justify-center mt-4">
+          <router-link
+            :to="{
+              name: 'settings_inbox_show',
+              params: { inboxId: $route.params.inbox_id },
+            }"
+          >
+            <NextButton
+              outline
+              slate
+              :label="$t('INBOX_MGMT.FINISH.MORE_SETTINGS')"
+            />
+          </router-link>
+          <router-link
+            :to="{
+              name: 'inbox_dashboard',
+              params: { inboxId: $route.params.inbox_id },
+            }"
+          >
+            <NextButton
+              solid
+              teal
+              :label="$t('INBOX_MGMT.FINISH.BUTTON_TEXT')"
+            />
+          </router-link>
+        </div>
+      </div>
+    </EmptyState>
+  </div>
+</template>

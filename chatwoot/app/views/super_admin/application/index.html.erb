@@ -1,0 +1,68 @@
+<%#
+# Index
+
+This view is the template for the index page.
+It is responsible for rendering the search bar, header and pagination.
+It renders the `_collection` partial to display details about the resources.
+
+## Local variables:
+
+- `page`:
+  An instance of [Administrate::Page::Collection][1].
+  Contains helper methods to help display a table,
+  and knows which attributes should be displayed in the resource's table.
+- `resources`:
+  An instance of `ActiveRecord::Relation` containing the resources
+  that match the user's search criteria.
+  By default, these resources are passed to the table partial to be displayed.
+- `search_term`:
+  A string containing the term the user has searched for, if any.
+- `show_search_bar`:
+  A boolean that determines if the search bar should be shown.
+
+[1]: http://www.rubydoc.info/gems/administrate/Administrate/Page/Collection
+%>
+
+<% content_for(:title) { display_resource_name(page.resource_name) } %>
+<%
+  current_filter = search_term.to_s[/\A(\w+):/, 1]
+  search_text = search_term.to_s.delete_prefix("#{current_filter}:").strip
+%>
+
+<%= render "page_header",
+           title: content_for(:title),
+           description: pluralize(number_with_delimiter(resources.total_count), page.resource_name.humanize.downcase) do %>
+  <% if accessible_action?(new_resource, :new) %>
+    <%= render "button",
+               label: t("administrate.actions.new_resource", name: page.resource_name.titleize.downcase),
+               icon: "i-lucide-plus size-4",
+               url: [:new, namespace, page.resource_path.to_sym] %>
+  <% end %>
+<% end %>
+
+<% if show_search_bar %>
+  <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <%= render "search", search_term: search_text, current_filter: current_filter, resource_name: display_resource_name(page.resource_name) %>
+    <%= render "filters", page: page, search_term: search_text, current_filter: current_filter %>
+  </div>
+<% end %>
+
+<%= render(
+  "collection",
+  collection_presenter: page,
+  collection_field_name: resource_name,
+  page: page,
+  resources: resources
+) %>
+
+<div class="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+  <% if resources.any? %>
+    <p class="text-label-small tabular-nums text-n-slate-11">
+      <%= t("super_admin.collection.showing",
+            from: resources.offset_value + 1,
+            to: resources.offset_value + resources.length,
+            total: number_with_delimiter(resources.total_count)) %>
+    </p>
+  <% end %>
+  <%= render "pagination", resources: resources %>
+</div>

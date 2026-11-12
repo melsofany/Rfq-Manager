@@ -1,0 +1,110 @@
+class Public::Api::V1::Portals::ArticlesController < Public::Api::V1::Portals::BaseController
+  before_action :ensure_custom_domain_request, only: [:show, :index, :show_markdown]
+  before_action :portal
+  before_action :set_portal_layout
+  before_action :set_view_variant
+  before_action :ensure_portal_feature_enabled
+  before_action :set_category, except: [:index, :show, :tracking_pixel]
+  before_action :set_article, only: [:show, :show_markdown]
+  layout 'portal'
+
+  def index
+    @search_query = list_params[:query]
+    @articles = @portal.articles.published.includes(:category, :author)
+
+    @articles = @articles.where(locale: permitted_params[:locale]) if permitted_params[:locale].present?
+
+    @articles_count = @articles.count
+
+    search_articles
+    order_by_sort_param
+    limit_results
+  end
+
+  def show
+    set_locale_switch_urls
+    @og_image_url = helpers.set_og_image_url(@portal.name, @article.title)
+    @parsed_content = render_article_content(@article.content.to_s)
+  end
+
+  def show_markdown
+    return head :not_found unless @article&.published?
+
+    render plain: @article.content.to_s, content_type: 'text/markdown; charset=utf-8'
+  end
+
+  def tracking_pixel
+    @article = @portal.articles.find_by(slug: permitted_params[:article_slug])
+    return head :not_found unless @article
+
+    @article.increment_view_count if @article.published?
+
+    # Serve the 1x1 tracking pixel with 24-hour private cache
+    # Private cache bypasses CDN but allows browser caching to prevent duplicate views from same user
+    expires_in 24.hours, public: false
+    response.headers['Content-Type'] = 'image/png'
+
+    pixel_path = Rails.public_path.join('assets/images/tracking-pixel.png')
+    send_file pixel_path, type: 'image/png', disposition: 'inline'
+  end
+
+  private
+
+  def limit_results
+    return if list_params[:per_page].blank?
+
+    per_page = [list_params[:per_page].to_i, 100].min
+    per_page = 25 if per_page < 1
+    @articles = @articles.page(list_params[:page]).per(per_page)
+  end
+
+  def search_articles
+    @articles = @articles.search(list_params) if list_params.present?
+  end
+
+  def order_by_sort_param
+    @articles = if list_params[:sort].present? && list_params[:sort] == 'views'
+                  @articles.order_by_views
+                else
+                  @articles.order_by_position
+                end
+  end
+
+  def set_article
+    @article = @portal.articles.find_by!(slug: permitted_params[:article_slug])
+  end
+
+  def set_locale_switch_urls
+    articles = @article.translation_family.published.includes(:category)
+
+    @locale_switch_urls = articles.to_h do |article|
+      url = helpers.generate_article_link(@portal.slug, article.slug, @theme_from_params, @is_plain_layout_enabled)
+      [article.public_locale, url]
+    end
+  end
+
+  def set_category
+    return if permitted_params[:category_slug].blank?
+
+    @category = @portal.categories.find_by!(
+      slug: permitted_params[:category_slug],
+      locale: permitted_params[:locale]
+    )
+  end
+
+  def list_params
+    @list_params ||= params.permit(:query, :locale, :sort, :status, :page, :per_page).tap do |permitted|
+      permitted[:query] = permitted[:query].to_s.strip.presence
+    end
+  end
+
+  def permitted_params
+    params.permit(:slug, :category_slug, :locale, :id, :article_slug)
+  end
+
+  def render_article_content(content)
+    ChatwootMarkdownRenderer.new(content).render_article
+  end
+end
+
+Public::Api::V1::Portals::ArticlesController.prepend_mod_with('Public::Api::V1::Portals::ArticlesController')

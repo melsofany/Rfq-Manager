@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "Извличане на разговори",
+    "LOAD_MORE_CONVERSATIONS": "Зареди още разговори",
+    "EOF": "Всички разговори са заредени 🎉",
+    "LIST": {
+      "404": "Няма активни разговори в тази група."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "Разговори",
+    "MENTION_HEADING": "Споменавания",
+    "UNATTENDED_HEADING": "Unattended",
+    "SEARCH": {
+      "INPUT": "Търсене на хора, чатове, запазени отговори .."
+    },
+    "FILTER_ALL": "Всички",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "Мой",
+      "unassigned": "Неназначен",
+      "all": "Всички"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "Отворен"
+      },
+      "resolved": {
+        "TEXT": "Разрешен"
+      },
+      "pending": {
+        "TEXT": "Предстоящ"
+      },
+      "snoozed": {
+        "TEXT": "Отложен"
+      },
+      "all": {
+        "TEXT": "Всички"
+      }
+    },
+    "VIEW_FILTER": "View",
+    "SORT_TOOLTIP_LABEL": "Sort conversations",
+    "CHAT_SORT": {
+      "STATUS": "Статус",
+      "ORDER_BY": "Order by"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Създаден в:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Last activity:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Last activity: Oldest first"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Last activity: Newest first"
+      },
+      "created_at_desc": {
+        "TEXT": "Created at: Newest first"
+      },
+      "created_at_asc": {
+        "TEXT": "Created at: Oldest first"
+      },
+      "priority_desc": {
+        "TEXT": "Priority: Highest first"
+      },
+      "priority_asc": {
+        "TEXT": "Priority: Lowest first"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Pending Response: Longest first"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Pending Response: Shortest first"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "Съобщение със снимка"
+      },
+      "audio": {
+        "CONTENT": "Аудио съобщение"
+      },
+      "video": {
+        "CONTENT": "Видео съобщение"
+      },
+      "file": {
+        "CONTENT": "Прикачен файл"
+      },
+      "location": {
+        "CONTENT": "Локация"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "сподели линк"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Sort conversation",
+      "DROPDOWN_TITLE": "Sort by",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Last activity at",
+          "LABEL": "Last activity"
+        },
+        "CREATED_AT": {
+          "NAME": "Създаден в",
+          "LABEL": "Създаден в"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Last user message at",
+          "LABEL": "Last message"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "Получено чрез имейл",
+    "VIEW_TWEET_IN_TWITTER": "Виж туита в Twitter",
+    "REPLY_TO_TWEET": "Отговори на този туит",
+    "LINK_TO_STORY": "Go to instagram story",
+    "SENT": "Успено изпратено",
+    "READ": "Read successfully",
+    "DELIVERED": "Delivered successfully",
+    "NO_MESSAGES": "Няма съобщения",
+    "NO_CONTENT": "Няма налично съдържание",
+    "HIDE_QUOTED_TEXT": "Скриване на цитирания текст",
+    "SHOW_QUOTED_TEXT": "Показване на цитирания текст",
+    "MESSAGE_READ": "Read",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

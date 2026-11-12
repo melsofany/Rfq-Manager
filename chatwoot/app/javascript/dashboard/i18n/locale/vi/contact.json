@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "Không có sẵn",
+    "EMAIL_ADDRESS": "Địa chỉ email",
+    "PHONE_NUMBER": "Số điện thoại",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Định danh",
+    "COPY_SUCCESSFUL": "Đã sao chép mã thành công",
+    "COMPANY": "Công ty",
+    "LOCATION": "Vị trí",
+    "BROWSER_LANGUAGE": "Ngôn ngữ của Trình duyệt",
+    "CONVERSATION_TITLE": "Chi tiết của cuộc trò chuyện",
+    "VIEW_PROFILE": "Xem hồ sơ cá nhân",
+    "BROWSER": "Trình duyệt",
+    "OS": "Hệ điều hành",
+    "INITIATED_FROM": "Bắt đầu từ",
+    "INITIATED_AT": "Bắt đầu lúc",
+    "IP_ADDRESS": "Địa chỉ IP",
+    "CREATED_AT_LABEL": "Đã tạo",
+    "NEW_MESSAGE": "Tin nhắn mới",
+    "CALL": "Call",
+    "CALL_INITIATED": "Calling the contact…",
+    "CALL_FAILED": "Unable to start the call. Please try again.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Choose a voice inbox"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "Không có cuộc trò chuyện trước đó được liên kết với liên hệ này.",
+      "TITLE": "Cuộc trò chuyện trước đó",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Nhãn danh bạ",
+        "ERROR": "Không thể sửa nhãn"
+      },
+      "CONVERSATION": {
+        "TITLE": "Nhãn hội thoại",
+        "ADD_BUTTON": "Thêm nhãn"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "Thêm nhãn",
+        "PLACEHOLDER": "Tìm nhãn",
+        "NO_RESULT": "Không tìm thấy nhãn",
+        "CREATE_LABEL": "Tạo mới nhãn"
+      }
+    },
+    "MERGE_CONTACT": "Hợp nhất liên hệ",
+    "CONTACT_ACTIONS": "Hành động với liên hệ",
+    "MUTE_CONTACT": "Block Contact",
+    "UNMUTE_CONTACT": "Unblock Contact",
+    "MUTED_SUCCESS": "This contact is blocked successfully. You will not be notified of any future conversations.",
+    "UNMUTED_SUCCESS": "This contact is unblocked successfully.",
+    "SEND_TRANSCRIPT": "Gửi bản ghi",
+    "EDIT_LABEL": "Chỉnh sửa",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "Thuộc tính tùy chỉnh",
+      "CONTACT_LABELS": "Nhãn danh bạ",
+      "PREVIOUS_CONVERSATIONS": "Cuộc trò chuyện trước đó",
+      "NO_RECORDS_FOUND": "Không có thuộc tính nào được tìm thấy"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "Chỉnh sửa liên hệ",
+    "TITLE": "Chỉnh sửa liên hệ",
+    "DESC": "Chỉnh sửa liên hệ chi tiết"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "Xoá liên lạc",
+    "TITLE": "Xoá liên hệ",
+    "DESC": "Xoá chi tiết liên hệ",
+    "CONFIRM": {
+      "TITLE": "Xác nhận xoá",
+      "MESSAGE": "Bạn có muốn xoá? ",
+      "YES": "Có, Xoá",
+      "NO": "Không, giữ"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Liên hệ đã được xóa thành công",
+      "ERROR_MESSAGE": "Không thể xoá liên hệ. Vui lòng thử lại sau."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "Gửi",
+      "CANCEL": "Huỷ",
+      "AVATAR": {
+        "LABEL": "Avatar của liên hệ"
+      },
+      "NAME": {
+        "PLACEHOLDER": "Nhập tên đầy đủ của liên hệ",
+        "LABEL": "Tên đầy đủ"
+      },
+      "BIO": {
+        "PLACEHOLDER": "Nhập tiểu sử của liên hệ",
+        "LABEL": "Tiểu sử"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "Nhập địa chỉ email của liên hệ",
+        "LABEL": "Email",
+        "DUPLICATE": "Địa chỉ email này đang được sử dụng cho một liên hệ khác.",
+        "ERROR": "Vui lòng nhập một địa chỉ email hợp lệ."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "Nhập số điện thoại của liên hệ",
+        "LABEL": "Số điện thoại",
+        "HELP": "Phone number should be of E.164 format eg: +1415555555 [+][country code][area code][local phone number]. You can select the dial code from the dropdown.",
+        "ERROR": "Số điện thoại nên rỗng hoặc thuộc định dạng E.164",
+        "DIAL_CODE_ERROR": "Please select a dial code from the list",
+        "DUPLICATE": "Số điện thoại này đang được dùng cho một liên hệ khác."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "Nhập vị trí của liên hệ",
+        "LABEL": "Địa điểm"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "Nhập tên công ty",
+        "LABEL": "Tên công ty"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Nhập tên thành phố",
+        "LABEL": "Tên nước",
+        "SELECT_PLACEHOLDER": "Chọn",
+        "REMOVE": "Xoá",
+        "SELECT_COUNTRY": "Select Country"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Enter the city name",
+        "LABEL": "Thành phố"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Nhập tên người dùng Facebook",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Nhập tên người dùng Twitter",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Nhập tên người dùng LinkedIn",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Nhập tên người dùng Github",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Hình đại diện liên hệ đã được xóa thành công",
+        "ERROR_MESSAGE": "Không thể xóa hình đại diện liên hệ. Vui lòng thử lại sau."
+      }
+    },
+    "SUCCESS_MESSAGE": "Liên hệ được lưu thành công",
+    "ERROR_MESSAGE": "Đã có lỗi, vui lòng thử lại"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "Bắt đầu cuộc hội thoại",
+    "TITLE": "Tạo mới cuộc trò chuyện",
+    "DESC": "Bắt đầu một cuộc hội thoại mới bằng cách thêm tin nhắn.",
+    "NO_INBOX": "Không tìm thấy kênh để bắt đầu cuộc trò chuyện với liên hệ này.",
+    "FORM": {
+      "TO": {
+        "LABEL": "Đến"
+      },
+      "INBOX": {
+        "LABEL": "Via Inbox",
+        "PLACEHOLDER": "Choose source inbox",
+        "ERROR": "Chọn kênh"
+      },
+      "SUBJECT": {
+        "LABEL": "Chủ đề",
+        "PLACEHOLDER": "Chủ đề",
+        "ERROR": "Chủ đề không được rỗng"
+      },
+      "MESSAGE": {
+        "LABEL": "Tin nhắn",
+        "PLACEHOLDER": "Viết tin nhắn ở đây",
+        "ERROR": "Tin nhắn không được rỗng"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Chọn File",
+        "HELP_TEXT": "Kéo thả file đính kèm tại đây"
+      },
+      "SUBMIT": "Gửi tin nhắn",
+      "CANCEL": "Huỷ",
+      "SUCCESS_MESSAGE": "Tin nhắn đã được gửi!",
+      "GO_TO_CONVERSATION": "Xem",
+      "ERROR_MESSAGE": "Không thể gửi! xin thử lại"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "Hồ sơ mạng xã hội"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Thêm thuộc tính tùy chỉnh",
+    "COPY_SUCCESSFUL": "Đã sao chép mã thành công",
+    "SHOW_MORE": "Show all attributes",
+    "SHOW_LESS": "Show less attributes",
+    "ACTIONS": {
+      "COPY": "Sao chép thuộc tính",
+      "DELETE": "Xoá thuộc tính",
+      "EDIT": "Sửa thuộc tính"
+    },
+    "ADD": {
+      "TITLE": "Tạo thuộc tính tùy chỉnh",
+      "DESC": "Thêm thông tin tuỳ chỉnh vào liên hệ này."
+    },
+    "FORM": {
+      "CREATE": "Thêm thuộc tính",
+      "CANCEL": "Huỷ",
+      "NAME": {
+        "LABEL": "Tên thuộc tính tùy chỉnh",
+        "PLACEHOLDER": "Ví dụ: shopify id",
+        "ERROR": "Tên thuộc tính tuỳ chỉnh không hợp lệ"
+      },
+      "VALUE": {
+        "LABEL": "Giá trị của thuộc tính",
+        "PLACEHOLDER": "Ví dụ: 11901 "
+      },
+      "ADD": {
+        "TITLE": "Tạo thuộc tính mới ",
+        "SUCCESS": "Thuộc tính được thêm thành công",
+        "ERROR": "Không thể thêm thuộc tính. Vui lòng thử lại sau"
+      },
+      "UPDATE": {
+        "SUCCESS": "Thuộc tính được cập nhật thành công",
+        "ERROR": "Không thể cập nhật thuộc tính. Vui lòng thử lại sau"
+      },
+      "DELETE": {
+        "SUCCESS": "Thuộc tính được xoá thành công",
+        "ERROR": "Không thể xoá thuộc tính. Vui lòng thử lại sau"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Thêm nhiều thuộc tính",
+        "PLACEHOLDER": "Tìm kiếm nhiều thuộc tính",
+        "NO_RESULT": "Không có thuộc tính nào được tìm thấy"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Chọn giá trị",
+          "SEARCH_INPUT_PLACEHOLDER": "Tìm kiếm giá trị",
+          "NO_RESULT": "Không tìm thấy kết quả"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Giá trị hợp lệ bắt buộc có",
+      "INVALID_URL": "URL không hợp lệ",
+      "INVALID_INPUT": "Invalid Input"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Hợp nhất các liên hệ",
+    "DESCRIPTION": "Hợp nhất các liên hệ để kết hợp hai hồ sơ thành một, bao gồm tất cả các thuộc tính và hội thoại. Trong trường hợp xung đột, các thuộc tính của liên hệ Chính sẽ được ưu tiên.",
+    "PRIMARY": {
+      "TITLE": "Liên hệ chính",
+      "HELP_LABEL": "Sẽ được xoá"
+    },
+    "PARENT": {
+      "TITLE": "Liên hệ cần gộp",
+      "PLACEHOLDER": "Tìm kiếm liên hệ",
+      "HELP_LABEL": "Được giữ"
+    },
+    "SUMMARY": {
+      "TITLE": "Tóm tắt",
+      "DELETE_WARNING": "Liên hệ của <strong>{primaryContactName}</strong> sẽ bị xoá.",
+      "ATTRIBUTE_WARNING": "\bChi tiết liên hệ của <strong>{primaryContactName}</strong> \bsẽ được sao chép đến <strong>{parentContactName}</strong>."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "Something went wrong. Please try again later."
+    },
+    "FORM": {
+      "SUBMIT": " Hợp nhất các liên hệ",
+      "CANCEL": "Huỷ",
+      "CHILD_CONTACT": {
+        "ERROR": "Chọn một liên hệ con để gộp"
+      },
+      "SUCCESS_MESSAGE": "Liên hệ được gộp thành công",
+      "ERROR_MESSAGE": "Không thể hợp nhất liên lạc, thử lại!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "Liên hệ",
+      "SEARCH_TITLE": "Tìm kiếm liên hệ",
+      "ACTIVE_TITLE": "Active contacts",
+      "SEARCH_PLACEHOLDER": "Tìm kiếm...",
+      "MESSAGE_BUTTON": "Tin nhắn",
+      "SEND_MESSAGE": "Gửi tin nhắn",
+      "BLOCK_CONTACT": "Block contact",
+      "UNBLOCK_CONTACT": "Unblock contact",
+      "BREADCRUMB": {
+        "CONTACTS": "Liên hệ"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Add contact",
+          "EXPORT_CONTACT": "Export contacts",
+          "IMPORT_CONTACT": "Import contacts",
+          "SAVE_CONTACT": "Save contact",
+          "EMAIL_ADDRESS_DUPLICATE": "Địa chỉ email này đang được sử dụng cho một liên hệ khác.",
+          "PHONE_NUMBER_DUPLICATE": "Số điện thoại này đang được dùng cho một liên hệ khác.",
+          "SUCCESS_MESSAGE": "Liên hệ được lưu thành công",
+          "ERROR_MESSAGE": "Unable to save contact. Please try again later."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "This contact is blocked successfully",
+        "BLOCK_ERROR_MESSAGE": "Unable to block contact. Please try again later.",
+        "UNBLOCK_SUCCESS_MESSAGE": "This contact is unblocked successfully",
+        "UNBLOCK_ERROR_MESSAGE": "Unable to unblock contact. Please try again later.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Import contacts",
+          "DESCRIPTION": "Nhập liên hệ bằng một file CSV.",
+          "DOWNLOAD_LABEL": "Tải xuống tệp CSV mẫu.",
+          "LABEL": "Tệp CSV:",
+          "CHOOSE_FILE": "Choose file",
+          "CHANGE": "Đổi",
+          "CANCEL": "Huỷ",
+          "IMPORT": "Nhập",
+          "SUCCESS_MESSAGE": "You will be notified via email when the import is complete.",
+          "ERROR_MESSAGE": "Đã có lỗi, vui lòng thử lại"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "Export contacts",
+          "DESCRIPTION": "Quickly export a csv file with comprehensive details of your contacts",
+          "CONFIRM": "Export",
+          "SUCCESS_MESSAGE": "Export is in progress, You will be notified via email when export file is ready to dowanlod.",
+          "ERROR_MESSAGE": "Đã có lỗi, vui lòng thử lại"
+        },
+        "SORT_BY": {
+          "LABEL": "Sắp bởi",
+          "OPTIONS": {
+            "NAME": "Tên",
+            "EMAIL": "Email",
+            "PHONE_NUMBER": "Số điện thoại",
+            "COMPANY": "Công ty",
+            "COUNTRY": "Quốc gia",
+            "CITY": "Tỉnh / Thành phố",
+            "LAST_ACTIVITY": "Hành động cuối cùng",
+            "CREATED_AT": "Tạo vào lúc"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Ordering",
+          "OPTIONS": {
+            "ASCENDING": "Ascending",
+            "DESCENDING": "Descending"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "Bạn có muốn lưu bộ lọc này không?",
+            "CONFIRM": "Lưu bộ lọc",
+            "LABEL": "Tên",
+            "PLACEHOLDER": "Enter the name of the filter",
+            "ERROR": "Enter a valid name",
+            "SUCCESS_MESSAGE": "Filter saved successfully",
+            "ERROR_MESSAGE": "Unable to save filter. Please try again later."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "Xác nhận xoá",
+            "DESCRIPTION": "Are you sure you want to delete this filter?",
+            "CONFIRM": "Có, Xoá",
+            "CANCEL": "No, Cancel",
+            "SUCCESS_MESSAGE": "Filter deleted successfully",
+            "ERROR_MESSAGE": "Unable to delete filter. Please try again later."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "Tên",
+      "EMAIL": "Email",
+      "PHONE_NUMBER": "Số điện thoại",
+      "IDENTIFIER": "Định danh",
+      "COUNTRY": "Quốc gia",
+      "CITY": "Tỉnh / Thành phố",
+      "COMPANY": "Công ty",
+      "CREATED_AT": "Tạo vào lúc",
+      "LAST_ACTIVITY": "Hành động cuối cùng",
+      "REFERER_LINK": "Liên kết người giới thiệu",
+      "BLOCKED": "Blocked",
+      "BLOCKED_TRUE": "Đúng",
+      "BLOCKED_FALSE": "Sai",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "Xóa các bộ lọc",
+        "UPDATE_SEGMENT": "Update segment",
+        "APPLY_FILTERS": "Áp dụng bộ lọc",
+        "ADD_FILTER": "Thêm bộ lọc"
+      },
+      "TITLE": "Lọc liên hệ",
+      "EDIT_SEGMENT": "Sửa bộ lọc",
+      "SEGMENT": {
+        "LABEL": "Segment name",
+        "INPUT_PLACEHOLDER": "Enter the name of the segment"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} more filters",
+        "CLEAR_FILTERS": "Xóa các bộ lọc"
+      }
+    },
+    "CARD": {
+      "OF": "của",
+      "VIEW_DETAILS": "Xem chi tiết",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "Chỉnh sửa liên hệ chi tiết",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Enter the first name"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Enter the last name"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Enter the email address",
+            "DUPLICATE": "Địa chỉ email này đang được sử dụng cho một liên hệ khác."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Enter the phone number",
+            "DUPLICATE": "Số điện thoại này đang được dùng cho một liên hệ khác."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Enter the city name"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Select country"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Enter the bio"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "Nhập tên công ty"
+          }
+        },
+        "UPDATE_BUTTON": "Update contact",
+        "SUCCESS_MESSAGE": "Contact updated successfully",
+        "ERROR_MESSAGE": "Unable to update contact. Please try again later."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "Edit social links",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Add Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Add Github"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Add Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Add Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Add TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Add LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Add Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "This action is permanent and irreversible.",
+        "BUTTON": "Delete now"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Created {date}",
+      "LAST_ACTIVITY": "Last active {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Permanently delete this contact. This action is irreversible",
+      "DELETE_CONTACT": "Xoá liên hệ",
+      "DELETE_DIALOG": {
+        "TITLE": "Xác nhận xoá",
+        "DESCRIPTION": "Are you sure you want to delete this contact?",
+        "CONFIRM": "Có, Xoá",
+        "API": {
+          "SUCCESS_MESSAGE": "Liên hệ đã được xóa thành công",
+          "ERROR_MESSAGE": "Không thể xoá liên hệ. Vui lòng thử lại sau."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Could not upload avatar. Please try again later.",
+          "SUCCESS_MESSAGE": "Avatar uploaded successfully"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Hình đại diện đã được xóa thành công",
+          "ERROR_MESSAGE": "Could not delete avatar. Please try again later."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Attributes",
+        "HISTORY": "History",
+        "NOTES": "Ghi chú",
+        "MEDIA": "Media",
+        "MERGE": "Merge"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "Không có cuộc trò chuyện trước đó được liên kết với liên hệ này"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Search for attributes",
+        "UNUSED_ATTRIBUTES": "{count} Used attribute | {count} Unused attributes",
+        "EMPTY_STATE": "There are no contact custom attributes available in this account. You can create a custom attribute in settings.",
+        "YES": "Có",
+        "NO": "Không",
+        "TRIGGER": {
+          "SELECT": "Chọn giá trị",
+          "INPUT": "Enter value"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Invalid number",
+          "REQUIRED": "Giá trị hợp lệ bắt buộc có",
+          "INVALID_INPUT": "Invalid input",
+          "INVALID_URL": "URL không hợp lệ",
+          "INVALID_DATE": "Invalid date"
+        },
+        "NO_ATTRIBUTES": "Không có thuộc tính nào được tìm thấy",
+        "API": {
+          "SUCCESS_MESSAGE": "Thuộc tính được cập nhật thành công",
+          "DELETE_SUCCESS_MESSAGE": "Thuộc tính được xoá thành công",
+          "UPDATE_ERROR": "Không thể cập nhật thuộc tính. Vui lòng thử lại sau",
+          "DELETE_ERROR": "Không thể xoá thuộc tính. Vui lòng thử lại sau"
+        }
+      },
+      "MERGE": {
+        "TITLE": "Hợp nhất liên hệ",
+        "DESCRIPTION": "Combine two profiles into one, including all attributes and conversations. In case of conflict, the primary contact’s attributes will take precedence.",
+        "PRIMARY": "Liên hệ chính",
+        "PRIMARY_HELP_LABEL": "To be saved",
+        "PRIMARY_REQUIRED_ERROR": "Please select a contact to merge with before proceeding",
+        "PARENT": "To be merged",
+        "PARENT_HELP_LABEL": "Sẽ được xoá",
+        "EMPTY_STATE": "No contacts found",
+        "PLACEHOLDER": "Search for primary contact",
+        "SEARCH_PLACEHOLDER": "Tìm kiếm liên hệ",
+        "SEARCH_ERROR_MESSAGE": "Could not search for contacts. Please try again later.",
+        "SUCCESS_MESSAGE": "Liên hệ được gộp thành công",
+        "ERROR_MESSAGE": "Không thể hợp nhất liên lạc, thử lại!",
+        "IS_SEARCHING": "Đang tìm kiếm...",
+        "BUTTONS": {
+          "CANCEL": "Huỷ",
+          "CONFIRM": "Hợp nhất liên hệ"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Thêm ghi chú",
+        "WROTE": "wrote",
+        "YOU": "You",
+        "SAVE": "Save note",
+        "ADD_NOTE": "Add contact note",
+        "EXPAND": "Expand",
+        "COLLAPSE": "Collapse",
+        "NO_NOTES": "No notes, you can add notes from the contact details page.",
+        "EMPTY_STATE": "There are no notes associated to this contact. You can add a note by typing in the box above.",
+        "CONVERSATION_EMPTY_STATE": "There are no notes yet. Use the Add note button to create one."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "No contacts found in this account",
+      "SUBTITLE": "Start adding new contacts by clicking on the button below",
+      "BUTTON_LABEL": "Add contact",
+      "SEARCH_EMPTY_STATE_TITLE": "Không có liên hệ nào khớp với tìm kiếm của bạn 🔍",
+      "LIST_EMPTY_STATE_TITLE": "No contacts available in this view 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "No contacts are active at the moment 🌙"
+    },
+    "LOAD_MORE": "Load more"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Gán nhãn",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Các nhãn được gán thành công.",
+    "ASSIGN_LABELS_FAILED": "Failed to assign labels",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Select the labels you want to add to the selected contacts.",
+    "NO_LABELS_FOUND": "No labels available yet.",
+    "SELECTED_COUNT": "{count} selected",
+    "CLEAR_SELECTION": "Clear selection",
+    "SELECT_ALL": "Select all ({count})",
+    "DELETE_CONTACTS": "Xoá",
+    "DELETE_SUCCESS": "Contacts deleted successfully.",
+    "DELETE_FAILED": "Failed to delete contacts.",
+    "DELETE_DIALOG": {
+      "TITLE": "Delete selected contacts",
+      "SINGULAR_TITLE": "Delete selected contact",
+      "DESCRIPTION": "This will permanently delete {count} selected contacts. This action cannot be undone.",
+      "SINGULAR_DESCRIPTION": "This will permanently delete the selected contact. This action cannot be undone.",
+      "CONFIRM_MULTIPLE": "Delete contacts",
+      "CONFIRM_SINGLE": "Xoá liên hệ"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "We couldn’t complete the search. Please try again."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "Xem",
+      "SUCCESS_MESSAGE": "The message was sent successfully!",
+      "ERROR_MESSAGE": "An error occurred while creating the conversation. Please try again later.",
+      "NO_INBOX_ALERT": "There are no available inboxes to start a conversation with this contact.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "Đến:",
+        "TAG_INPUT_PLACEHOLDER": "Enter at least 2 characters to search by name, email, or phone number",
+        "CONTACT_CREATING": "Creating contact..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Via:",
+        "BUTTON": "Show inboxes"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Chủ đề :",
+        "SUBJECT_PLACEHOLDER": "Enter your email subject here",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_BUTTON": "Bcc"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "Viết tin nhắn ở đây..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp template: {templateName}",
+          "VARIABLES": "Biến",
+          "BACK": "Trở về",
+          "SEND_MESSAGE": "Gửi tin nhắn"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "BACK": "Trở về",
+          "SEND_MESSAGE": "Gửi tin nhắn"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Discard",
+        "SEND": "Send ({keyCode})"
+      }
+    }
+  }
+}

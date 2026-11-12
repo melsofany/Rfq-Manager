@@ -1,0 +1,276 @@
+{
+  "GENERAL_SETTINGS": {
+    "LIMIT_MESSAGES": {
+      "CONVERSATION": "Sie haben das Konversationslimit überschritten. Der Hacker Plan erlaubt nur 500 Unterhaltungen.",
+      "INBOXES": "Sie haben das Posteingang-Limit überschritten. Der Hacker-Plan unterstützt nur Live-Chat der Webseite. Zusätzliche Posteingänge wie E-Mail, WhatsApp usw. erfordern einen kostenpflichtigen Tarif.",
+      "AGENTS": "Sie haben das Agenten-Limit überschritten. Ihr Plan erlaubt nur {allowedAgents} Agenten.",
+      "NON_ADMIN": "Bitte kontaktieren Sie Ihren Administrator, um den Plan zu upgraden und alle Funktionen weiterzunutzen."
+    },
+    "TITLE": "Kontoeinstellungen",
+    "SUBMIT": "Einstellungen aktualisieren",
+    "BACK": "Zurück",
+    "DISMISS": "Verwerfen",
+    "UPDATE": {
+      "ERROR": "Einstellungen konnten nicht aktualisiert werden, versuchen Sie es erneut!",
+      "SUCCESS": "Kontoeinstellungen erfolgreich aktualisiert"
+    },
+    "ACCOUNT_DELETE_SECTION": {
+      "TITLE": "Löschen Sie Ihr Konto",
+      "NOTE": "Sobald Sie Ihr Konto gelöscht haben, werden alle Ihre Daten gelöscht.",
+      "BUTTON_TEXT": "Löschen Sie Ihr Konto",
+      "CONFIRM": {
+        "TITLE": "Konto löschen",
+        "MESSAGE": "Das Löschen Ihres Kontos ist unwiderruflich. Geben Sie Ihren Kontonamen ein, um zu bestätigen, dass Sie es dauerhaft löschen möchten.",
+        "BUTTON_TEXT": "Löschen",
+        "DISMISS": "Stornieren",
+        "PLACE_HOLDER": "Bitte {accountName} zur Bestätigung eingeben"
+      },
+      "SUCCESS": "Konto zur Löschung markiert",
+      "FAILURE": "Konto konnte nicht gelöscht werden, versuche es erneut!",
+      "SCHEDULED_DELETION": {
+        "TITLE": "Konto für Löschung geplant",
+        "MESSAGE_MANUAL": "Dieses Konto ist für das Löschen auf {deletionDate} geplant. Dies wurde von einem Administrator angefordert. Sie können das Löschen vor diesem Datum abbrechen.",
+        "MESSAGE_INACTIVITY": "Dieses Konto ist für die Löschung auf {deletionDate} aufgrund von Kontoinaktivität vorgesehen. Sie können die Löschung vor diesem Datum abbrechen.",
+        "CLEAR_BUTTON": "Geplante Löschung abbrechen"
+      }
+    },
+    "FORM": {
+      "ERROR": "Bitte Formularfehler korrigieren",
+      "GENERAL_SECTION": {
+        "TITLE": "Allgemeine Einstellungen",
+        "NOTE": ""
+      },
+      "ACCOUNT_ID": {
+        "TITLE": "Account ID",
+        "NOTE": "Diese ID ist erforderlich, wenn Sie eine API-basierte Integration erstellen"
+      },
+      "TRANSLATION": {
+        "TITLE": "Translation",
+        "NOTE": "Speak every customer's language, whatever languages your team knows.",
+        "CAPTAIN": {
+          "TITLE": "Captain",
+          "NOTE": "AI translations that sound natural and keep your tone."
+        },
+        "GOOGLE": {
+          "TITLE": "Google Übersetzer",
+          "NOTE": "Quick, reliable translations from Google.",
+          "NOT_CONNECTED": "Not connected",
+          "CONNECT": "Verbinden",
+          "NOT_CONNECTED_HINT": "Google Translate isn't connected yet."
+        },
+        "UPGRADE": {
+          "NOTE": "Upgrade to a paid plan to translate conversations with Captain or Google Translate.",
+          "BUTTON": "Upgrade durchführen"
+        },
+        "AUTO_TRANSLATE": {
+          "TITLE": "Auto-translate conversations",
+          "NOTE": "Read every message in your language. Customers get replies in theirs.",
+          "LOCKED": "Choose a service to turn this on.",
+          "NOT_AVAILABLE": "Auto-translate isn't enabled for this account yet."
+        },
+        "API": {
+          "SUCCESS": "Translation settings updated successfully",
+          "ERROR": "Failed to update translation settings"
+        }
+      },
+      "AUTO_RESOLVE": {
+        "TITLE": "Unterhaltungen automatisch auflösen",
+        "NOTE": "Diese Konfiguration würde es Ihnen ermöglichen, die Unterhaltung nach einer gewissen Zeit der Inaktivität automatisch zu beenden.",
+        "DURATION": {
+          "LABEL": "Dauer der Inaktivität",
+          "HELP": "Zeit der Inaktivität, nach der die Unterhaltung automatisch gelöst wird",
+          "PLACEHOLDER": "30",
+          "ERROR": "Auto resolve duration should be between {minDuration} minutes and 999 days",
+          "API": {
+            "SUCCESS": "Auto resolve settings updated successfully",
+            "ERROR": "Failed to update auto resolve settings"
+          }
+        },
+        "MESSAGE": {
+          "LABEL": "Custom auto-resolution message",
+          "PLACEHOLDER": "Die Unterhaltung wurde durch das System aufgrund von 15 Tagen Inaktivität geschlossen",
+          "HELP": "Message sent to the customer after conversation is auto-resolved"
+        },
+        "PREFERENCES": "Einstellungen",
+        "LABEL": {
+          "LABEL": "Add label after auto-resolution",
+          "PLACEHOLDER": "Select a label"
+        },
+        "IGNORE_WAITING": {
+          "LABEL": "Skip conversations waiting for agent’s reply"
+        },
+        "UPDATE_BUTTON": "Save Changes"
+      },
+      "NAME": {
+        "LABEL": "Kontobezeichnung",
+        "PLACEHOLDER": "Ihr Kontoname",
+        "ERROR": "Bitte geben Sie einen gültigen Kontonamen ein"
+      },
+      "LANGUAGE": {
+        "LABEL": "Sprache",
+        "PLACEHOLDER": "Ihr Kontoname",
+        "ERROR": ""
+      },
+      "DOMAIN": {
+        "LABEL": "Eingehende E-Mail-Domain",
+        "PLACEHOLDER": "Die Domain, von der E-Mails empfangen werden",
+        "ERROR": ""
+      },
+      "SUPPORT_EMAIL": {
+        "LABEL": "Support-E-Mail",
+        "PLACEHOLDER": "Die Support-E-Mail Ihres Unternehmens",
+        "ERROR": ""
+      },
+      "AUTO_RESOLVE_IGNORE_WAITING": {
+        "LABEL": "Exclude unattended conversations",
+        "HELP": "When enabled, the system will skip resolving conversations that are still waiting for an agent's reply."
+      },
+      "AUDIO_TRANSCRIPTION": {
+        "TITLE": "Transcribe Audio Messages",
+        "NOTE": "Automatically transcribe audio messages in conversations. Generate a text transcript whenever an audio message is sent or received, and display it alongside the message.",
+        "API": {
+          "SUCCESS": "Audio transcription setting updated successfully",
+          "ERROR": "Failed to update audio transcription setting"
+        }
+      },
+      "ENFORCE_MFA": {
+        "TITLE": "Enforce two-factor authentication",
+        "NOTE": "Require every member of this account to set up two-factor authentication. Members without it will be asked to set it up at their next password sign-in. Sign-ins through Google or SAML are exempt. API access tokens of members who have not set up two-factor authentication stop working for this account until they enrol.",
+        "API": {
+          "SUCCESS": "Two-factor authentication enforcement updated successfully",
+          "ERROR": "Failed to update two-factor authentication enforcement"
+        }
+      },
+      "AUTO_RESOLVE_DURATION": {
+        "LABEL": "Inactivity duration for resolution",
+        "HELP": "Duration after a conversation should auto resolve if there is no activity",
+        "PLACEHOLDER": "30",
+        "ERROR": "Automatische Auflösungsdauer sollte zwischen 10 Minuten und 999 Tagen liegen",
+        "API": {
+          "SUCCESS": "Auto resolve settings updated successfully",
+          "ERROR": "Failed to update auto resolve settings"
+        },
+        "UPDATE_BUTTON": "Aktualisieren",
+        "MESSAGE_LABEL": "Custom resolution message",
+        "MESSAGE_PLACEHOLDER": "Die Unterhaltung wurde durch das System aufgrund von 15 Tagen Inaktivität geschlossen",
+        "MESSAGE_HELP": "This message is sent to the customer when a conversation is automatically resolved by the system due to inactivity."
+      },
+      "FEATURES": {
+        "INBOUND_EMAIL_ENABLED": "Konversationskontinuität mit E-Mails ist für Ihr Konto aktiviert.",
+        "CUSTOM_EMAIL_DOMAIN_ENABLED": "Sie können jetzt E-Mails in Ihrer benutzerdefinierten Domäne empfangen."
+      }
+    },
+    "UPDATE_CHATWOOT": "Ein Update {latestChatwootVersion} für Chatwoot ist verfügbar. Bitte aktualisieren Sie Ihre Instanz.",
+    "LEARN_MORE": "Mehr erfahren",
+    "PAYMENT_PENDING": "Your account payment is past due. Please update your payment information to avoid subscription cancellation.",
+    "PAYMENT_PENDING_AGENT": "Your account payment is past due. Please contact your administrator to resolve it.",
+    "UPGRADE": "Upgrade to continue using Chatwoot",
+    "LIMITS_UPGRADE": "Ihr Konto hat die Nutzungsbeschränkungen überschritten. Um Chatwoot weiter nutzen zu können aktualisieren Sie bitte Ihren Tarif",
+    "OPEN_BILLING": "Rechnung öffnen"
+  },
+  "FORMS": {
+    "MULTISELECT": {
+      "ENTER_TO_SELECT": "Drücken Sie zur Auswahl die Eingabetaste",
+      "ENTER_TO_REMOVE": "Drücken Sie zum Entfernen die Eingabetaste",
+      "NO_OPTIONS": "List is empty",
+      "SELECT_ONE": "Eines wählen",
+      "SELECT": "Auswählen"
+    }
+  },
+  "NETWORK": {
+    "NOTIFICATION": {
+      "OFFLINE": "Offline",
+      "RECONNECTING": "Verbinde neu...",
+      "RECONNECT_SUCCESS": "Wiederverbunden"
+    },
+    "BUTTON": {
+      "REFRESH": "Neu laden"
+    }
+  },
+  "COMMAND_BAR": {
+    "SEARCH_PLACEHOLDER": "Suchen oder springen zu",
+    "SNOOZE_PLACEHOLDER": "Type a time e.g. tomorrow, 2 hours, next friday, jan 15...",
+    "SECTIONS": {
+      "GENERAL": "Generell",
+      "REPORTS": "Berichte",
+      "CONVERSATION": "Konversation",
+      "BULK_ACTIONS": "Massenaktionen",
+      "CHANGE_ASSIGNEE": "Beauftragten ändern",
+      "CHANGE_PRIORITY": "Priorität ändern",
+      "CHANGE_TEAM": "Team wechseln",
+      "SNOOZE_CONVERSATION": "Konversation stummschalten",
+      "EXECUTE_MACRO": "Execute Macro",
+      "ADD_LABEL": "Label zur Konversation hinzufügen",
+      "REMOVE_LABEL": "Label aus der Konversation entfernen",
+      "SETTINGS": "Einstellungen",
+      "AI_ASSIST": "AI-Assistent",
+      "APPEARANCE": "Darstellung",
+      "SNOOZE_NOTIFICATION": "Ungelesene Benachrichtigungen"
+    },
+    "COMMANDS": {
+      "GO_TO_MY_INBOX": "Zu „Mein Postfach“",
+      "GO_TO_CONVERSATION_DASHBOARD": "Zur Konversationsübersicht",
+      "GO_TO_CONTACTS_DASHBOARD": "Zur Kontaktübersicht",
+      "GO_TO_CAPTAIN": "Zu Captain",
+      "GO_TO_CALLS_DASHBOARD": "Zum Anruf-Dashboard",
+      "GO_TO_CAMPAIGNS": "Zu Kampagnen",
+      "GO_TO_HELP_CENTER": "Zum Help Center",
+      "GO_TO_REPORTS_OVERVIEW": "Zur Berichtsübersicht",
+      "GO_TO_CONVERSATION_REPORTS": "Gehen Sie zu Konversationsberichten",
+      "GO_TO_AGENT_REPORTS": "Zu den Agentenberichten",
+      "GO_TO_LABEL_REPORTS": "Zu den Label-Berichten",
+      "GO_TO_INBOX_REPORTS": "Zu den Posteingangsberichten",
+      "GO_TO_TEAM_REPORTS": "Zu den Teamberichten",
+      "GO_TO_CSAT_REPORTS": "Zu den CSAT-Berichten",
+      "GO_TO_BOT_REPORTS": "Zu den Bot-Berichten",
+      "GO_TO_SLA_REPORTS": "Zu den SLA-Berichten",
+      "GO_TO_SETTINGS_AGENTS": "Zu den Agenten-Einstellungen",
+      "GO_TO_SETTINGS_TEAMS": "Zu den Team Einstellungen",
+      "GO_TO_SETTINGS_INBOXES": "Zu den Posteingangseinstellungen",
+      "GO_TO_SETTINGS_TEMPLATES": "Zu den Vorlagen",
+      "GO_TO_SETTINGS_LABELS": "Zu den Labeleinstellungen",
+      "GO_TO_SETTINGS_CUSTOM_ATTRIBUTES": "Zu den benutzerdefinierten Attributen",
+      "GO_TO_SETTINGS_AUTOMATION": "Zu Automatisierungen",
+      "GO_TO_SETTINGS_MACROS": "Zu Makros",
+      "GO_TO_SETTINGS_CANNED_RESPONSES": "Zu den Einstellungen für vorgefertigte Antworten",
+      "GO_TO_SETTINGS_SLA": "Zu den SLA-Einstellungen",
+      "GO_TO_SETTINGS_APPLICATIONS": "Zu den Anwendungseinstellungen",
+      "GO_TO_SETTINGS_DATA": "Zu Daten",
+      "GO_TO_SETTINGS_AUDIT_LOGS": "Zu den Audit-Protokollen",
+      "GO_TO_SETTINGS_BILLING": "Zur Abrechnung",
+      "GO_TO_SETTINGS_ACCOUNT": "Zu den Kontoeinstellungen",
+      "GO_TO_SETTINGS_PROFILE": "Zu Profileinstellungen",
+      "ADD_LABELS_TO_CONVERSATION": "Label zur Konversation hinzufügen",
+      "ASSIGN_AN_AGENT": "Einen Agent zuweisen",
+      "AI_ASSIST": "AI-Assistent",
+      "ASSIGN_PRIORITY": "Priorität zuweisen",
+      "ASSIGN_A_TEAM": "Ein Team zuweisen",
+      "EXECUTE_A_MACRO": "Execute a macro",
+      "MUTE_CONVERSATION": "Konversation stummschalten",
+      "UNMUTE_CONVERSATION": "Konversation entstummen",
+      "REMOVE_LABEL_FROM_CONVERSATION": "Label aus der Konversation entfernen",
+      "REOPEN_CONVERSATION": "Konversation wieder öffnen",
+      "RESOLVE_CONVERSATION": "Konversation lösen",
+      "SEND_TRANSCRIPT": "Ein E-Mail-Transkript senden",
+      "SNOOZE_CONVERSATION": "Snooze-Konversation",
+      "UNTIL_NEXT_REPLY": "Bis zur nächsten Antwort",
+      "UNTIL_NEXT_WEEK": "Bis nächste Woche",
+      "UNTIL_TOMORROW": "Bis morgen",
+      "UNTIL_NEXT_MONTH": "bis zum nächsten Monat",
+      "AN_HOUR_FROM_NOW": "bis in einer Stunde von jetzt an",
+      "UNTIL_CUSTOM_TIME": "individuell",
+      "CHANGE_APPEARANCE": "Aussehen ändern",
+      "LIGHT_MODE": "Hell",
+      "DARK_MODE": "Dunkel",
+      "SYSTEM_MODE": "System",
+      "SNOOZE_NOTIFICATION": "Ungelesene Benachrichtigungen"
+    }
+  },
+  "DASHBOARD_APPS": {
+    "LOADING_MESSAGE": "Dashboard-App wird geladen..."
+  },
+  "COMMON": {
+    "OR": "Oder",
+    "CLICK_HERE": "hier klicken"
+  }
+}

@@ -1,0 +1,1639 @@
+{
+  "INBOX_MGMT": {
+    "HEADER": "Indbakker",
+    "DESCRIPTION": "A channel is the mode of communication your customer chooses to interact with you. An inbox is where you manage interactions for a specific channel. It can include communications from various sources such as email, live chat, and social media.",
+    "LEARN_MORE": "Learn more about inboxes",
+    "COUNT": "{n} inbox | {n} inboxes",
+    "SEARCH_PLACEHOLDER": "Søg indbakkens navn, kanal eller identifikator...",
+    "NO_RESULTS": "No inboxes found matching your search",
+    "RECONNECTION_REQUIRED": "Your inbox is disconnected. You won't receive new messages until you reauthorize it.",
+    "CLICK_TO_RECONNECT": "Click here to reconnect.",
+    "WHATSAPP_REGISTRATION_INCOMPLETE": "Your WhatsApp Business registration isn’t complete. Please check your display name status in Meta Business Manager before reconnecting.",
+    "COMPLETE_REGISTRATION": "Complete Registration",
+    "LIST": {
+      "404": "Der er ingen indbakker tilknyttet denne konto."
+    },
+    "CREATE_FLOW": {
+      "CHANNEL": {
+        "TITLE": "Vælg Kanal",
+        "BODY": "Vælg den udbyder, du vil integrere med Chatwoot."
+      },
+      "INBOX": {
+        "TITLE": "Opret Indbakke",
+        "BODY": "Autentificer din konto og opret en indbakke."
+      },
+      "AGENT": {
+        "TITLE": "Tilføj Agenter",
+        "BODY": "Tilføj agenter til den oprettede indbakke."
+      },
+      "FINISH": {
+        "TITLE": "Voilà!",
+        "BODY": "Så er alt klart!"
+      }
+    },
+    "ADD": {
+      "CHANNEL_NAME": {
+        "LABEL": "Indbakke Navn",
+        "PLACEHOLDER": "Indtast dit indbakke navn (f. eks. Acme Inc)",
+        "ERROR": "Angiv et gyldigt indbakke navn"
+      },
+      "WEBSITE_NAME": {
+        "LABEL": "Websted Navn",
+        "PLACEHOLDER": "Indtast dit websted navn (fx: Firma ApS)"
+      },
+      "FB": {
+        "HELP": "PS: Ved at logge ind får vi kun adgang til din sides beskeder. Dine private beskeder kan aldrig tilgås af Chatwoot.",
+        "CHOOSE_PAGE": "Vælg Side",
+        "CHOOSE_PLACEHOLDER": "Vælg en side fra listen",
+        "INBOX_NAME": "Indbakke Navn",
+        "ADD_NAME": "Tilføj et navn til din indbakke",
+        "PICK_NAME": "Pick a Name for your Inbox",
+        "PICK_A_VALUE": "Vælg en værdi",
+        "CREATE_INBOX": "Opret Indbakke",
+        "RESTRICTED_WARNING": "Oprettelse af Facebook-indbakker er midlertidigt utilgængelig på grund af et problem på API-niveau hos Meta – ikke et problem med Chatwoot. Vi arbejder tæt sammen med Meta om at løse det hurtigst muligt.",
+        "STATUS_LINK": "Vis statusopdateringer"
+      },
+      "INSTAGRAM": {
+        "CONTINUE_WITH_INSTAGRAM": "Continue with Instagram",
+        "CONNECT_YOUR_INSTAGRAM_PROFILE": "Connect your Instagram Profile",
+        "HELP": "To add your Instagram profile as a channel, you need to authenticate your Instagram Profile by clicking on 'Continue with Instagram' ",
+        "ERROR_MESSAGE": "There was an error connecting to Instagram, please try again",
+        "ERROR_AUTH": "There was an error connecting to Instagram, please try again",
+        "NEW_INBOX_SUGGESTION": "This Instagram account was previously linked to a different inbox and has now been migrated here. All new messages will appear here. The old inbox will no longer be able to send or receive messages for this account.",
+        "DUPLICATE_INBOX_BANNER": "This Instagram account was migrated to the new Instagram channel inbox. You won’t be able to send/receive Instagram messages from this inbox anymore.",
+        "RESTRICTED_WARNING": "Instagram-indbakke er midlertidigt utilgængelig på grund af et API-niveau problem på Metas side, ikke et problem med Chatwoot. Vi arbejder tæt sammen med Meta for at løse det så hurtigt som muligt.",
+        "SETTINGS_RESTRICTED_WARNING": "Instagram messaging er i øjeblikket påvirket af en API-niveau problem på Metas side, ikke et problem med Chatwoot. Nogle beskeder eller handlinger kan være forsinkede eller utilgængelige. Vi arbejder tæt sammen med Meta for at løse det så hurtigt som muligt.",
+        "STATUS_LINK": "Vis statusopdateringer"
+      },
+      "TIKTOK": {
+        "CONTINUE_WITH_TIKTOK": "Continue with TikTok",
+        "CONNECT_YOUR_TIKTOK_PROFILE": "Connect your TikTok Profile",
+        "HELP": "To add your TikTok profile as a channel, you need to authenticate your TikTok Profile by clicking on 'Continue with TikTok' ",
+        "ERROR_MESSAGE": "There was an error connecting to TikTok, please try again",
+        "ERROR_AUTH": "There was an error connecting to TikTok, please try again",
+        "NORTH_AMERICA_WARNING": "Forbindelser til TikTok for nordamerikanske konti er midlertidigt utilgængelige, mens vi afventer en opdatering fra TikTok-teamet."
+      },
+      "TWITTER": {
+        "HELP": "For at tilføje din Twitter-profil som en kanal, skal du godkende din Twitter-profil ved at klikke på 'Log ind med Twitter' ",
+        "ERROR_MESSAGE": "Der opstod en fejl under forbindelsen til Twitter. Prøv igen",
+        "TWEETS": {
+          "ENABLE": "Opret samtaler fra nævnte Tweets"
+        }
+      },
+      "WEBSITE_CHANNEL": {
+        "TITLE": "Hjemmesidekanal",
+        "DESC": "Opret en kanal til din hjemmeside og begynde at supporte dine kunder via vores hjemmeside widget.",
+        "LOADING_MESSAGE": "Opretter Website Support Kanal",
+        "CHANNEL_AVATAR": {
+          "LABEL": "Kanal Avatar"
+        },
+        "CHANNEL_WEBHOOK_URL": {
+          "LABEL": "Webhook URL",
+          "PLACEHOLDER": "Please enter your Webhook URL",
+          "ERROR": "Angiv en gyldig URL"
+        },
+        "CHANNEL_WEBHOOK_SECRET": {
+          "LABEL": "Webhook Secret",
+          "COPY": "Copy secret to clipboard",
+          "COPY_SUCCESS": "Secret copied to clipboard",
+          "TOGGLE": "Toggle secret visibility",
+          "RESET_SUCCESS": "Webhook secret regenerated successfully",
+          "RESET_ERROR": "Unable to regenerate webhook secret. Please try again"
+        },
+        "CHANNEL_DOMAIN": {
+          "LABEL": "Hjemmeside Domæne",
+          "PLACEHOLDER": "Indtast dit website domæne (fx: ditfirma.dk)"
+        },
+        "CHANNEL_WELCOME_TITLE": {
+          "LABEL": "Velkomstoverskrift",
+          "PLACEHOLDER": "Hejsa!"
+        },
+        "CHANNEL_WELCOME_TAGLINE": {
+          "LABEL": "Velkomst Tagline",
+          "PLACEHOLDER": "Vi gør det nemt at komme i kontakt med os. Spørg os om noget, eller del din feedback."
+        },
+        "CHANNEL_GREETING_MESSAGE": {
+          "LABEL": "Kanal start hilsen besked",
+          "PLACEHOLDER": "Dit firma ApS svarer typisk på et par timer."
+        },
+        "CHANNEL_GREETING_TOGGLE": {
+          "LABEL": "Aktivér kanal start hilsen",
+          "HELP_TEXT": "Send automatisk en hilsen når en ny samtale er oprettet.",
+          "ENABLED": "Aktiveret",
+          "DISABLED": "Deaktiveret"
+        },
+        "REPLY_TIME": {
+          "TITLE": "Angiv svartid",
+          "IN_A_FEW_MINUTES": "På nogle få minutter",
+          "IN_A_FEW_HOURS": "Om et par timer",
+          "IN_A_DAY": "På en dag",
+          "HELP_TEXT": "Denne svartid vil blive vist på live chat widget"
+        },
+        "WIDGET_COLOR": {
+          "LABEL": "Widget Farve",
+          "PLACEHOLDER": "Opdater widget farve der bruges i widget"
+        },
+        "SUBMIT_BUTTON": "Opret indbakke",
+        "API": {
+          "ERROR_MESSAGE": "Vi var ikke i stand til at oprette en hjemmeside kanal, prøv igen"
+        }
+      },
+      "TWILIO": {
+        "TITLE": "Twilio SMS/Whatsapp Kanal",
+        "ACCOUNT_SID": {
+          "LABEL": "Konto SID",
+          "PLACEHOLDER": "Indtast venligst din Twilio konto SID",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "API_KEY": {
+          "USE_API_KEY": "Use API Key Authentication",
+          "LABEL": "API Key SID",
+          "PLACEHOLDER": "Please enter your API Key SID",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "API_KEY_SECRET": {
+          "LABEL": "API Key Secret",
+          "PLACEHOLDER": "Please enter your API Key Secret",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "MESSAGING_SERVICE_SID": {
+          "LABEL": "SID For Beskedtjeneste",
+          "PLACEHOLDER": "Indtast venligst din Twilio Messaging Service SID",
+          "ERROR": "Dette felt er påkrævet",
+          "USE_MESSAGING_SERVICE": "Brug en Twilio-meddelelsestjeneste"
+        },
+        "CHANNEL_TYPE": {
+          "LABEL": "Kanaltype",
+          "ERROR": "Vælg venligst din kanaltype"
+        },
+        "AUTH_TOKEN": {
+          "LABEL": "Auth Token",
+          "PLACEHOLDER": "Indtast venligst din Twilio Auth Token",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "CHANNEL_NAME": {
+          "LABEL": "Indbakke Navn",
+          "PLACEHOLDER": "Indtast venligst et indbakke navn",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "PHONE_NUMBER": {
+          "LABEL": "Telefonnummer",
+          "PLACEHOLDER": "Indtast venligst det telefonnummer, hvorfra beskeden vil blive sendt.",
+          "ERROR": "Please provide a valid phone number that starts with a `+` sign and does not contain any spaces."
+        },
+        "SUBMIT_BUTTON": "Opret Twilio Kanal",
+        "API": {
+          "ERROR_MESSAGE": "Vi var ikke i stand til at godkende Twilio legitimationsoplysninger, prøv igen"
+        },
+        "API_CALLBACK": {
+          "TITLE": "Callback URL",
+          "SUBTITLE": "Du er nødt til at konfigurere besked callback URL i Twilio med den URL, der er nævnt her."
+        }
+      },
+      "SMS": {
+        "TITLE": "SMS Kanal",
+        "DESC": "Begynd at støtte dine kunder via SMS.",
+        "PROVIDERS": {
+          "LABEL": "API Provider",
+          "TWILIO": "Twilio",
+          "BANDWIDTH": "Båndbredde"
+        },
+        "API": {
+          "ERROR_MESSAGE": "Vi kunne ikke gemme SMS-kanalen"
+        },
+        "BANDWIDTH": {
+          "ACCOUNT_ID": {
+            "LABEL": "Konto SID",
+            "PLACEHOLDER": "Indtast venligst dit Båndbredde Konto ID",
+            "ERROR": "Dette felt er påkrævet"
+          },
+          "API_KEY": {
+            "LABEL": "API Nøgle",
+            "PLACEHOLDER": "Please enter your Bandwidth API Key",
+            "ERROR": "Dette felt er påkrævet"
+          },
+          "API_SECRET": {
+            "LABEL": "API Hemmelighed",
+            "PLACEHOLDER": "Please enter your Bandwidth API Secret",
+            "ERROR": "Dette felt er påkrævet"
+          },
+          "APPLICATION_ID": {
+            "LABEL": "Applikations ID",
+            "PLACEHOLDER": "Indtast venligst dit Båndbredde-program-id",
+            "ERROR": "Dette felt er påkrævet"
+          },
+          "INBOX_NAME": {
+            "LABEL": "Indbakke Navn",
+            "PLACEHOLDER": "Indtast venligst et indbakke navn",
+            "ERROR": "Dette felt er påkrævet"
+          },
+          "PHONE_NUMBER": {
+            "LABEL": "Telefonnummer",
+            "PLACEHOLDER": "Indtast venligst det telefonnummer, hvorfra beskeden vil blive sendt.",
+            "ERROR": "Please provide a valid phone number that starts with a `+` sign and does not contain any spaces."
+          },
+          "SUBMIT_BUTTON": "Opret Båndbredde Kanal",
+          "API": {
+            "ERROR_MESSAGE": "Vi var ikke i stand til at godkende Twilio legitimationsoplysninger, prøv igen"
+          },
+          "API_CALLBACK": {
+            "TITLE": "Callback URL",
+            "SUBTITLE": "Du skal konfigurere beskedtilbagekalds-URL'en i Båndbredde med den URL, der er nævnt her."
+          }
+        }
+      },
+      "WHATSAPP": {
+        "TITLE": "WhatsApp Kanal",
+        "DESC": "Begynd at støtte dine kunder via WhatsApp.",
+        "PROVIDERS": {
+          "LABEL": "API Provider",
+          "WHATSAPP_EMBEDDED": "WhatsApp Business",
+          "TWILIO": "Twilio",
+          "WHATSAPP_CLOUD": "WhatsApp Sky",
+          "WHATSAPP_CLOUD_DESC": "Quick setup through Meta",
+          "WHATSAPP_CLOUD_MANUAL_SETUP_DESC": "Manuel opsætning med Cloud API legitimationsoplysninger",
+          "TWILIO_DESC": "Connect via Twilio credentials",
+          "360_DIALOG": "360Dialog"
+        },
+        "SELECT_PROVIDER": {
+          "TITLE": "Select your API provider",
+          "DESCRIPTION": "Choose your WhatsApp provider. You can connect directly through Meta which requires no setup, or connect through Twilio using your account credentials.",
+          "RESTRICTION_DESCRIPTION": "Vælg din WhatsApp-udbyder. Du kan forbinde WhatsApp Cloud manuelt ved hjælp af dine Cloud API-legitimationsoplysninger eller oprette forbindelse via Twilio ved hjælp af dine kontooplysninger."
+        },
+        "INBOX_NAME": {
+          "LABEL": "Indbakke Navn",
+          "PLACEHOLDER": "Indtast venligst et indbakkens navn",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "PHONE_NUMBER": {
+          "LABEL": "Telefonnummer",
+          "PLACEHOLDER": "Indtast venligst det telefonnummer, hvorfra beskeden vil blive sendt.",
+          "ERROR": "Please provide a valid phone number that starts with a `+` sign and does not contain any spaces."
+        },
+        "PHONE_NUMBER_ID": {
+          "LABEL": "Telefonnummer ID",
+          "PLACEHOLDER": "Indtast venligst telefonnummer ID indhentet fra Facebook udviklerdashboard.",
+          "ERROR": "Angiv en gyldig værdi."
+        },
+        "BUSINESS_ACCOUNT_ID": {
+          "LABEL": "Business Konto ID",
+          "PLACEHOLDER": "Indtast venligst Business Account ID opnået fra Facebook udvikler dashboard.",
+          "ERROR": "Angiv en gyldig værdi."
+        },
+        "WEBHOOK_VERIFY_TOKEN": {
+          "LABEL": "Webhook Verificér Token",
+          "PLACEHOLDER": "Enter a verify token which you want to configure for Facebook webhooks.",
+          "ERROR": "Angiv en gyldig værdi."
+        },
+        "API_KEY": {
+          "LABEL": "API Nøgle",
+          "SUBTITLE": "Konfigurer WhatsApp API-nøglen.",
+          "PLACEHOLDER": "API Nøgle",
+          "ERROR": "Angiv en gyldig værdi."
+        },
+        "API_CALLBACK": {
+          "TITLE": "Callback URL",
+          "SUBTITLE": "Du skal konfigurere dit webhook URL og verifikations token, i Facebook Developer portal med værdierne vist nedenfor.",
+          "WEBHOOK_URL": "Webhook URL",
+          "WEBHOOK_VERIFICATION_TOKEN": "Webhook verifikations token"
+        },
+        "MANUAL_SETUP": {
+          "HEADER": {
+            "TITLE": "Tilslut WhatsApp manuelt",
+            "DESCRIPTION": "Følg disse trin for at forberede din Meta-konto og tilslut dit nummer til Chatwoot."
+          },
+          "APP": {
+            "TITLE": "Opret eller vælg en Meta-app",
+            "DESCRIPTION": "Dit WhatsApp-nummer skal være tilknyttet en Meta-app, hvor anvendelsesscenariet for WhatsApp er aktiveret.",
+            "ITEM_1": "Åbn {metaDevelopers} og log ind med en administratorkonto.",
+            "META_DEVELOPERS": "Meta Udviklere",
+            "ITEM_2": "Opret en ny app, eller vælg den app, du allerede bruger til dette WhatsApp nummer.",
+            "ITEM_3": "Vælg muligheden for at forbinde med kunder via WhatsApp.",
+            "ITEM_4": "Vælg den forretningsportefølje, der ejer, eller vil eje, WhatsApp nummeret.",
+            "VIDEO_TITLE": "Se: Opret en Meta-app",
+            "VIDEO_DESCRIPTION": "Denne korte gennemgang viser, hvor du opretter en ny app i Meta Developers."
+          },
+          "NUMBER": {
+            "TITLE": "Tilføj dit telefonnummer og få dets ID'er",
+            "DESCRIPTION": "Tilføj og verificer produktionsnummeret i din Meta-app, og kopiér derefter de to identifikatorer, der vises under API-opsætning.",
+            "ITEM_1": "Åbn WhatsApp-use-casen i din Meta-app, og vælg API-opsætning.",
+            "ITEM_2": "I afsnittet \"Send og modtag meddelelser\" skal du åbne vælgeren \"Fra\".",
+            "ITEM_3": "Vælg et eksisterende produktionsnummer, eller vælg Tilføj telefonnummer.",
+            "ITEM_4": "Udfyld den WhatsApp-virksomhedsprofil, som Meta har anmodet om.",
+            "ITEM_5": "Bekræft telefonnummeret ved hjælp af den engangskode OTP, der er sendt via SMS eller taleopkald.",
+            "ITEM_6": "Kopier telefonnummer ID og WhatsApp Business Account ID vist i API Setup.",
+            "VIDEO_TITLE": "Se: Tilføj et telefonnummer, og find dets ID'er",
+            "VIDEO_DESCRIPTION": "Denne gennemgang viser, hvordan du tilføjer eller vælger et produktionsnummer og kopierer identifikatorerne fra Meta."
+          },
+          "TOKEN": {
+            "TITLE": "Generer en permanent adgangstoken",
+            "DESCRIPTION": "Opret en Meta-systembruger med adgang til din app og WhatsApp Business-konto.",
+            "ITEM_1": "Åbn Meta Business-indstillinger og gå til Brugere → Systembrugere.",
+            "ITEM_2": "Opret en admin systembruger, eller vælg en eksisterende.",
+            "ITEM_3": "Tildel din Meta-app og WhatsApp Business-konto til systembrugeren.",
+            "ITEM_4": "Giv fuld kontrol over de tildelte WhatsApp-aktiver.",
+            "ITEM_5": "Generer en token til din Meta-app og indstil dens udløb til Aldrig.",
+            "ITEM_6": "Vælg whatsapp_business_management og whatsapp_business_messaging, derefter kopiere token.",
+            "VIDEO_TITLE": "Se: Generer et permanent adgangstoken",
+            "VIDEO_DESCRIPTION": "Denne vejledning viser, hvordan du vælger din Meta-app, vælger et token, der ikke udløber, og tildeler de nødvendige WhatsApp-tilladelser.",
+            "WARNING": "Meta viser kun token én gang. Kopiér den før du lukker dialogen."
+          },
+          "DETAILS": {
+            "WABA_LABEL": "WhatsApp Business Konto-ID",
+            "WABA_PLACEHOLDER": "Indtast WABA ID",
+            "PHONE_ID_LABEL": "Telefonnummer ID",
+            "PHONE_ID_PLACEHOLDER": "Indtast Telefonnummer ID",
+            "TOKEN_LABEL": "Permanent adgangstoken",
+            "TOKEN_PLACEHOLDER": "Indsæt adgangstoken"
+          },
+          "REVIEW": {
+            "TITLE": "Opret din WhatsApp indbakke",
+            "DESCRIPTION": "Gennemgå oplysningerne om nummeret, og vælg et navn til indbakken.",
+            "VERIFIED": "Dit Metanummer og adgangstoken er gyldigt.",
+            "BUSINESS_NAME": "Business name",
+            "PHONE_NUMBER": "Telefonnummer",
+            "PHONE_ID": "Telefonnummer ID",
+            "WABA_ID": "WhatsApp Business Konto-ID",
+            "INBOX_NAME": "Indbakkens navn",
+            "INBOX_NAME_HELP": "Vi har genereret dette navn fra dit bekræftede Meta firmanavn. Du kan ændre det."
+          },
+          "VERIFY": {
+            "TITLE": "Bekræft din forbindelse",
+            "DESCRIPTION": "Chatwoot kontrollerer nummeradgang og konfigurerer din Meta webhook.",
+            "NUMBER_ACCESS": "Adgang til nummer",
+            "TEMPLATE_ACCESS": "Skabelon adgang",
+            "CALLBACK": "Webhook tilbagekald",
+            "SUBSCRIPTION": "Webhook abonnement",
+            "WEBHOOK_URL": "Webhook URL",
+            "COPY": "Kopiér",
+            "COPY_SUCCESS": "Webhook URL kopieret til udklipsholder",
+            "COMPLETE": "Verificeret",
+            "PENDING": "Afventer",
+            "SUCCESS": "Dit WhatsApp-nummer er tilsluttet og klar til agenttildeling.",
+            "RETRY_SUCCESS": "Opsætning af webhook blev genforsøgt med succes.",
+            "RETRY_ERROR": "Vi kunne ikke genprøve webhook-opsætningen. Prøv igen."
+          },
+          "ACTIONS": {
+            "BACK": "Tilbage",
+            "OPEN_META_APPS": "Åbn Meta Apps",
+            "APP_READY": "Min Meta-app er klar",
+            "NEXT": "Næste",
+            "OPEN_BUSINESS_SETTINGS": "Åbn Meta Business-indstillinger",
+            "SHOW_TOKEN": "Vis token",
+            "HIDE_TOKEN": "Skjul token",
+            "VERIFY_DETAILS": "Bekræft detaljer",
+            "CONNECT": "Opret indbakke",
+            "RETRY_WEBHOOK": "Prøv webhook setup igen",
+            "CONTINUE": "Fortsæt med at tilføje agenter"
+          },
+          "ERRORS": {
+            "IDS_REQUIRED": "Indtast telefonnummer ID og WhatsApp Business Account ID.",
+            "REQUIRED": "Indtast telefonnummer-ID'et, WhatsApp Business-konto-ID og permanent adgangstoken.",
+            "INVALID_TOKEN": "Denne adgangstoken er ugyldigt eller udløbet. Generer en nyt permanent token og prøv igen.",
+            "GENERIC": "Vi kunne ikke fuldføre WhatsApp opsætningen. Tjek dine oplysninger og prøv igen."
+          }
+        },
+        "SUBMIT_BUTTON": "Opret WhatsApp Kanal",
+        "EMBEDDED_SIGNUP": {
+          "TITLE": "Quick setup with Meta",
+          "DESC": "Brug hurtig opsætning med Meta til at forbinde et nyt eller et eksisterende nummer fra WhatsApp Business-appen. Du bliver viderestillet til Meta, hvor du skal logge ind på din WhatsApp Business-konto. Hvis du har administratoradgang, bliver opsætningen nem og problemfri.",
+          "BENEFITS": {
+            "TITLE": "Benefits of Embedded Signup:",
+            "EASY_SETUP": "No manual configuration required",
+            "SECURE_AUTH": "Secure OAuth based authentication",
+            "AUTO_CONFIG": "Automatic webhook and phone number configuration"
+          },
+          "LEARN_MORE": {
+            "TEXT": "For at lære mere om hurtig opsætning, priser og begrænsninger, besøg {link}.",
+            "LINK_TEXT": "this link"
+          },
+          "SUBMIT_BUTTON": "Connect with WhatsApp Business",
+          "AUTH_PROCESSING": "Authenticating with Meta",
+          "WAITING_FOR_BUSINESS_INFO": "Please complete business setup in the Meta window...",
+          "PROCESSING": "Setting up your WhatsApp Business Account",
+          "ENABLING_CALLING": "Aktiverer WhatsApp opkald på dit nummer…",
+          "LOADING_SDK": "Loading Facebook SDK...",
+          "CANCELLED": "WhatsApp Signup was cancelled",
+          "SUCCESS_TITLE": "WhatsApp Business Account Connected!",
+          "WAITING_FOR_AUTH": "Waiting for authentication...",
+          "INVALID_BUSINESS_DATA": "Invalid business data received from Facebook. Please try again.",
+          "UNSUPPORTED_COMPLETION": "Meta-opsætningen blev afsluttet uden et WhatsApp-telefonnummer, der kan tilknyttes. Kør venligst opsætningen igen, og tilføj et telefonnummer.",
+          "SIGNUP_ERROR": "Signup error occurred",
+          "AUTH_NOT_COMPLETED": "Authentication not completed. Please restart the process.",
+          "SUCCESS_FALLBACK": "WhatsApp Business Account has been successfully configured",
+          "MANUAL_FALLBACK": "If your number is already connected to the WhatsApp Business Platform (API), or if you’re a tech provider onboarding your own number, please use the {link} flow",
+          "MANUAL_LINK_TEXT": "manual setup flow",
+          "ACCESS_REQUEST": {
+            "TITLE": "Quick setup with Meta",
+            "DESCRIPTION": "Forbind et nyt eller eksisterende nummer fra WhatsApp Business-appen uden manuel konfiguration. Fortæl os, hvad din virksomhed laver, og hvordan du vil bruge WhatsApp, for at aktivere denne mulighed.",
+            "BUTTON": "Anmod om adgang",
+            "FORM_DESCRIPTION": "Fortæl os om din virksomhed, og hvordan du planlægger at bruge WhatsApp. Indsend din beskrivelse af anvendelsen for at muliggøre en hurtig opsætning af din konto.",
+            "USE_CASE_LABEL": "Business use case",
+            "USE_CASE_PLACEHOLDER": "Vi sælger for eksempel boliginteriør og bruger WhatsApp til at besvare produktspørgsmål og hjælpe kunder med deres ordrer.",
+            "SUBMIT": "Send",
+            "ERROR": "Vi kunne ikke aktivere adgang. Prøv venligst igen."
+          },
+          "RESTRICTED_WARNING": "WhatsApp Embedded Signup er midlertidigt utilgængelig på grund af et problem på API-niveau hos Meta – ikke et problem hos Chatwoot. Du kan benytte manuel opsætning til numre, der er kvalificerede til Cloud API. Vi arbejder tæt sammen med Meta om at løse problemet hurtigst muligt.",
+          "STATUS_LINK": "Vis statusopdateringer",
+          "CALLING_ENABLE_FAILED": "Din WhatsApp-indbakke er klar, men taleopkald kunne ikke aktiveres – dette nummer er endnu ikke tilmeldt WhatsApp Business Calling API. Kontakt Meta eller din WhatsApp Business-løsningsleverandør for at få nummeret tilmeldt, og aktivér derefter opkald under indstillingerne for opkald i indbakken."
+        },
+        "API": {
+          "ERROR_MESSAGE": "Vi kunne ikke gemme WhatsApp-kanalen",
+          "MANUAL_RESTRICTION_WARNING": "WhatsApp Embedded Signup er midlertidigt utilgængelig på grund af et problem på API-niveau hos Meta – det skyldes altså ikke et problem med Chatwoot. Manuel opsætning fungerer kun for numre, der allerede er forbundet til WhatsApp Cloud API. Numre, der benytter sameksistens med WhatsApp Business-appen, understøttes endnu ikke i dette forløb. Vi arbejder tæt sammen med Meta om at løse problemet hurtigst muligt. Tak for din tålmodighed.",
+          "STATUS_LINK": "Vis statusopdateringer"
+        }
+      },
+      "VOICE": {
+        "TITLE": "Voice Channel",
+        "DESC": "Integrate Twilio Voice and start supporting your customers via phone calls.",
+        "PHONE_NUMBER": {
+          "LABEL": "Telefonnummer",
+          "PLACEHOLDER": "Enter your phone number (e.g. +1234567890)",
+          "ERROR": "Please provide a valid phone number in E.164 format (e.g. +1234567890)"
+        },
+        "TWILIO": {
+          "ACCOUNT_SID": {
+            "LABEL": "Konto SID",
+            "PLACEHOLDER": "Enter your Twilio Account SID",
+            "REQUIRED": "Account SID is required"
+          },
+          "AUTH_TOKEN": {
+            "LABEL": "Auth Token",
+            "PLACEHOLDER": "Enter your Twilio Auth Token",
+            "REQUIRED": "Auth Token is required"
+          },
+          "API_KEY_SID": {
+            "LABEL": "API Key SID",
+            "PLACEHOLDER": "Enter your Twilio API Key SID",
+            "REQUIRED": "API Key SID is required"
+          },
+          "API_KEY_SECRET": {
+            "LABEL": "API Key Secret",
+            "PLACEHOLDER": "Enter your Twilio API Key Secret",
+            "REQUIRED": "API Key Secret is required"
+          }
+        },
+        "CONFIGURATION": {
+          "TWILIO_VOICE_URL_TITLE": "Twilio Voice URL",
+          "TWILIO_VOICE_URL_SUBTITLE": "Configure this URL as the Voice URL on your Twilio phone number and TwiML App.",
+          "TWILIO_STATUS_URL_TITLE": "Twilio Status Callback URL",
+          "TWILIO_STATUS_URL_SUBTITLE": "Configure this URL as the Status Callback URL on your Twilio phone number."
+        },
+        "SUBMIT_BUTTON": "Create Voice Channel",
+        "API": {
+          "ERROR_MESSAGE": "We were not able to create the voice channel"
+        }
+      },
+      "API_CHANNEL": {
+        "TITLE": "API Kanal",
+        "DESC": "Integrer med API-kanal og begynd at supportere dine kunder.",
+        "CHANNEL_NAME": {
+          "LABEL": "Kanalnavn",
+          "PLACEHOLDER": "Indtast et kanalnavn",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "WEBHOOK_URL": {
+          "LABEL": "Webhook URL",
+          "SUBTITLE": "Configure the URL where you want to receive callbacks on events.",
+          "PLACEHOLDER": "Webhook URL"
+        },
+        "SUBMIT_BUTTON": "Opret API-kanal",
+        "API": {
+          "ERROR_MESSAGE": "Vi var ikke i stand til at gemme api kanalen"
+        }
+      },
+      "EMAIL_CHANNEL": {
+        "TITLE": "E-mail Kanal",
+        "DESC": "Integrate your email inbox.",
+        "CHANNEL_NAME": {
+          "LABEL": "Kanalnavn",
+          "PLACEHOLDER": "Indtast et kanalnavn",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "EMAIL": {
+          "LABEL": "E-mail",
+          "SUBTITLE": "E-mail hvor dine kunder sender dig support tickets",
+          "PLACEHOLDER": "E-mail"
+        },
+        "SUBMIT_BUTTON": "Opret E-Mail Kanal",
+        "API": {
+          "ERROR_MESSAGE": "Vi kunne ikke gemme e-mailkanalen"
+        },
+        "FINISH_MESSAGE": "Begynd at videresende dine e-mails til følgende e-mailadresse.",
+        "FINISH_MESSAGE_NO_FORWARDING": "Your email inbox has been created successfully! You need to configure SMTP and IMAP credentials to send and receive emails. Without these settings, no emails will be processed.",
+        "FORWARDING_ADDRESS_LABEL": "Forward emails to this address:",
+        "CONFIGURE_SMTP_IMAP_LINK": "Klik her",
+        "CONFIGURE_SMTP_IMAP_TEXT": " to configure IMAP and SMTP settings"
+      },
+      "LINE_CHANNEL": {
+        "TITLE": "LINE Kanal",
+        "DESC": "Integrér med LINE-kanalen og begynd at støtte dine kunder.",
+        "CHANNEL_NAME": {
+          "LABEL": "Kanalnavn",
+          "PLACEHOLDER": "Indtast et kanalnavn",
+          "ERROR": "Dette felt er påkrævet"
+        },
+        "LINE_CHANNEL_ID": {
+          "LABEL": "LINE Kanal ID",
+          "PLACEHOLDER": "LINE Kanal ID"
+        },
+        "LINE_CHANNEL_SECRET": {
+          "LABEL": "LINE Kanal Hemmelighed",
+          "PLACEHOLDER": "LINE Kanal Hemmelighed"
+        },
+        "LINE_CHANNEL_TOKEN": {
+          "LABEL": "LINE Kanal Token",
+          "PLACEHOLDER": "LINE Kanal Token"
+        },
+        "SUBMIT_BUTTON": "Opret LINE Kanal",
+        "API": {
+          "ERROR_MESSAGE": "Vi var ikke i stand til at gemme LINE kanalen"
+        },
+        "API_CALLBACK": {
+          "TITLE": "Callback URL",
+          "SUBTITLE": "Du skal indstille webhook URL i LINE programmet med URL-adressen nævnt her."
+        }
+      },
+      "TELEGRAM_CHANNEL": {
+        "TITLE": "Telegram Kanal",
+        "DESC": "Integrér med Telegram-kanalen og begynd at støtte dine kunder.",
+        "BOT_TOKEN": {
+          "LABEL": "Bot Token",
+          "SUBTITLE": "Konfigurer den bot token du har fået fra Telegram BotFather.",
+          "PLACEHOLDER": "Bot Token"
+        },
+        "SUBMIT_BUTTON": "Opret Telegram Kanal",
+        "API": {
+          "ERROR_MESSAGE": "Vi var ikke i stand til at gemme telegram kanal"
+        }
+      },
+      "AUTH": {
+        "TITLE": "Vælg en kanal",
+        "DESC": "Chatwoot understøtter live-chat-widgets, Facebook Messenger, Twitter-profiler, WhatsApp, E-mails, osv., som kanaler. Hvis du ønsker at bygge en brugerdefineret kanal, kan du oprette den ved hjælp af API-kanalen. For at komme i gang, vælg en af kanalerne nedenfor.",
+        "TITLE_NEXT": "Complete the setup",
+        "TITLE_FINISH": "Voilà!",
+        "CHANNEL": {
+          "WEBSITE": {
+            "TITLE": "Website",
+            "DESCRIPTION": "Create a live-chat widget"
+          },
+          "FACEBOOK": {
+            "TITLE": "Facebook",
+            "DESCRIPTION": "Connect your Facebook page"
+          },
+          "WHATSAPP": {
+            "TITLE": "WhatsApp",
+            "DESCRIPTION": "Support your customers on WhatsApp"
+          },
+          "WHATSAPP_CALL": {
+            "TITLE": "WhatsApp Opkald",
+            "DESCRIPTION": "Tag stemmeopkald på dit WhatsApp-nummer"
+          },
+          "EMAIL": {
+            "TITLE": "E-mail",
+            "DESCRIPTION": "Connect with Gmail, Outlook, or other providers"
+          },
+          "SMS": {
+            "TITLE": "SMS",
+            "DESCRIPTION": "Integrate SMS channel with Twilio or bandwidth"
+          },
+          "API": {
+            "TITLE": "API",
+            "DESCRIPTION": "Make a custom channel using our API"
+          },
+          "TELEGRAM": {
+            "TITLE": "Telegram",
+            "DESCRIPTION": "Configure Telegram channel using Bot token"
+          },
+          "LINE": {
+            "TITLE": "Line",
+            "DESCRIPTION": "Integrate your Line channel"
+          },
+          "INSTAGRAM": {
+            "TITLE": "Instagram",
+            "DESCRIPTION": "Connect your instagram account"
+          },
+          "TIKTOK": {
+            "TITLE": "TikTok",
+            "DESCRIPTION": "Connect your TikTok account",
+            "ACCESS_REQUEST_DESCRIPTION": "Kontakt vores supportteam for at anmode om adgang til TikTok"
+          },
+          "VOICE": {
+            "TITLE": "Voice",
+            "DESCRIPTION": "Integrate with Twilio Voice"
+          }
+        }
+      },
+      "AGENTS": {
+        "TITLE": "Agenter",
+        "DESC": "Her kan du tilføje agenter til at håndtere din nyoprettede indbakke. Kun disse valgte agenter vil have adgang til din indbakke. Agenter som ikke er en del af denne indbakke, vil ikke kunne se eller reagere på beskeder i denne indbakke, når de logger ind. <br> <b>PS:</b> Som administrator, hvis du har brug for adgang til alle indbakker, bør du tilføje dig selv som agent til alle indbakker, du opretter.",
+        "VALIDATION_ERROR": "Add at least one agent to your new Inbox",
+        "PICK_AGENTS": "Vælg agenter for indbakken"
+      },
+      "DETAILS": {
+        "TITLE": "Indbakke Detaljer",
+        "DESC": "Vælg den Facebook-side, du vil forbinde til Chatwoot, fra dropdown listen nedenfor. Du kan også give et brugerdefineret navn til din indbakke for bedre identifikation."
+      },
+      "FINISH": {
+        "TITLE": "Du klarede det!",
+        "DESC": "Du er færdig med at integrere din Facebook-side med Chatwoot. Næste gang en kunde sender en meddelelse til din side, vil samtalen automatisk dukke op i din indbakke.<br>Vi giver dig også et widget script, som du nemt kan tilføje til din hjemmeside. Når dette er live på din hjemmeside, kan kunder sende dig en besked direkte fra din hjemmeside uden hjælp fra et eksternt værktøj, og samtalen vises lige her, på Chatwoot.<br>Cool, var? Nå ikke, vi forsøge at være :)"
+      },
+      "EMAIL_PROVIDER": {
+        "TITLE": "Select your email provider",
+        "DESCRIPTION": "Select an email provider from the list below. If you don't see your email provider in the list, you can select the other provider option and provide the IMAP and SMTP Credentials."
+      },
+      "MICROSOFT": {
+        "TITLE": "Microsoft Email",
+        "DESCRIPTION": "Click on the Sign in with Microsoft button to get started. You will redirected to the email sign in page. Once you accept the requested permissions, you would be redirected back to the inbox creation step.",
+        "EMAIL_PLACEHOLDER": "Enter email address",
+        "SIGN_IN": "Sign in with Microsoft",
+        "ERROR_MESSAGE": "There was an error connecting to Microsoft, please try again"
+      },
+      "GOOGLE": {
+        "TITLE": "Google Email",
+        "DESCRIPTION": "Click on the Sign in with Google button to get started. You will redirected to the email sign in page. Once you accept the requested permissions, you would be redirected back to the inbox creation step.",
+        "SIGN_IN": "Sign in with Google",
+        "EMAIL_PLACEHOLDER": "Enter email address",
+        "ERROR_MESSAGE": "There was an error connecting to Google, please try again"
+      }
+    },
+    "DETAILS": {
+      "LOADING_FB": "Autentificerer dig med Facebook...",
+      "ERROR_FB_LOADING": "Error loading Facebook SDK. Please disable any ad-blockers and try again from a different browser.",
+      "ERROR_FB_AUTH": "Noget gik galt, Opdatér siden...",
+      "ERROR_FB_UNAUTHORIZED": "You're not authorized to perform this action. ",
+      "ERROR_FB_UNAUTHORIZED_HELP": "Please ensure you have access to the Facebook page with full control. You can read more about Facebook roles <a href=\" https://www.facebook.com/help/187316341316631\">here</a>.",
+      "ERROR_CHANNEL_CREATION": "Vi kunne ikke oprette indbakken. Prøv venligst igen.",
+      "CREATING_CHANNEL": "Opretter din indbakke...",
+      "TITLE": "Indstil Indbakkedetaljer",
+      "DESC": ""
+    },
+    "AGENTS": {
+      "BUTTON_TEXT": "Tilføj agenter",
+      "ADD_AGENTS": "Tilføjer agenter til din indbakke..."
+    },
+    "FINISH": {
+      "TITLE": "Din indbakke er klar!",
+      "MESSAGE": "Du kan nu engagere dig med dine kunder gennem din nye kanal. Glædelig supportering",
+      "BUTTON_TEXT": "Tag mig med dertil",
+      "MORE_SETTINGS": "Flere indstillinger",
+      "WEBSITE_SUCCESS": "Du er færdig med at oprette en hjemmeside kanal. Kopier koden vist nedenfor og indsæt den på din hjemmeside. Næste gang en kunde bruger live chat, vil samtalen automatisk vises i din indbakke.",
+      "WHATSAPP_QR_INSTRUCTION": "Scan the QR code above to quickly test your WhatsApp inbox",
+      "SMS_QR_INSTRUCTION": "Scan QR-koden ovenfor for hurtigt at teste din SMS-indbakke",
+      "SMS_QR_ALT": "QR-kode til at teste SMS-indbakken",
+      "TWILIO_CALLBACK_FALLBACK": "Webhooks konfigureres automatisk. Hvis indgående beskeder ikke når frem, skal du bruge denne callback-URL i Twilio.",
+      "MESSENGER_QR_INSTRUCTION": "Scan the QR code above to quickly test your Facebook Messenger inbox",
+      "TELEGRAM_QR_INSTRUCTION": "Scan the QR code above to quickly test your Telegram inbox"
+    },
+    "REAUTH": "Genautorisér",
+    "VIEW": "Vis",
+    "EDIT": {
+      "API": {
+        "SUCCESS_MESSAGE": "Indbakkeindstillinger opdateret",
+        "AUTO_ASSIGNMENT_SUCCESS_MESSAGE": "Automatisk tildeling opdateret",
+        "ERROR_MESSAGE": "Indbakkeindstillingerne kunne ikke opdateres. Prøv igen senere."
+      },
+      "EMAIL_COLLECT_BOX": {
+        "ENABLED": "Aktiveret",
+        "DISABLED": "Deaktiveret"
+      },
+      "ENABLE_CSAT": {
+        "ENABLED": "Aktiveret",
+        "DISABLED": "Deaktiveret"
+      },
+      "SENDER_NAME_SECTION": {
+        "TITLE": "Sender name",
+        "SUB_TEXT": "Select the name shown to your customer when they receive emails from your agents.",
+        "FOR_EG": "For eg:",
+        "FRIENDLY": {
+          "TITLE": "Friendly",
+          "FROM": "fra",
+          "SUBTITLE": "Add the name of the agent who sent the reply in the sender name to make it friendly."
+        },
+        "PROFESSIONAL": {
+          "TITLE": "Professional",
+          "SUBTITLE": "Use only the configured business name as the sender name in the email header."
+        },
+        "BUSINESS_NAME": {
+          "BUTTON_TEXT": "Configure your business name",
+          "PLACEHOLDER": "Enter your business name",
+          "SAVE_BUTTON_TEXT": "Save"
+        }
+      },
+      "ALLOW_MESSAGES_AFTER_RESOLVED": {
+        "ENABLED": "Aktiveret",
+        "DISABLED": "Deaktiveret"
+      },
+      "ENABLE_CONTINUITY_VIA_EMAIL": {
+        "ENABLED": "Aktiveret",
+        "DISABLED": "Deaktiveret"
+      },
+      "LOCK_TO_SINGLE_CONVERSATION": {
+        "ENABLED": "Reopen same conversation",
+        "DISABLED": "Create new conversations",
+        "ENABLED_DESCRIPTION": "When a contact messages again, the previous conversation will be reopened.",
+        "DISABLED_DESCRIPTION": "A new conversation will be created each time after the previous one is resolved."
+      },
+      "ENABLE_HMAC": {
+        "LABEL": "Aktiver"
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "Slet",
+      "AVATAR_DELETE_BUTTON_TEXT": "Slet Avatar",
+      "CONFIRM": {
+        "TITLE": "Bekræft Sletning",
+        "MESSAGE": "Er du sikker på du vil slette ",
+        "PLACE_HOLDER": "Skriv venligst {inboxName} for at bekræfte",
+        "YES": "Ja, Slet ",
+        "NO": "Nej, Behold "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Indbakken blev slettet",
+        "ERROR_MESSAGE": "Kunne ikke slette indbakken. Prøv igen senere.",
+        "AVATAR_SUCCESS_MESSAGE": "Indbakke avatar slettet",
+        "AVATAR_ERROR_MESSAGE": "Kunne ikke slette indbakken avatar. Prøv igen senere."
+      }
+    },
+    "TABS": {
+      "SETTINGS": "Indstillinger",
+      "COLLABORATORS": "Samarbejdspartnere",
+      "CONFIGURATION": "Konfiguration",
+      "CAMPAIGN": "Kampagner",
+      "PRE_CHAT_FORM": "Pre Chat Form",
+      "BUSINESS_HOURS": "Forretningstider",
+      "WIDGET_BUILDER": "Widget Builder",
+      "BOT_CONFIGURATION": "Bot konfiguration",
+      "ACCOUNT_HEALTH": "Account Health",
+      "CSAT": "CSAT",
+      "VOICE": "Stemme",
+      "CALLS": "Opkald"
+    },
+    "VOICE_CONFIGURATION": {
+      "ENABLE_VOICE": {
+        "LABEL": "Aktiver Stemme Opkald",
+        "DESCRIPTION": "Aktiver stemmeopkald i denne indbakke. Agenter vil kunne foretage og modtage telefonopkald."
+      },
+      "CREDENTIALS": {
+        "DESCRIPTION": "Voice calling requires an Account Auth Token for webhook verification and API key credentials for calls."
+      },
+      "INBOUND": {
+        "LABEL": "Tillad indgående opkald",
+        "DESCRIPTION": "Lad kunderne ringe til dette nummer. Når funktionen er slået fra, afvises indgående opkald automatisk – medarbejderne får ingen besked, og der oprettes ingen samtale. Medarbejderne kan stadig foretage udgående opkald."
+      },
+      "RECORDING": {
+        "LABEL": "Optag opkald",
+        "DESCRIPTION": "Optag opkald, og vedhæft optagelsen til samtalen. Slå dette fra, hvor optagelse opkald ikke er tilladt."
+      },
+      "TRANSCRIPTION": {
+        "LABEL": "Transkribér optagelser",
+        "DESCRIPTION": "Konvertér hver optagelse til en tekstudskrift. Funktionen benytter Captain og kræver, at lydtranskribering er aktiveret for kontoen."
+      }
+    },
+    "WHATSAPP_CALLING": {
+      "ENABLE": {
+        "LABEL": "Aktiver WhatsApp Opkald",
+        "DESCRIPTION": "Giv agenter mulighed for at modtage og foretage WhatsApp Cloud-opkald i denne indbakke. Kunder kan ringe til dette virksomhedsnummer direkte fra WhatsApp."
+      },
+      "ENABLE_FAILED": "Stemmeopkald kunne ikke aktiveres for dette nummer – det er endnu ikke tilmeldt WhatsApp Business Calling API. Kontakt Meta eller din WhatsApp Business-løsningsleverandør for at få nummeret tilmeldt, og prøv derefter igen.",
+      "PHONE_NUMBER": {
+        "LABEL": "Virksomhedens telefonnummer",
+        "HELP_TEXT": "WhatsApp-nummer, som kunderne vil ringe til."
+      },
+      "HOW_IT_WORKS": {
+        "LABEL": "Sådan fungerer det",
+        "DESCRIPTION": "Opkald foretages direkte peer-to-peer mellem agentens browser og Meta – der kræves ingen yderligere legitimationsoplysninger. Sørg for, at agentens browser har tilladelse til at bruge mikrofonen på dette websted."
+      },
+      "PERMISSION_REQUEST_BODY": {
+        "LABEL": "Anmodning om opkaldstilladelse besked",
+        "HELP_TEXT": "Vises til kontakten, når vedkommende endnu ikke har givet samtykke til at modtage opkald. Lad feltet være tomt for at bruge standardindstillingen.",
+        "PLACEHOLDER": "Vi vil gerne ringe til dig angående din samtale."
+      }
+    },
+    "CHANNEL_PREFERENCES": "Channel Preferences",
+    "WIDGET_FEATURES": "Widget features",
+    "TWILIO_HEALTH": {
+      "TITLE": "Administrer dit Twilio-nummer",
+      "DESCRIPTION": "Gennemgå Twilio-kontoen, afsenderen og de webhooks, der understøtter denne indbakke. Alt, hvad Chatwoot ikke kan modtage, markeres her",
+      "GO_TO_SETTINGS": "Gå til Twilio-konsollen",
+      "NO_DATA": "Sundhedsdata er ikke tilgængelige",
+      "LOADING": "Henter sundhedsdata fra Twilio…",
+      "ERROR_TITLE": "Kunne ikke oprette forbindelse til Twilio",
+      "STATUS": {
+        "HEALTHY": "Alle kontroller bestået",
+        "MISCONFIGURED": "Kræver opmærksomhed"
+      },
+      "FIELDS": {
+        "ACCOUNT_NAME": {
+          "LABEL": "Twilio konto",
+          "TOOLTIP": "Den Twilio konto disse legitimationsoplysninger tilhører"
+        },
+        "ACCOUNT_STATUS": {
+          "LABEL": "Konto status",
+          "TOOLTIP": "En suspenderet eller lukket Twilio konto kan ikke sende eller modtage noget"
+        },
+        "ACCOUNT_TYPE": {
+          "LABEL": "Konto type",
+          "TOOLTIP": "Testkonti kan kun sende beskeder til eller ringe til telefonnumre, som du har verificeret hos Twilio"
+        },
+        "SENDER": {
+          "LABEL": "Afsender",
+          "TOOLTIP": "Telefonnummeret eller beskedtjenesten, der er knyttet til denne indbakke"
+        },
+        "CAPABILITIES": {
+          "LABEL": "Nummer funktioner",
+          "TOOLTIP": "Funktioner, som Twilio har aktiveret for dette nummer. En funktion, som denne indbakke har brug for, men ikke har, vil aldrig fungere"
+        },
+        "VOICE_CALLING": {
+          "LABEL": "Stemme opkald",
+          "TOOLTIP": "Om opkald er aktiveret for denne indbakke"
+        }
+      },
+      "VALUES": {
+        "ACCOUNT_STATUSES": {
+          "ACTIVE": "Aktiv",
+          "SUSPENDED": "Suspenderet",
+          "CLOSED": "Lukket"
+        },
+        "ACCOUNT_TYPES": {
+          "TRIAL": "Prøve",
+          "FULL": "Fuld"
+        },
+        "CAPABILITIES": {
+          "SMS": "SMS",
+          "VOICE": "Stemme"
+        },
+        "SENDER_TYPES": {
+          "PHONE_NUMBER": "Telefonnummer",
+          "MESSAGING_SERVICE": "Beskedtjeneste"
+        },
+        "ENABLED": "Aktiveret",
+        "DISABLED": "Deaktiveret"
+      },
+      "WEBHOOKS": {
+        "TITLE": "Webhooks",
+        "DESCRIPTION": "Twilio kalder disse URL'er, når en besked eller et opkald modtages. Registrer dem igen, efter at du har ændret din installations-URL",
+        "REGISTER_ALL": "Registrer webhooks",
+        "MESSAGING": "Webhook til beskeder",
+        "VOICE": "Webhook til Stemme",
+        "VOICE_STATUS": "Tilbagekald for stemmestatus",
+        "VOICE_APP": "Udgående opkald (TwiML app)"
+      },
+      "WEBHOOK": {
+        "CONFIGURED_SUCCESS": "Webhook konfigureret korrekt",
+        "NOT_SET": "ikke angivet",
+        "EXPECTED": "Forventet",
+        "CURRENT": "I øjeblikket sat til",
+        "REASONS": {
+          "NOT_SET": "Webhook ikke konfigureret",
+          "URL_MISMATCH": "Uoverensstemmelse i webhook-URL",
+          "WRONG_HTTP_METHOD": "Webhook bruger den forkerte HTTP metode",
+          "OVERRIDDEN_BY_NUMBER": "Beskedtjenesten henvender sig til nummeret",
+          "OVERRIDDEN_BY_APPLICATION": "Tilsidesat af en TwiML-app",
+          "OVERRIDDEN_BY_TRUNK": "Overskrevet af en SIP-trunk",
+          "MISSING_TWIML_APP": "TwiML app ikke oprettet"
+        },
+        "HINTS": {
+          "NOT_SET": "Twilio har ingen webhook for denne afsender, så intet når frem til Chatwoot.",
+          "URL_MISMATCH": "Twilio kalder en anden URL, så trafikken går et andet sted hen.",
+          "WRONG_HTTP_METHOD": "URL'en er korrekt, men Twilio kalder den med {method} i stedet for POST, og Chatwoot svarer kun på POST.",
+          "OVERRIDDEN_BY_NUMBER": "Denne beskedtjeneste har \"Use webhook on number\" aktiveret, så Twilio ignorerer tjenestens webhook.",
+          "OVERRIDDEN_BY_APPLICATION": "En TwiML-app er knyttet til dette nummer, og Twilio bruger appens URL'er i stedet for nummerets. Fjern tilknytningen i Twilio Console.",
+          "OVERRIDDEN_BY_TRUNK": "Dette nummer er knyttet til en SIP-trunk, så Twilio dirigerer opkald til trunken og ignorerer voice-webhooks fuldstændigt. Fjern tilknytningen til trunken i Twilio-konsollen.",
+          "MISSING_TWIML_APP": "Chatwoot har ingen TwiML-app til dette nummer, så der kan ikke foretages udgående opkald."
+        }
+      }
+    },
+    "ACCOUNT_HEALTH": {
+      "TITLE": "Manage your WhatsApp account",
+      "DESCRIPTION": "Gennemgå tilstanden af dit WhatsApp-telefonnummer, beskedkapaciteten og de tilknyttede Meta-virksomhedsoplysninger.",
+      "GO_TO_SETTINGS": "Go to Meta Business Manager",
+      "NO_DATA": "Health data is not available",
+      "ERRORS": {
+        "AUTHORIZATION": {
+          "EMBEDDED_TITLE": "WhatsApp forbindelsen skal opdateres",
+          "EMBEDDED_DESCRIPTION": "Meta kunne ikke validere forbindelsen for denne indbakke. Gå til Konfiguration for at konfigurere den igen ved hjælp af Embedded Signup.",
+          "MANUAL_TITLE": "WhatsApp adgangstoken kræver opmærksomhed",
+          "MANUAL_DESCRIPTION": "Meta kunne ikke validere adgangstoken for denne indbakke. Gå til Konfiguration for at bekræfte eller erstatte den."
+        },
+        "GENERIC_TITLE": "WhatsApp sundhedsdata er utilgængelige",
+        "GENERIC_DESCRIPTION": "Meta kunne ikke returnere de aktuelle oplysninger om systemets tilstand. Gennemgå fejlen nedenfor, og prøv igen senere.",
+        "GO_TO_CONFIGURATION": "Gå til Konfiguration"
+      },
+      "SECTIONS": {
+        "BUSINESS_PROFILE": "Virksomhedsprofil",
+        "PHONE_NUMBER": "Telefonnummer",
+        "HEALTH_AND_CAPACITY": "Sundhed og kapacitet",
+        "BUSINESS_ACCOUNT": "Business konto"
+      },
+      "FIELDS": {
+        "PROFILE_DESCRIPTION": {
+          "LABEL": "Beskrivelse",
+          "TOOLTIP": "Beskrivelse vist til kunder i WhatsApp virksomhedsprofil"
+        },
+        "PROFILE_ADDRESS": {
+          "LABEL": "Ip Adresse",
+          "TOOLTIP": "Virksomhedsadresse vist i WhatsApp virksomhedsprofil"
+        },
+        "PROFILE_EMAIL": {
+          "LABEL": "E-mail",
+          "TOOLTIP": "Kontakt-e-mail vist i WhatsApp virksomhedsprofil"
+        },
+        "PROFILE_WEBSITES": {
+          "LABEL": "Hjemmesider",
+          "TOOLTIP": "Hjemmeside-links vist i WhatsApp virksomhedsprofil"
+        },
+        "DISPLAY_PHONE_NUMBER": {
+          "LABEL": "Display phone number",
+          "TOOLTIP": "Phone number displayed to customers"
+        },
+        "VERIFIED_NAME": {
+          "LABEL": "WhatsApp visningsnavn",
+          "TOOLTIP": "Visningsnavn tilknyttet dette telefonnummer på WhatsApp"
+        },
+        "PHONE_NUMBER_ID": {
+          "LABEL": "Telefonnummer ID",
+          "TOOLTIP": "Meta-id for dette WhatsApp telefonnummer"
+        },
+        "COEXISTENCE": {
+          "LABEL": "Sameksistens",
+          "TOOLTIP": "Dette nummer er forbundet til både WhatsApp Business app og Cloud API"
+        },
+        "DISPLAY_NAME_STATUS": {
+          "LABEL": "Display name status",
+          "TOOLTIP": "Om Meta har gennemgået og godkendt WhatsApp visningsnavnet",
+          "DESCRIPTIONS": {
+            "APPROVED": "Visningsnavnet er godkendt og kan vises øverst i WhatsApp-chats. Et navn, som modtageren har gemt, kan i stedet blive vist.",
+            "AVAILABLE_WITHOUT_REVIEW": "Visningsnavnet gemmes på din WhatsApp-profil, men modtagere kan muligvis se telefonnummeret, indtil Meta har gennemgået og godkendt det. Meta påbegynder denne gennemgang, når din virksomhed når en højere grænse for antal beskeder.",
+            "PENDING_REVIEW": "Meta gennemgår visningsnavnet. Ingen handling er nødvendig med mindre Meta anmoder om mere information.",
+            "REJECTED": "Meta godkendte ikke visningsnavnet. Gennemgå retningslinjerne for visningsnavne, og opdater derefter navnet eller indsend en klage hos Meta.",
+            "DECLINED": "Meta godkendte ikke visningsnavnet. Gennemgå retningslinjerne for visningsnavne, og opdater derefter navnet eller indsend en klage hos Meta.",
+            "EXPIRED": "Telefonnummerets certifikat er udløbet, så dette nummer kan ikke registreres til brug for API.",
+            "UNKNOWN": "Meta returnerede ikke en status for gennemgang af visningsnavnet."
+          }
+        },
+        "LAST_ONBOARDED_TIME": {
+          "LABEL": "Sidst onboardet",
+          "TOOLTIP": "Seneste gang Meta registrerede dette telefonnummer"
+        },
+        "PHONE_NUMBER_STATUS": {
+          "LABEL": "Status på telefonnummer",
+          "TOOLTIP": "Nuværende forbindelsesstatus for dette telefonnummer på WhatsApp"
+        },
+        "QUALITY_RATING": {
+          "LABEL": "Quality rating",
+          "TOOLTIP": "Kvalitetsvurdering, som Meta tildeler dette telefonnummer på baggrund af nylige beskedsignaler"
+        },
+        "MESSAGING_LIMIT_TIER": {
+          "LABEL": "Grænse for virksomhedsbeskeder",
+          "TOOLTIP": "Antal unikke kunder, din virksomhed kan sende beskeder til uden for kundeservicevinduet i en løbende 24-timers periode",
+          "DESCRIPTION": "Denne grænse deles af alle WhatsApp-telefonnumre i virksomhedsporteføljen."
+        },
+        "ACCOUNT_MODE": {
+          "LABEL": "Account mode",
+          "TOOLTIP": "Nuværende driftstilstand for dette WhatsApp-telefonnummer"
+        },
+        "CODE_VERIFICATION_STATUS": {
+          "LABEL": "Kode verifikation",
+          "TOOLTIP": "Status for verifikationskode rapporteret af Meta for dette telefonnummer"
+        },
+        "THROUGHPUT_LEVEL": {
+          "LABEL": "Gennemløb",
+          "TOOLTIP": "Niveau for beskedgennemstrømning tildelt dette telefonnummer"
+        },
+        "BUSINESS_ACCOUNT_NAME": {
+          "LABEL": "WhatsApp Business-kontonavn",
+          "TOOLTIP": "Navn på den WhatsApp Business-konto, der er knyttet til dette telefonnummer"
+        },
+        "BUSINESS_ACCOUNT_ID": {
+          "LABEL": "WhatsApp Business Konto-ID",
+          "TOOLTIP": "Meta-id for den linkede WhatsApp Business-konto"
+        },
+        "BUSINESS_PORTFOLIO_NAME": {
+          "LABEL": "Navn på virksomhedsportefølje",
+          "TOOLTIP": "Navnet på den Meta-virksomhedsportfolio, der ejer WhatsApp Business-kontoen"
+        },
+        "BUSINESS_PORTFOLIO_ID": {
+          "LABEL": "ID for virksomhedsportefølje",
+          "TOOLTIP": "Meta-id for den virksomhedsportefølje, der ejer WhatsApp Business-kontoen"
+        }
+      },
+      "VALUES": {
+        "NOT_AVAILABLE": "Ikke tilgængelig",
+        "TIERS": {
+          "TIER_250": "250 customers per 24h",
+          "TIER_1000": "1K customers per 24h",
+          "TIER_1K": "1K customers per 24h",
+          "TIER_2K": "2K kunder pr. 24 timer",
+          "TIER_10K": "10K customers per 24h",
+          "TIER_100K": "100K customers per 24h",
+          "TIER_UNLIMITED": "Unlimited customers per 24h",
+          "UNKNOWN": "Rating not available"
+        },
+        "STATUSES": {
+          "APPROVED": "Approved",
+          "CONNECTED": "Tilsluttet",
+          "VERIFIED": "Verificeret",
+          "STANDARD": "Standard",
+          "ACTIVE": "Aktiv",
+          "EXPIRED": "Udløbet",
+          "FLAGGED": "Markeret",
+          "RESTRICTED": "Begrænset",
+          "BANNED": "Udelukket",
+          "DISCONNECTED": "Afbrudt",
+          "UNKNOWN": "Ikke tilgængelig",
+          "PENDING_REVIEW": "Under gennemgang",
+          "AVAILABLE_WITHOUT_REVIEW": "Ikke gennemgået endnu",
+          "REJECTED": "Ikke godkendt",
+          "DECLINED": "Ikke godkendt",
+          "NON_EXISTS": "Non exists"
+        },
+        "MODES": {
+          "SANDBOX": "Sandbox",
+          "LIVE": "Levende"
+        },
+        "QUALITY": {
+          "GREEN": "Grøn",
+          "YELLOW": "Gul",
+          "RED": "Rød"
+        },
+        "TIER_NAMES": {
+          "TIER_250": "Tier 250",
+          "TIER_1000": "Tier 1K",
+          "TIER_1K": "Tier 1K",
+          "TIER_2K": "Tier 2K",
+          "TIER_10K": "Tier 10K",
+          "TIER_100K": "Tier 100K",
+          "TIER_UNLIMITED": "Ubegrænset"
+        }
+      },
+      "BUSINESS_PROFILE": {
+        "PREVIEW_LABEL": "WhatsApp virksomhedsprofil"
+      },
+      "WEBHOOK": {
+        "TITLE": "Webhook Configuration",
+        "DESCRIPTION": "Webhook URL is required for your WhatsApp Business Account to receive messages from customers",
+        "ACTION_REQUIRED": "Webhook not configured",
+        "REGISTER_BUTTON": "Register Webhook",
+        "REGISTER_SUCCESS": "Webhook registered successfully",
+        "REGISTER_ERROR": "Failed to register webhook. Please try again.",
+        "CONFIGURED_SUCCESS": "Webhook configured successfully",
+        "URL_MISMATCH": "Webhook URL mismatch",
+        "CONFIGURED_URL": "Konfigureret URL",
+        "EXPECTED_URL": "Forventet URL",
+        "COPY_URL": "Kopier webhook URL",
+        "COPY_SUCCESS": "Webhook URL kopieret til udklipsholder"
+      }
+    },
+    "SETTINGS": "Indstillinger",
+    "FEATURES": {
+      "LABEL": "Funktioner",
+      "DISPLAY_FILE_PICKER": "Vis filvælger på widget'en",
+      "DISPLAY_EMOJI_PICKER": "Vis emoji-vælger på widget'en",
+      "ALLOW_END_CONVERSATION": "Tillad brugere at afslutte samtale fra widget",
+      "USE_INBOX_AVATAR_FOR_BOT": "Use inbox name and avatar for the bot"
+    },
+    "SETTINGS_POPUP": {
+      "MESSENGER_HEADING": "Messenger- Script",
+      "MESSENGER_SUB_HEAD": "Placer denne knap inde i din body tag",
+      "ALLOWED_DOMAINS": {
+        "TITLE": "Allowed Domains",
+        "DESCRIPTION": "Restrict which websites can embed your chat widget. For security, only add domains you own and trust. Add one or more domains separated by commas. Leave blank to allow all domains (not recommended for production).",
+        "PLACEHOLDER": "example.com, www.example.com, app.example.com"
+      },
+      "ALLOW_MOBILE_WEBVIEW": {
+        "LABEL": "Enable widget in mobile apps",
+        "SUBTITLE": "Check this if you embed the widget in iOS or Android apps. Mobile apps don't send domain information, so they would be blocked by domain restrictions unless this is enabled."
+      },
+      "IDENTITY_VALIDATION": {
+        "TITLE": "Identity Validation",
+        "DESCRIPTION": "Verify user authenticity by generating secure tokens. This prevents unauthorized users from impersonating others in your chat.",
+        "SECRET_KEY": "Secret Key",
+        "VIEW_DOCS": "View documentation",
+        "REQUIRE_LABEL": "Require identity validation for all conversations",
+        "REQUIRE_DESCRIPTION": "When enabled, users must provide a valid identity token to start conversations. Requests without valid tokens will be rejected.",
+        "ROTATE": {
+          "BUTTON": "Rotér nøgle",
+          "TITLE": "Roter secret key?",
+          "WARNING": "Den nuværende nøgle tilbagekaldes i det øjeblik, du roterer den.",
+          "WARNING_DETAIL": "Der er ingen overlappingsperiode, og det kan ikke gendannes.",
+          "IMPACT": "Dine servere skal signere brugere med den nye nøgle. Hvis nogen stadig er signeret med den gamle nøgle, vil verifikationen mislykkes. Hvis identitetsvalidering er påkrævet, kan de ikke starte en samtale.",
+          "CONFIRM": "Rotér nøgle",
+          "CANCEL": "Annuller",
+          "SUCCESS": "Secret key er blevet roteret",
+          "ERROR": "Kunne ikke rotere secret key, prøv venligst igen"
+        }
+      },
+      "INBOX_AGENTS": "Agenter",
+      "INBOX_AGENTS_SUB_TEXT": "Tilføj eller fjern agenter fra denne indbakke",
+      "AGENT_ASSIGNMENT": "Samtale Tildeling",
+      "AGENT_ASSIGNMENT_SUB_TEXT": "Opdater indstillinger for samtale",
+      "UPDATE": "Opdater",
+      "ENABLE_EMAIL_COLLECT_BOX": "Aktiver boks til indsamling af e-mail",
+      "ENABLE_EMAIL_COLLECT_BOX_SUB_TEXT": "Aktiver eller deaktivér opsamlingsboks for e-mail ved ny samtale",
+      "AUTO_ASSIGNMENT": "Aktiver automatisk tildeling",
+      "SENDER_NAME_SECTION": "Enable Agent Name in Email",
+      "SENDER_NAME_SECTION_TEXT": "Enable/Disable showing Agent's name in email, if disabled it will show business name",
+      "ENABLE_CONTINUITY_VIA_EMAIL": "Aktivér konversationskontinuitet via e-mail",
+      "ENABLE_CONTINUITY_VIA_EMAIL_SUB_TEXT": "Samtaler vil fortsætte via e-mail, hvis kontaktpersonens e-mailadresse er tilgængelig.",
+      "ENABLE_CONTINUITY_VIA_EMAIL_DISABLED_TEXT": "Denne funktion er tilgængelig i et betalt abonnement. Opgrader for at aktivere fortsættelse af samtalen via e-mail.",
+      "LOCK_TO_SINGLE_CONVERSATION": "Conversation Routing",
+      "LOCK_TO_SINGLE_CONVERSATION_SUB_TEXT": "Configure conversation creation for existing contacts",
+      "INBOX_UPDATE_TITLE": "Indbakke Indstillinger",
+      "INBOX_UPDATE_SUB_TEXT": "Opdater dine indbakkeindstillinger",
+      "AUTO_ASSIGNMENT_SUB_TEXT": "Aktiver eller deaktiver automatisk tildeling af nye samtaler til agenter tilføjet til denne indbakke.",
+      "HMAC_VERIFICATION": "Bruger Identitetsvalidering",
+      "HMAC_DESCRIPTION": "For at validere brugerens identitet, kan du passere en `identifier_hash` for hver bruger. Du kan generere en HMAC sha256 hash ved hjælp af 'identifier' med nøglen vist her.",
+      "HMAC_LINK_TO_DOCS": "You can read more here.",
+      "HMAC_MANDATORY_VERIFICATION": "Gennemtving Validering Af Bruger Identitet",
+      "HMAC_MANDATORY_DESCRIPTION": "Hvis aktiveret, vil forespørgsler der mangler 'identifier_hash' blive afvist.",
+      "INBOX_IDENTIFIER": "Identifikator For Indbakke",
+      "INBOX_IDENTIFIER_SUB_TEXT": "Brug den `inbox_identifier` token vist her til godkendelse dine API-klienter.",
+      "FORWARD_EMAIL_TITLE": "Videresend til e-mail",
+      "FORWARD_EMAIL_SUB_TEXT": "Begynd at videresende dine e-mails til følgende e-mailadresse.",
+      "FORWARD_EMAIL_NOT_CONFIGURED": "Forwarding emails to your inbox is currently disabled on this installation. To use this feature, it must be enabled by your administrator. Please get in touch with them to proceed.",
+      "ALLOW_MESSAGES_AFTER_RESOLVED": "Tillad beskeder efter samtalen løst",
+      "ALLOW_MESSAGES_AFTER_RESOLVED_SUB_TEXT": "Tillad slutbrugere at sende beskeder, selv efter samtalen er løst.",
+      "WHATSAPP_SECTION_SUBHEADER": "Denne API-nøgle bruges til integration med WhatsApp API'erne.",
+      "WHATSAPP_SECTION_UPDATE_SUBHEADER": "Enter the new API key to be used for the integration with the WhatsApp APIs.",
+      "WHATSAPP_SECTION_TITLE": "API Nøgle",
+      "WHATSAPP_SECTION_UPDATE_TITLE": "Update API Key",
+      "WHATSAPP_SECTION_UPDATE_PLACEHOLDER": "Enter the new API Key here",
+      "WHATSAPP_SECTION_UPDATE_BUTTON": "Opdater",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_ADD_TITLE": "Tilføj Business Management Token",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_REPLACE_TITLE": "Erstat Business Management Token",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_CONFIGURED": "Business management token konfigureret",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_UPDATE_SUBHEADER": "Angiv et token med adgang til denne WhatsApp Business-konto, når Chatwoot ikke kan hente dens skabeloner til beskeder. Chatwoot bruger kun dette token til synkronisering af skabeloner.",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_UPDATE_PLACEHOLDER": "Indtast business management token",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_ADD_BUTTON": "Tilføj",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_REPLACE_BUTTON": "Erstat",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_UPDATE_SUCCESS": "WhatsApp business management token blev opdateret.",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_UPDATE_ERROR": "Kunne ikke opdatere business management token. Kontroller dens WhatsApp Business Management tilladelse og kontoadgang, og prøv derefter igen.",
+      "WHATSAPP_BUSINESS_MANAGEMENT_TOKEN_GUIDE_LINK": "Lær at generere en WhatsApp Business Management token",
+      "WHATSAPP_EMBEDDED_SIGNUP_TITLE": "WhatsApp Embedded Signup",
+      "WHATSAPP_EMBEDDED_SIGNUP_SUBHEADER": "This inbox is connected through WhatsApp embedded signup.",
+      "WHATSAPP_EMBEDDED_SIGNUP_DESCRIPTION": "You can reconfigure this inbox to update your WhatsApp Business settings.",
+      "WHATSAPP_RECONFIGURE_BUTTON": "Reconfigure",
+      "WHATSAPP_MANUAL_TRANSFER_TITLE": "Skift til manuel opsætning",
+      "WHATSAPP_MANUAL_TRANSFER_SUBHEADER": "Denne indbakke blev tilsluttet via WhatsApps integrerede tilmelding, som ikke længere understøttes. Indtast legitimationsoplysningerne til WhatsApp Cloud API fra din egen Meta-app for at skifte denne indbakke til manuel opsætning. Konfigurer webhooken i din Meta-app ved hjælp af ovenstående verifikationstoken, før du foretager skiftet.",
+      "WHATSAPP_MANUAL_TRANSFER_PHONE_NUMBER_ID_LABEL": "Telefonnummer ID",
+      "WHATSAPP_MANUAL_TRANSFER_BUSINESS_ACCOUNT_ID_LABEL": "Business Konto ID",
+      "WHATSAPP_MANUAL_TRANSFER_API_KEY_LABEL": "API Nøgle",
+      "WHATSAPP_MANUAL_TRANSFER_API_KEY_PLACEHOLDER": "Indtast en permanent adgangstoken fra din Meta-app",
+      "WHATSAPP_MANUAL_TRANSFER_BUTTON": "Skift til manuel opsætning",
+      "WHATSAPP_MANUAL_TRANSFER_SUCCESS": "Indbakken blev skiftet til manuel opsætning.",
+      "WHATSAPP_MANUAL_TRANSFER_ERROR": "Kunne ikke skifte til manuel opsætning. Kontroller venligst legitimationsoplysningerne og prøv igen.",
+      "WHATSAPP_CONNECT_TITLE": "Connect to WhatsApp Business",
+      "WHATSAPP_CONNECT_SUBHEADER": "Upgrade to WhatsApp embedded signup for easier management.",
+      "WHATSAPP_CONNECT_DESCRIPTION": "Connect this inbox to WhatsApp Business for enhanced features and easier management.",
+      "WHATSAPP_CONNECT_BUTTON": "Tilslut",
+      "WHATSAPP_CONNECT_SUCCESS": "Successfully connected to WhatsApp Business!",
+      "WHATSAPP_CONNECT_ERROR": "Failed to connect to WhatsApp Business. Please try again.",
+      "WHATSAPP_RECONFIGURE_SUCCESS": "Successfully reconfigured WhatsApp Business!",
+      "WHATSAPP_RECONFIGURE_ERROR": "Failed to reconfigure WhatsApp Business. Please try again.",
+      "WHATSAPP_APP_ID_MISSING": "WhatsApp App ID is not configured. Please contact your administrator.",
+      "WHATSAPP_CONFIG_ID_MISSING": "WhatsApp Configuration ID is not configured. Please contact your administrator.",
+      "WHATSAPP_LOGIN_CANCELLED": "WhatsApp login was cancelled. Please try again.",
+      "WHATSAPP_WEBHOOK_TITLE": "Webhook verifikations token",
+      "WHATSAPP_WEBHOOK_SUBHEADER": "This token is used to verify the authenticity of the webhook endpoint.",
+      "WHATSAPP_TEMPLATES_SYNC_TITLE": "Sync Templates",
+      "WHATSAPP_TEMPLATES_SYNC_SUBHEADER": "Manually sync message templates from WhatsApp to update your available templates.",
+      "WHATSAPP_TEMPLATES_SYNC_BUTTON": "Sync Templates",
+      "WHATSAPP_TEMPLATES_SYNC_SUCCESS": "Templates sync initiated successfully. It may take a couple of minutes to update.",
+      "WHATSAPP_MANUAL_MIGRATION": {
+        "BANNER": {
+          "TITLE": "Manuel opsætning anbefales",
+          "DESCRIPTION": "Denne indbakke er forbundet via den fælles Meta-app, der bruges til integreret tilmelding, hvilket er blevet påvirket af nylige restriktioner fra Meta. For at undgå lignende problemer i fremtiden anbefaler vi, at du forbinder den igen ved hjælp af din egen Meta-app.",
+          "START": "Start manuel migration",
+          "GUIDE": "Se guide"
+        },
+        "DIALOG": {
+          "EYEBROW": "WhatsApp manuel migration",
+          "TITLE": "Genopret forbindelse til WhatsApp-indbakken",
+          "CLOSE": "Luk",
+          "ACTION_REQUIRED_TITLE": "Genopret forbindelse med din egen Meta-app",
+          "ACTION_REQUIRED_DESCRIPTION": "Indbakker, der er forbundet via din egen Meta-app, påvirkes ikke af restriktioner for den fælles app til indlejret tilmelding. Denne guidede proces opdaterer WhatsApp API-forbindelsen uden at oprette en ny indbakke.",
+          "GUIDE_LINK": "Åbn den manuelle opsætningsguide",
+          "PRESERVED_TITLE": "Konserveret",
+          "PRESERVED_DESCRIPTION": "Samtaler, kontakter, samarbejdspartnere, routing, åbningstider og indbakkeindstillinger.",
+          "UPDATED_TITLE": "Opdateret",
+          "UPDATED_DESCRIPTION": "WABA-id, telefonnummer-id, adgangstoken og webhook-konfiguration.",
+          "WABA_ID": "WABA ID",
+          "WABA_PLACEHOLDER": "Indtast WABA ID",
+          "WABA_HELP": "Den WhatsApp Business-konto, der ejer dette telefonnummer.",
+          "PHONE_NUMBER_ID": "Telefonnummer ID",
+          "PHONE_NUMBER_PLACEHOLDER": "Indtast Telefonnummer ID",
+          "PHONE_NUMBER_HELP": "Metas unikke ID for WhatsApp-nummeret forbundet til denne indbakke.",
+          "DISPLAY_PHONE_NUMBER": "Vist telefonnummer",
+          "DISPLAY_PHONE_NUMBER_PLACEHOLDER": "Indtast telefonnummer til visning",
+          "DISPLAY_PHONE_NUMBER_HELP": "WhatsApp-nummeret til kunderne. Dette kan ikke ændres under migreringen.",
+          "ACCESS_TOKEN": "Permanent adgangstoken eller systembruger token",
+          "ACCESS_TOKEN_PLACEHOLDER": "Indsæt adgangstoken",
+          "TOKEN_HELP_PREFIX": "Tokenen skal indeholde",
+          "TOKEN_HELP_MIDDLE": "Tilføj",
+          "TOKEN_HELP_SUFFIX": "til synkronisering og håndtering af skabeloner.",
+          "MESSAGING_PERMISSION": "whatsapp_business_messaging.",
+          "MANAGEMENT_PERMISSION": "whatsapp_business_management",
+          "REVIEW_TITLE": "Gennemgå, før du opretter forbindelse igen",
+          "INBOX": "Indbakke",
+          "PHONE_NUMBER": "Telefonnummer",
+          "NOT_ENTERED": "Ikke angivet",
+          "VERIFY_NOTICE": "Chatwoot vil verificere disse legitimationsoplysninger hos Meta, før eventuelle ændringer foretages. Hvis verificeringen mislykkes, forbliver den nuværende konfiguration uændret.",
+          "BACK": "Tilbage",
+          "CANCEL": "Annuller",
+          "CONTINUE": "Fortsæt",
+          "REVIEW_MIGRATION": "Gennemgang af migrering",
+          "RECONNECT": "Genopret forbindelse til WhatsApp-indbakken"
+        },
+        "STEPS": {
+          "BEFORE_YOU_START": {
+            "TITLE": "Før du starter",
+            "DESCRIPTION": "Dette genopretter forbindelsen til WhatsApp API-oplysningerne for denne indbakke. Samtaler, samarbejdspartnere, routing, åbningstider, CSAT og bot-indstillinger bevares."
+          },
+          "BUSINESS_DETAILS": {
+            "TITLE": "Virksomhedsoplysninger",
+            "DESCRIPTION": "Indtast WhatsApp-aktiverne fra kundens Meta Business-konto."
+          },
+          "ACCESS_TOKEN": {
+            "TITLE": "Adgangs token",
+            "DESCRIPTION": "Indsæt en permanent adgangstoken eller system bruger token med WhatsApp tilladelser."
+          },
+          "REVIEW_MIGRATION": {
+            "TITLE": "Gennemgang af migrering",
+            "DESCRIPTION": "Bekræft forbindelsesoplysningerne, før du genopretter forbindelsen til denne indbakke. Chatwoot vil verificere tokenet, WABA'en og telefonnummeret hos Meta, før ændringerne anvendes."
+          }
+        }
+      },
+      "WHATSAPP_CALLING_ENABLED": {
+        "LABEL": "Aktiver stemmeopkald",
+        "DESCRIPTION": "Giv agenter mulighed for at foretage og modtage WhatsApp-taleopkald i denne indbakke. Kun tilgængeligt for WhatsApp Cloud-kanaler med indlejret tilmelding, hvor Meta har givet tilladelse til opkald."
+      },
+      "UPDATE_PRE_CHAT_FORM_SETTINGS": "Update Pre Chat Form Settings"
+    },
+    "HELP_CENTER": {
+      "LABEL": "Help Center",
+      "PLACEHOLDER": "Select Help Center",
+      "SELECT_PLACEHOLDER": "Select Help Center",
+      "NONE": "Ingen",
+      "REMOVE": "Remove Help Center",
+      "SUB_TEXT": "Attach a Help Center with the inbox"
+    },
+    "AUTO_ASSIGNMENT": {
+      "MAX_ASSIGNMENT_LIMIT": "Grænse for automatisk tildeling",
+      "MAX_ASSIGNMENT_LIMIT_RANGE_ERROR": "Indtast en værdi større end 0",
+      "MAX_ASSIGNMENT_LIMIT_SUB_TEXT": "Begræns det maksimale antal samtaler fra denne indbakke, der kan være auto tildelt en agent"
+    },
+    "ASSIGNMENT": {
+      "TITLE": "Samtale Tildeling",
+      "DESCRIPTION": "Automatically assign incoming conversations to available agents based on assignment policies",
+      "ENABLE_AUTO_ASSIGNMENT": "Enable automatic conversation assignment",
+      "DEFAULT_RULES_TITLE": "Default assignment rules",
+      "DEFAULT_RULES_DESCRIPTION": "Using the default assignment behavior for all conversations",
+      "DEFAULT_RULE_1": "Earliest created conversations first",
+      "DEFAULT_RULE_2": "Round robin distribution",
+      "CUSTOMIZE_WITH_POLICY": "Customize with assignment policy",
+      "USING_POLICY": "Using custom assignment policy for this inbox",
+      "CUSTOMIZE_POLICY": "Customize with assignment policy",
+      "DELETE_POLICY": "Delete policy",
+      "POLICY_LABEL": "Assignment policy",
+      "ASSIGNMENT_ORDER_LABEL": "Assignment Order",
+      "ASSIGNMENT_METHOD_LABEL": "Assignment Method",
+      "POLICY_STATUS": {
+        "ACTIVE": "Aktiv",
+        "INACTIVE": "Inactive"
+      },
+      "PRIORITY": {
+        "EARLIEST_CREATED": "Earliest created",
+        "LONGEST_WAITING": "Longest waiting"
+      },
+      "METHOD": {
+        "ROUND_ROBIN": "Round robin",
+        "BALANCED": "Balanced assignment"
+      },
+      "UPGRADE_PROMPT": "Custom assignment policies are available on the Business plan",
+      "UPGRADE_TO_BUSINESS": "Upgrade to Business",
+      "DEFAULT_POLICY_LINKED": "Default policy linked",
+      "DEFAULT_POLICY_DESCRIPTION": "Link a custom assignment policy to customize how conversations are assigned to agents in this inbox.",
+      "LINK_EXISTING_POLICY": "Link existing policy",
+      "CREATE_NEW_POLICY": "Create new policy",
+      "NO_POLICIES": "No assignment policies found",
+      "VIEW_ALL_POLICIES": "View all policies",
+      "CURRENT_BEHAVIOR": "Currently using default assignment behavior:",
+      "LINK_SUCCESS": "Assignment policy linked successfully",
+      "LINK_ERROR": "Failed to link assignment policy"
+    },
+    "ASSIGNMENT_POLICY": {
+      "DELETE_CONFIRM_TITLE": "Delete assignment policy?",
+      "DELETE_CONFIRM_MESSAGE": "Are you sure you want to remove this assignment policy from this inbox? The inbox will revert to default assignment rules.",
+      "CANCEL": "Annuller",
+      "CONFIRM_DELETE": "Slet",
+      "DELETE_SUCCESS": "Assignment policy removed successfully",
+      "DELETE_ERROR": "Failed to remove assignment policy"
+    },
+    "FACEBOOK_REAUTHORIZE": {
+      "TITLE": "Genautorisér",
+      "SUBTITLE": "Din Facebook-forbindelse er udløbet, tilslut venligst din Facebook-side igen for at fortsætte tjenesterne",
+      "MESSAGE_SUCCESS": "Genoprettelse lykkedes",
+      "MESSAGE_ERROR": "Der opstod en fejl, prøv igen"
+    },
+    "PRE_CHAT_FORM": {
+      "DESCRIPTION": "Forud chat formularer gør det muligt for dig at fange brugeroplysninger, før de starter samtale med dig.",
+      "SET_FIELDS": "Tidligere chatformularfelter",
+      "SET_FIELDS_HEADER": {
+        "FIELDS": "Felter",
+        "LABEL": "Etiketter",
+        "PLACE_HOLDER": "Pladsholder",
+        "KEY": "Nøgle",
+        "TYPE": "Type",
+        "REQUIRED": "Påkrævet"
+      },
+      "ENABLE": {
+        "LABEL": "Aktiver præ-chat formular",
+        "OPTIONS": {
+          "ENABLED": "Ja",
+          "DISABLED": "Nej"
+        }
+      },
+      "PRE_CHAT_MESSAGE": {
+        "LABEL": "Tidligere chatbesked",
+        "PLACEHOLDER": "Denne meddelelse vil være synlig for brugerne sammen med formularen"
+      },
+      "REQUIRE_EMAIL": {
+        "LABEL": "Besøgende skal angive deres navn og e-mailadresse, før du starter chatten"
+      }
+    },
+    "CSAT": {
+      "TITLE": "Aktiver CSAT",
+      "SUBTITLE": "Automatically trigger CSAT surveys at the end of conversations to understand how customers feel about their support experience. Track satisfaction trends and identify areas for improvement over time.",
+      "DISPLAY_TYPE": {
+        "LABEL": "Display type"
+      },
+      "MESSAGE": {
+        "LABEL": "Besked",
+        "PLACEHOLDER": "Please enter a message to show users with the form"
+      },
+      "BUTTON_TEXT": {
+        "LABEL": "Button text",
+        "PLACEHOLDER": "Please rate us"
+      },
+      "LANGUAGE": {
+        "LABEL": "Sprog",
+        "PLACEHOLDER": "Select template language"
+      },
+      "MESSAGE_PREVIEW": {
+        "LABEL": "Message preview",
+        "TOOLTIP": "This may vary slightly when rendered on WhatsApp's platform."
+      },
+      "TEMPLATE_STATUS": {
+        "APPROVED": "Approved by WhatsApp",
+        "PENDING": "Pending WhatsApp approval",
+        "REJECTED": "Meta rejected the template",
+        "DEFAULT": "Needs WhatsApp approval",
+        "NOT_FOUND": "The template does not exist in the Meta platform."
+      },
+      "TEMPLATE_CREATION": {
+        "SUCCESS_MESSAGE": "WhatsApp template created successfully and sent for approval",
+        "ERROR_MESSAGE": "Failed to create WhatsApp template"
+      },
+      "TEMPLATE_UPDATE_DIALOG": {
+        "TITLE": "Edit survey details",
+        "DESCRIPTION": "We will delete the previous template and make a new one which will be sent again for WhatsApp approval",
+        "CONFIRM": "Create new template",
+        "CANCEL": "Gå tilbage"
+      },
+      "UTILITY_ANALYZER": {
+        "ACTION": "Check utility fit",
+        "HELPER_NOTE": "Check this message before submission to improve Utility fit. The system creates a dedicated CSAT template with buttons for reporting and submits it as Utility; Meta may still reclassify it as Marketing based on content.",
+        "RESULT_LABEL": "Meta category prediction",
+        "GUIDANCE_NOTE": "This is a guidance check, not a guarantee of Meta approval.",
+        "SUGGESTION_LABEL": "Suggested utility-safe rewrite",
+        "APPLY": "Use this rewrite",
+        "ERROR_MESSAGE": "Couldn't analyze the message. Please try again.",
+        "CLASSIFICATION": {
+          "LIKELY_UTILITY": "Likely Utility",
+          "LIKELY_MARKETING": "Likely Marketing",
+          "UNCLEAR": "Needs clarification"
+        }
+      },
+      "SURVEY_RULE": {
+        "LABEL": "Survey rule",
+        "DESCRIPTION_PREFIX": "Send the survey if the conversation",
+        "DESCRIPTION_SUFFIX": "any of the labels",
+        "OPERATOR": {
+          "CONTAINS": "indeholder",
+          "DOES_NOT_CONTAINS": "indeholder ikke"
+        },
+        "SELECT_PLACEHOLDER": "select labels"
+      },
+      "NOTE": "Note: CSAT surveys are sent only once per conversation",
+      "WHATSAPP_NOTE": "Note: When you save, the system creates a dedicated CSAT template in WhatsApp (used to capture rating and feedback in reports) and submits it as Utility for approval. Meta may still classify it as Marketing based on content. After approval, surveys are sent only once per conversation as per the survey rule.",
+      "API": {
+        "SUCCESS_MESSAGE": "CSAT settings updated successfully",
+        "ERROR_MESSAGE": "We couldn't update CSAT settings. Please try again later."
+      }
+    },
+    "BUSINESS_HOURS": {
+      "TITLE": "Indstil din tilgængelighed",
+      "SUBTITLE": "Indstil din tilgængelighed på din livechat widget",
+      "WEEKLY_TITLE": "Indstil dine ugentlige timer",
+      "TIMEZONE_LABEL": "Vælg tidszone",
+      "UPDATE": "Opdater indstillinger for åbningstider",
+      "TOGGLE_AVAILABILITY": "Aktiver forretningstilgængelighed for denne indbakke",
+      "UNAVAILABLE_MESSAGE_LABEL": "Utilgængelig besked til besøgende",
+      "TOGGLE_HELP": "Enabling business availability will show the available hours on live chat widget even if all the agents are offline. Outside available hours visitors can be warned with a message and a pre-chat form.",
+      "DAY": {
+        "DAY": "Dag",
+        "AVAILABILITY": "Tilgængelighed",
+        "HOURS": "Hours",
+        "ENABLE": "Aktiver tilgængelighed for denne dag",
+        "UNAVAILABLE": "Unavailable",
+        "VALIDATION_ERROR": "Starttidspunkt bør være før lukketid.",
+        "CHOOSE": "Vælg"
+      },
+      "ALL_DAY": "All-Day"
+    },
+    "IMAP": {
+      "TITLE": "IMAP",
+      "SUBTITLE": "Indstil dine IMAP-oplysninger",
+      "NOTE_TEXT": "Konfigurer IMAP til at modtage e-mails direkte fra din postkasse. Lad funktionen være deaktiveret, hvis du bruger e-mail-videresendelse.",
+      "UPDATE": "Opdater indstillinger",
+      "TOGGLE_AVAILABILITY": "Aktiver IMAP- konfiguration for denne indbakke",
+      "TOGGLE_HELP": "Enabling IMAP will help the user to receive email",
+      "EDIT": {
+        "SUCCESS_MESSAGE": "Indbakkeindstillinger opdateret",
+        "ERROR_MESSAGE": "Kunne ikke opdatere IMAP-indstillinger"
+      },
+      "ADDRESS": {
+        "LABEL": "Ip Adresse",
+        "PLACE_HOLDER": "Adresse (f.eks.: imap.gmail.com)"
+      },
+      "PORT": {
+        "LABEL": "Port",
+        "PLACE_HOLDER": "Port"
+      },
+      "LOGIN": {
+        "LABEL": "Log Ind",
+        "PLACE_HOLDER": "Log Ind"
+      },
+      "PASSWORD": {
+        "LABEL": "Adgangskode",
+        "PLACE_HOLDER": "Adgangskode"
+      },
+      "ENABLE_SSL": "Aktiver SSL",
+      "AUTH_MECHANISM": "Godkendelse"
+    },
+    "MICROSOFT": {
+      "TITLE": "Microsoft",
+      "SUBTITLE": "Reauthorize your MICROSOFT account"
+    },
+    "SMTP": {
+      "TITLE": "Smtp",
+      "SUBTITLE": "Indstil dine IMAP-oplysninger",
+      "UPDATE": "Opdater SMTP indstillinger",
+      "TOGGLE_AVAILABILITY": "Aktiver SMTP konfiguration for denne indbakke",
+      "TOGGLE_HELP": "Aktivering af SMTP vil hjælpe brugeren med at sende e-mail",
+      "EDIT": {
+        "SUCCESS_MESSAGE": "SMTP indstillinger opdateret",
+        "ERROR_MESSAGE": "Kan ikke opdatere SMTP indstillinger"
+      },
+      "ADDRESS": {
+        "LABEL": "Ip Adresse",
+        "PLACE_HOLDER": "Adresse (f.eks.: smtp.gmail.com)"
+      },
+      "PORT": {
+        "LABEL": "Port",
+        "PLACE_HOLDER": "Port"
+      },
+      "LOGIN": {
+        "LABEL": "Log Ind",
+        "PLACE_HOLDER": "Log Ind"
+      },
+      "PASSWORD": {
+        "LABEL": "Adgangskode",
+        "PLACE_HOLDER": "Adgangskode"
+      },
+      "DOMAIN": {
+        "LABEL": "Domæne",
+        "PLACE_HOLDER": "Domæne"
+      },
+      "ENCRYPTION": "Kryptering",
+      "SSL_TLS": "SSL/TLS",
+      "START_TLS": "STARTTLS",
+      "OPEN_SSL_VERIFY_MODE": "Åbn SSL-bekræftelsestilstand",
+      "AUTH_MECHANISM": "Godkendelse"
+    },
+    "NOTE": "Bemærk: ",
+    "WIDGET_BUILDER": {
+      "WIDGET_OPTIONS": {
+        "AVATAR": {
+          "LABEL": "Websted Avatar",
+          "DELETE": {
+            "API": {
+              "SUCCESS_MESSAGE": "Avatar slettet",
+              "ERROR_MESSAGE": "Der opstod en fejl. Prøv venligst igen"
+            }
+          }
+        },
+        "WEBSITE_NAME": {
+          "LABEL": "Websted Navn",
+          "PLACE_HOLDER": "Indtast dit websted navn (fx: Firma ApS)",
+          "ERROR": "Please enter a valid website name"
+        },
+        "WELCOME_HEADING": {
+          "LABEL": "Velkomstoverskrift",
+          "PLACE_HOLDER": "Hej der!"
+        },
+        "WELCOME_TAGLINE": {
+          "LABEL": "Velkomst Tagline",
+          "PLACE_HOLDER": "Vi gør det nemt at komme i kontakt med os. Spørg os om noget, eller del din feedback."
+        },
+        "REPLY_TIME": {
+          "LABEL": "Svar Tid",
+          "IN_A_FEW_MINUTES": "På nogle få minutter",
+          "IN_A_FEW_HOURS": "Om et par timer",
+          "IN_A_DAY": "På en dag"
+        },
+        "WIDGET_COLOR_LABEL": "Widget Farve",
+        "WIDGET_BUBBLE": "Bubble",
+        "WIDGET_BUBBLE_POSITION_LABEL": "Position:",
+        "WIDGET_BUBBLE_TYPE_LABEL": "Type:",
+        "WIDGET_BUBBLE_LAUNCHER_TITLE": {
+          "DEFAULT": "Chat med os",
+          "LABEL": "Launcher Title",
+          "PLACE_HOLDER": "Chat med os"
+        },
+        "UPDATE": {
+          "BUTTON_TEXT": "Opdater Widget Indstillinger",
+          "API": {
+            "SUCCESS_MESSAGE": "Widget-indstillinger opdateret",
+            "ERROR_MESSAGE": "Kan ikke opdatere widget-indstillinger"
+          }
+        },
+        "WIDGET_VIEW_OPTION": {
+          "PREVIEW": "Eksempelvisning",
+          "SCRIPT": "Script"
+        },
+        "WIDGET_BUBBLE_POSITION": {
+          "LEFT": "Venstre",
+          "RIGHT": "Højre"
+        },
+        "WIDGET_BUBBLE_TYPE": {
+          "STANDARD": "Standard",
+          "EXPANDED_BUBBLE": "Udvidet Boble"
+        }
+      },
+      "WIDGET_SCREEN": {
+        "DEFAULT": "Standard",
+        "CHAT": "Chat mode"
+      },
+      "REPLY_TIME": {
+        "IN_A_FEW_MINUTES": "Svarer typisk på et par minutter",
+        "IN_A_FEW_HOURS": "Svarer typisk på et par timer",
+        "IN_A_DAY": "Svarer typisk på en dag"
+      },
+      "FOOTER": {
+        "START_CONVERSATION_BUTTON_TEXT": "Start Samtale",
+        "CHAT_INPUT_PLACEHOLDER": "Skriv din besked"
+      },
+      "BODY": {
+        "TEAM_AVAILABILITY": {
+          "ONLINE": "Vi er online",
+          "OFFLINE": "Vi er ikke tilgængelige i øjeblikket"
+        },
+        "USER_MESSAGE": "Hi",
+        "AGENT_MESSAGE": "Hej"
+      },
+      "BRANDING_TEXT": "Drevet af Chatwoot",
+      "SCRIPT_SETTINGS": "\n      window.chatwootSettings = {options};"
+    },
+    "EMAIL_PROVIDERS": {
+      "MICROSOFT": {
+        "TITLE": "Microsoft",
+        "DESCRIPTION": "Connect with Microsoft"
+      },
+      "GOOGLE": {
+        "TITLE": "Google",
+        "DESCRIPTION": "Connect with Google"
+      },
+      "OTHER_PROVIDERS": {
+        "TITLE": "Other Providers",
+        "DESCRIPTION": "Connect with Other Providers"
+      }
+    },
+    "CHANNELS": {
+      "MESSENGER": "Messenger",
+      "WEB_WIDGET": "Website",
+      "TWITTER_PROFILE": "Twitter",
+      "TWILIO_SMS": "Twilio SMS",
+      "WHATSAPP": "WhatsApp",
+      "SMS": "SMS",
+      "EMAIL": "E-mail",
+      "TELEGRAM": "Telegram",
+      "LINE": "Line",
+      "API": "API Kanal",
+      "INSTAGRAM": "Instagram",
+      "TIKTOK": "TikTok",
+      "VOICE": "Voice"
+    }
+  }
+}

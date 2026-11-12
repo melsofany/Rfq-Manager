@@ -12,3 +12,10 @@ AGENTS.md
 # Room writes this schema export in its own canonical format on every build;
 # reformatting it would be undone by the next compile.
 android/app/schemas/
+
+# Vendored upstream Chatwoot source (chatwoot/) is kept byte-for-byte as
+# released. Reformatting it would make every future upstream diff unreadable
+# and the repo-wide format gate would fail on 9,700 upstream files.
+chatwoot/
+# Cortoba's overlay onto Chatwoot is Ruby/ERB/YAML in the same tree.
+chatwoot-cortoba/

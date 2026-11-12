@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Automation",
+    "DESCRIPTION": "Automation can replace and streamline existing processes that require manual effort, such as adding labels and assigning conversations to the most suitable agent. This allows the team to focus on their strengths while reducing time spent on routine tasks.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "Automatiseringsregels ophalen",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "Automatiseringsregel toevoegen",
+      "SUBMIT": "Aanmaken",
+      "CANCEL_BUTTON_TEXT": "Annuleren",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Regel naam",
+          "PLACEHOLDER": "Voer regelnaam in",
+          "ERROR": "Naam is vereist"
+        },
+        "DESC": {
+          "LABEL": "Beschrijving",
+          "PLACEHOLDER": "Voer regelomschrijving in",
+          "ERROR": "Omschrijving is vereist"
+        },
+        "EVENT": {
+          "LABEL": "Event",
+          "PLACEHOLDER": "Selecteer er een",
+          "ERROR": "Event is verplicht"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Retry",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Runs the moment an event happens, as long as the conditions match."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Wait condition",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "Postvak In",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "Voorwaarden"
+        },
+        "ACTIONS": {
+          "LABEL": "Acties"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Voorwaarde toevoegen",
+      "ACTION_BUTTON_LABEL": "Actie toevoegen",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatiseringsregel succesvol toegevoegd",
+        "ERROR_MESSAGE": "Kan geen automatiseringsregel aanmaken, probeer het later opnieuw"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Naam",
+        "ACTIVE": "Actief",
+        "CREATED_ON": "Aangemaakt op"
+      },
+      "404": "Geen automatiseringsregels gevonden",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "Automatiseringsregel verwijderen",
+      "SUBMIT": "Verwijderen",
+      "CANCEL_BUTTON_TEXT": "Annuleren",
+      "CONFIRM": {
+        "TITLE": "Verwijderen bevestigen",
+        "MESSAGE": "Weet u zeker dat u wilt verwijderen ",
+        "YES": "Ja, verwijderen ",
+        "NO": "Nee, Behouden "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Automatiseringsregel succesvol verwijderd",
+        "ERROR_MESSAGE": "Kon geen automatiseringsregel verwijderen, probeer het later opnieuw"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Automatiseringsregel bewerken",
+      "SUBMIT": "Vernieuwen",
+      "CANCEL_BUTTON_TEXT": "Annuleren",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatiseringsregel succesvol bijgewerkt",
+        "ERROR_MESSAGE": "Automatiseringsregel kon niet worden bijgewerkt, probeer het later opnieuw"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Kloon",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatisering met succes gekloond",
+        "ERROR_MESSAGE": "Automatiseringsregel kon niet worden gekloond, probeer het later opnieuw"
+      }
+    },
+    "FORM": {
+      "EDIT": "Bewerken",
+      "CREATE": "Aanmaken",
+      "DELETE": "Verwijderen",
+      "CANCEL": "Annuleren",
+      "RESET_MESSAGE": "Het veranderen van het event type zal de condities en events die u hieronder hebt toegevoegd resetten"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "U moet tenminste één voorwaarde hebben om op te slaan",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Aangepaste contactattributen",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Gesprek aangepaste attributen",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "U moet tenminste één actie hebben om op te slaan",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Voer hier uw bericht in",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Teams selecteren",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Automatiseringsregel activeren",
+      "DEACTIVATION_TITLE": "Automatiseringsregel deactiveren",
+      "ACTIVATION_DESCRIPTION": "Deze actie activeert de automatiseringsregel '{automationName}'. Weet u zeker dat u wilt doorgaan?",
+      "DEACTIVATION_DESCRIPTION": "Deze actie zal de automatiseringsregel '{automationName}' deactiveren. Weet u zeker dat u wilt doorgaan?",
+      "ACTIVATION_SUCCESFUL": "Automatiseringsregel succesvol geactiveerd",
+      "DEACTIVATION_SUCCESFUL": "Automatiseringsregel succesvol gedeactiveerd",
+      "ACTIVATION_ERROR": "Automatisering kon niet worden geactiveerd, probeer het later opnieuw",
+      "DEACTIVATION_ERROR": "Automatisering kon niet worden gedeactiveerd, probeer het later opnieuw",
+      "CONFIRMATION_LABEL": "Ja",
+      "CANCEL_LABEL": "Nee"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Kon bijlage niet uploaden, probeer het opnieuw",
+      "LABEL_IDLE": "Bijlage uploaden",
+      "LABEL_UPLOADING": "Uploaden...",
+      "LABEL_UPLOADED": "Succesvol geüpload",
+      "LABEL_UPLOAD_FAILED": "Upload mislukt"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Waarde is vereist",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Value must be between 1 and 998",
+      "ACTION_PARAMETERS_REQUIRED": "Action parameters are required",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Geen",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Gesprek aangemaakt",
+      "CONVERSATION_UPDATED": "Gesprek bijgewerkt",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "Gesprek dempen",
+      "SNOOZE_CONVERSATION": "Demp gesprek",
+      "RESOLVE_CONVERSATION": "Resolve Conversation",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "Change Priority",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Open conversation",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Geen",
+      "LOW": "Laag",
+      "MEDIUM": "Gemiddeld",
+      "HIGH": "Hoog",
+      "URGENT": "Dringend"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "Privénotitie",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "E-mailadres",
+      "INBOX": "Postvak In",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "Telefoonnummer",
+      "STATUS": "Status",
+      "BROWSER_LANGUAGE": "Web browser Taal",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "Land",
+      "COMPANY_NAME": "Bedrijfsnaam",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Team",
+      "PRIORITY": "Prioriteit",
+      "LABELS": "Labelen",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

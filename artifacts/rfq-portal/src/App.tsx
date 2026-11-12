@@ -41,6 +41,7 @@ import ItemsPage from "@/modules/reports/pages/items";
 
 // ── Module: Communications — التواصل ──────────────────────────────────────
 import WhatsAppPage from "@/modules/communications/pages/index";
+import ChatwootInboxPage from "@/modules/communications/pages/chatwoot";
 
 // ── Module: Integrations — تكاملات ERP ────────────────────────────────────
 import IntegrationsPage from "@/modules/integrations/pages/index";
@@ -202,7 +203,11 @@ function Router() {
       </Route>
 
       {/* ── Module: Communications ─────────────────────────────────────── */}
+      {/* Chatwoot console when configured; the built-in chat otherwise. */}
       <Route path="/whatsapp">
+        <ProtectedRoute component={ChatwootInboxPage} />
+      </Route>
+      <Route path="/whatsapp-legacy">
         <ProtectedRoute component={WhatsAppPage} />
       </Route>
 

@@ -1,0 +1,55 @@
+tags:
+  - Conversations
+operationId: update-conversation
+summary: Update Conversation
+description: Update Conversation Attributes
+security:
+  - userBearerAuth: []
+  - agentBotBearerAuth: []
+  - userApiKey: []
+  - agentBotApiKey: []
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          priority:
+            type: [string, "null"]
+            enum: ['urgent', 'high', 'medium', 'low', null]
+            description: 'The priority of the conversation. Set to null to clear the priority.'
+            example: 'high'
+          sla_policy_id:
+            type: number
+            description: 'The ID of the SLA policy (Available only in Enterprise edition)'
+            example: 1
+responses:
+  '200':
+    description: Success
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/conversation'
+  '401':
+    description: Unauthorized
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '404':
+    description: Conversation not found
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '422':
+    description: Validation error
+    content:
+      application/json:
+        schema:
+          type: object
+          required: [error]
+          properties:
+            error:
+              type: string

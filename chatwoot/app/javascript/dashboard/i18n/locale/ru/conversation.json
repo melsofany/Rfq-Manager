@@ -1,0 +1,617 @@
+{
+  "CONVERSATION": {
+    "REFERRAL": {
+      "AD_LABEL": "Ad",
+      "POST_LABEL": "Post",
+      "VIEW_AD": "View ad",
+      "WELCOME_MESSAGE_LABEL": "Pre-filled message: ",
+      "REPLIED_BELOW": "Customer replied below"
+    },
+    "SELECT_A_CONVERSATION": "Пожалуйста, выберите диалог из левой панели",
+    "CSAT_REPLY_MESSAGE": "Пожалуйста, оцените диалог",
+    "404": "Мы не можем найти диалог. Пожалуйста, попробуйте еще раз",
+    "SWITCH_VIEW_LAYOUT": "Переключить вид",
+    "DASHBOARD_APP_TAB_MESSAGES": "Сообщения",
+    "UNVERIFIED_SESSION": "Подлинность этого пользователя не подтверждена",
+    "NO_MESSAGE_1": "Ой! Похоже, сообщений от клиентов нет.",
+    "NO_MESSAGE_2": " чтобы отправить сообщение на вашу страницу!",
+    "NO_INBOX_1": "Алоха! Похоже, вы еще не добавили ни одного источника.",
+    "NO_INBOX_2": " для начала",
+    "NO_INBOX_AGENT": "Ой! Похоже, вы не добавлены ни к одному источнику сообщений. Обратитесь к администратору",
+    "SEARCH_MESSAGES": "Поиск по сообщениям в диалогах",
+    "VIEW_ORIGINAL": "View original",
+    "VIEW_TRANSLATED": "View translated",
+    "TRANSLATING": "Translating…",
+    "TRANSLATING_TO": "Translating to {language}…",
+    "VIEW_ORIGINAL_IN": "View original ({language})",
+    "VIEW_TRANSLATED_IN": "View translated ({language})",
+    "TRANSLATION_FAILED": "Could not translate, sent as typed",
+    "CONTACT_TRANSLATION_FAILED": "Could not translate",
+    "EMPTY_STATE": {
+      "CMD_BAR": "открыть меню команд",
+      "KEYBOARD_SHORTCUTS": "для просмотра быстрых клавиш"
+    },
+    "SEARCH": {
+      "TITLE": "Поиск сообщений",
+      "RESULT_TITLE": "Результаты поиска",
+      "LOADING_MESSAGE": "Сохранение данных...",
+      "PLACEHOLDER": "Введите любой текст для поиска сообщений",
+      "NO_MATCHING_RESULTS": "Результаты не найдены."
+    },
+    "UNREAD_MESSAGES": "Непрочитанные сообщения",
+    "UNREAD_MESSAGE": "Непрочитанное сообщение",
+    "CONTACT_HISTORY": {
+      "OLDER": "Previous conversation",
+      "NEWER": "Next conversation",
+      "OLDER_WITH": "Previous conversation with {name} · {time}",
+      "NEWER_WITH": "Next conversation with {name} · {time}",
+      "CUSTOMER": "this customer",
+      "REPLY_TO_OLDER": "Reply to this older conversation",
+      "GO_TO_LATEST": "Go to latest conversation"
+    },
+    "CLICK_HERE": "Нажмите здесь",
+    "LOADING_INBOXES": "Загружаем источники",
+    "LOADING_CONVERSATIONS": "Загрузка диалогов",
+    "CANNOT_REPLY": "Вы не можете ответить из-за",
+    "24_HOURS_WINDOW": "Ограничение на 24 часа",
+    "48_HOURS_WINDOW": "Ограничение на 48 часа",
+    "API_HOURS_WINDOW": "Вы можете ответить на этот диалог только в течение {hours} часов",
+    "NOT_ASSIGNED_TO_YOU": "Этот диалог вам не назначен. Вы хотите назначить этот диалог себе?",
+    "ASSIGN_TO_ME": "Назначить мне",
+    "BOT_HANDOFF_MESSAGE": "This conversation is currently handled by {assigneeName}.",
+    "BOT_HANDOFF_FALLBACK_ASSIGNEE": "an AI agent",
+    "BOT_HANDOFF_ACTION": "Take over",
+    "BOT_HANDOFF_REOPEN_ACTION": "Отметить диалог как открытый",
+    "BOT_HANDOFF_SUCCESS": "Диалог был передан вам",
+    "BOT_HANDOFF_ERROR": "Не удалось принять диалог. Пожалуйста, попробуйте еще раз.",
+    "TWILIO_WHATSAPP_CAN_REPLY": "Вы можете ответить в этой беседе только с помощью шаблона сообщения",
+    "TWILIO_WHATSAPP_24_HOURS_WINDOW": "Ограничение на 24 часа",
+    "OLD_INSTAGRAM_INBOX_REPLY_BANNER": "Данный аккаунт Instagram был перенесен в новый канал Instagram. Все новые сообщения будут появляться там. Вы больше не сможете отправлять сообщения из этого диалога.",
+    "INSTAGRAM_RESTRICTION_BANNER": "Instagram messaging is currently affected by an API-level issue on Meta’s side, not a problem with Chatwoot. Some messages or actions may be delayed or unavailable. We’re working closely with Meta to resolve it as quickly as possible.",
+    "INSTAGRAM_RESTRICTION_STATUS_LINK": "View status updates",
+    "REPLYING_TO": "Вы отвечаете на:",
+    "REMOVE_SELECTION": "Удалить выделенное",
+    "DOWNLOAD": "Скачать",
+    "UNKNOWN_FILE_TYPE": "Неизвестный файл",
+    "SAVE_CONTACT": "Сохранить контакт",
+    "NO_CONTENT": "Нет содержимого для отображения",
+    "SHARED_ATTACHMENT": {
+      "CONTACT": "{sender} поделился контактом",
+      "LOCATION": "{sender} поделился местоположением",
+      "FILE": "{sender} поделился файлом",
+      "MEETING": "{sender} приступил к встрече"
+    },
+    "UPLOADING_ATTACHMENTS": "Загрузка вложений...",
+    "REPLIED_TO_STORY": "Ответил на вашу историю",
+    "UNSUPPORTED_MESSAGE": "Это сообщение не поддерживается. Вы можете просмотреть это сообщение в приложении Facebook / Instagram.",
+    "UNSUPPORTED_MESSAGE_FACEBOOK": "Это сообщение не поддерживается. Вы можете просмотреть это сообщение в приложении Facebook Messenger.",
+    "UNSUPPORTED_MESSAGE_INSTAGRAM": "Это сообщение не поддерживается. Вы можете просмотреть это сообщение в приложении Instagram.",
+    "UNSUPPORTED_MESSAGE_TIKTOK": "Это сообщение не поддерживается. Вы можете просмотреть это сообщение в приложении TikTok.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_TITLE": "Message content unavailable",
+    "UNSUPPORTED_MESSAGE_WHATSAPP": "We’re unable to display this message because Meta hasn’t provided its content. This can happen with WhatsApp Coexistence setups. To view the message, please check it in your WhatsApp Business app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_DETAILS": "For more details, refer to {documentation}.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_LEARN_MORE": "Meta’s documentation",
+    "WHATSAPP_FLOW_RESPONSE": "Submitted a flow response",
+    "WHATSAPP_REFERRAL": {
+      "AD": "Ad"
+    },
+    "SUCCESS_DELETE_MESSAGE": "Сообщение успешно удалено",
+    "FAIL_DELETE_MESSSAGE": "Не удалось удалить сообщение! Попробуйте еще раз",
+    "NO_RESPONSE": "Нет ответа",
+    "REQUEST_CONTACT_INFO": {
+      "ACTION": "Ask the customer to share their WhatsApp phone number",
+      "PENDING_ACTION": "Contact information request pending",
+      "STATES": {
+        "PENDING": "Waiting for contact information",
+        "SHARED": "Phone number shared",
+        "IDENTITY_CONFLICT": "Phone number needs review"
+      }
+    },
+    "RESPONSE": "Ответ",
+    "RATING_TITLE": "Оценка",
+    "FEEDBACK_TITLE": "Обратная связь",
+    "REPLY_MESSAGE_NOT_FOUND": "Сообщение недоступно",
+    "CAPTAIN_GENERATION": {
+      "TITLE": "How was this reply generated?",
+      "GENERATED_BY": "Generated by Captain",
+      "LOADING": "Loading details…",
+      "EMPTY": "No generation details available for this message.",
+      "TIMELINE": "Generation steps",
+      "STEP_TOOL": "Called {name}",
+      "STEP_HANDOFF": "Handed off to {name}",
+      "REASONING": "Reasoning",
+      "SOURCES": "Knowledge base",
+      "SOURCES_SUMMARY": "{count} result | {count} results",
+      "MODEL": "Generated with {model}",
+      "CREDITS": "Credits: {credits}"
+    },
+    "CARD": {
+      "SHOW_LABELS": "Показать метки",
+      "HIDE_LABELS": "Скрыть метки",
+      "LABELS_COUNT": "{count} метки"
+    },
+    "VOICE_CALL": {
+      "INCOMING_CALL": "Входящий звонок",
+      "OUTGOING_CALL": "Исходящий звонок",
+      "CALL_IN_PROGRESS": "Идёт звонок",
+      "NO_ANSWER": "Нет ответа",
+      "NO_ANSWER_OUTBOUND_LABEL": "Нет ответа",
+      "NO_ANSWER_OUTBOUND_SUBTEXT": "Контакт не взял трубку",
+      "MISSED_CALL": "Пропущенный звонок",
+      "MISSED_CALL_INBOUND_SUBTEXT": "Агенты не взяли трубку",
+      "MISSED_CALL_DECLINED_BY": "Агент {agentName} отменил звонок",
+      "CALL_ENDED": "Звонок завершен",
+      "HANDLED_BY": "Handled by {agentName}",
+      "NOT_ANSWERED_YET": "Пока нет ответа",
+      "CALLING": "Звонок…",
+      "THEY_ANSWERED": "Они ответили",
+      "YOU_ANSWERED": "Вы ответили",
+      "AGENT_ANSWERED": "{agentName} ответил",
+      "JOIN_CALL": "Присоединиться к звонку",
+      "CALL_BACK": "Перезвонить",
+      "TRANSCRIPT_SHOW_MORE": "Show more",
+      "TRANSCRIPT_SHOW_LESS": "Показать меньше"
+    },
+    "HEADER": {
+      "RESOLVE_ACTION": "Завершить",
+      "REOPEN_ACTION": "Открыть заново",
+      "OPEN_ACTION": "Открыть",
+      "MORE_ACTIONS": "Ещё действия",
+      "OPEN": "Открыть",
+      "CLOSE": "Закрыть",
+      "DETAILS": "подробности",
+      "COPY_ID_SUCCESS": "ID разговора скопирован в буфер обмена",
+      "SNOOZED_UNTIL": "Отложить до",
+      "SNOOZED_UNTIL_TOMORROW": "Отложено до завтра",
+      "SNOOZED_UNTIL_NEXT_WEEK": "Отложено до следующей недели",
+      "SNOOZED_UNTIL_NEXT_REPLY": "Отложить до следующего ответа",
+      "WHATSAPP_CALL": "Начать звонок WhatsApp",
+      "WHATSAPP_CALL_FAILED": "Не удалось начать вызов Whatsapp.",
+      "VOICE_CALL": "Начать звонок",
+      "VOICE_CALL_FAILED": "Не получается начать звонок.",
+      "WHATSAPP_CALL_PERMISSION_REQUESTED": "Запросите разрешение на звонок у контакта. Попробуйте снова после получения разрешения.",
+      "WHATSAPP_CALL_PERMISSION_PENDING": "Запросите разрешение на звонок у контакта. Попробуйте снова после получения разрешения.",
+      "SLA_STATUS": {
+        "FRT": "FRT {status}",
+        "NRT": "NRT {status}",
+        "RT": "RT {status}",
+        "MISSED": "пропущенный",
+        "DUE": "до"
+      }
+    },
+    "RESOLVE_DROPDOWN": {
+      "MARK_PENDING": "Отметить как ожидающие",
+      "SNOOZE_UNTIL": "Отложено",
+      "SNOOZE": {
+        "TITLE": "Отложить до",
+        "NEXT_REPLY": "Следующий ответ",
+        "TOMORROW": "Завтра",
+        "NEXT_WEEK": "На следующей неделе"
+      }
+    },
+    "MENTION": {
+      "AGENTS": "Операторы",
+      "TEAMS": "Команды"
+    },
+    "PICKER": {
+      "VARIABLE": {
+        "SEARCH_PLACEHOLDER": "Search variables",
+        "DESCRIPTION": "Описание",
+        "VALUE": "Value",
+        "NO_VALUE": "No value for this conversation"
+      },
+      "EMOJI": {
+        "SEARCH_PLACEHOLDER": "Поиск эмодзи",
+        "EMPTY_STATE": "Type to search emojis"
+      },
+      "MACRO": {
+        "SEARCH_PLACEHOLDER": "Search macros",
+        "ACTION_COUNT": "1 action | {count} actions"
+      },
+      "MENTION": {
+        "SEARCH_PLACEHOLDER": "Search agents and teams",
+        "FILTER": {
+          "ALL": "Все"
+        },
+        "AVAILABILITY": "Доступность",
+        "ROLE": "Тип оператора",
+        "AUTO_ASSIGN": "Auto assign",
+        "ENABLED": "Включено",
+        "DISABLED": "Выключено",
+        "YOU_ARE_A_MEMBER": "You are a member of this team"
+      }
+    },
+    "CUSTOM_SNOOZE": {
+      "TITLE": "Отложить до",
+      "APPLY": "Отложено",
+      "CANCEL": "Отменить"
+    },
+    "SUGGESTIONS": {
+      "SUGGEST": "Suggest with Captain",
+      "EMPTY": "No new suggestions",
+      "ACCEPT": "Accept",
+      "APPLY_HINT": "Click to apply",
+      "REJECT": "Отклонить",
+      "ACCEPT_ALL": "Accept all",
+      "ERROR": "Could not load suggestions. Please try again.",
+      "APPLY_ERROR": "Could not apply the suggested labels. Please try again."
+    },
+    "PRIORITY": {
+      "TITLE": "Приоритет",
+      "OPTIONS": {
+        "NONE": "Ничего",
+        "URGENT": "Срочность",
+        "HIGH": "Высокая",
+        "MEDIUM": "Средняя",
+        "LOW": "Низкая"
+      },
+      "CHANGE_PRIORITY": {
+        "SELECT_PLACEHOLDER": "Ничего",
+        "INPUT_PLACEHOLDER": "Выберите приоритет",
+        "NO_RESULTS": "Результаты не найдены",
+        "SUCCESSFUL": "Изменен приоритет разговора id {conversationId} на {priority}",
+        "FAILED": "Не удалось изменить приоритет. Пожалуйста, попробуйте еще раз."
+      }
+    },
+    "DELETE_CONVERSATION": {
+      "TITLE": "Удалить диалог #{conversationId}",
+      "DESCRIPTION": "Вы уверены, что хотите удалить этот диалог?",
+      "CONFIRM": "Удалить"
+    },
+    "CARD_CONTEXT_MENU": {
+      "PENDING": "Отметить как ожидающие",
+      "RESOLVED": "Пометить как разрешено",
+      "MARK_AS_UNREAD": "Отметить как непрочитанное",
+      "MARK_AS_READ": "Отметить как прочитанное",
+      "REOPEN": "Переоткрыть разговор",
+      "SNOOZE": {
+        "TITLE": "Отложено",
+        "NEXT_REPLY": "До следующего ответа",
+        "TOMORROW": "До завтра",
+        "NEXT_WEEK": "До следующей недели"
+      },
+      "ASSIGN_AGENT": "Назначить агента",
+      "ASSIGN_LABEL": "Назначить метки",
+      "SEARCH_LABELS": "Поиск меток",
+      "NO_LABELS_FOUND": "Метки не найдены",
+      "AGENTS_LOADING": "Загрузка агентов...",
+      "ASSIGN_TEAM": "Назначить команду",
+      "DELETE": "Удалить диалог",
+      "OPEN_IN_NEW_TAB": "Открыть в новой вкладке",
+      "COPY_LINK": "Скопировать ссылку на диалог",
+      "COPY_LINK_SUCCESS": "Ссылка на диалог скопирована в буфер обмена",
+      "API": {
+        "AGENT_ASSIGNMENT": {
+          "SUCCESFUL": "ID разговора {conversationId} присвоен \"{agentName}\"",
+          "FAILED": "Не удалось назначить агента. Пожалуйста, попробуйте еще раз."
+        },
+        "LABEL_ASSIGNMENT": {
+          "SUCCESFUL": "Назначена метка #{labelName} диалогу {conversationId}",
+          "FAILED": "Не удалось назначить метку. Пожалуйста, попробуйте еще раз."
+        },
+        "LABEL_REMOVAL": {
+          "SUCCESFUL": "Удалена метка #{labelName} из диалога с ID {conversationId}",
+          "FAILED": "Не удалось удалить метку. Пожалуйста, попробуйте еще раз."
+        },
+        "TEAM_ASSIGNMENT": {
+          "SUCCESFUL": "Назначена команда \"{team}\" разговору с ID {conversationId}",
+          "FAILED": "Не удалось назначить команду. Пожалуйста, попробуйте еще раз."
+        }
+      }
+    },
+    "FOOTER": {
+      "MESSAGE_SIGN_TOOLTIP": "Подпись сообщения",
+      "ENABLE_SIGN_TOOLTIP": "Включить подпись",
+      "DISABLE_SIGN_TOOLTIP": "Отключить подпись",
+      "MSG_INPUT": "Shift + enter чтобы начать новую строку. Начните с '/', чтобы выбрать шаблонный ответ.",
+      "PRIVATE_MSG_INPUT": "Shift + enter для новой строки. Это будет видно только Операторам",
+      "MESSAGING_RESTRICTED": "Вы не можете отвечать в этот диалог",
+      "MESSAGING_RESTRICTED_WHATSAPP": "You can only reply using a template message due to 24-hour message window restriction",
+      "MESSAGING_RESTRICTED_API": "You can only reply using a template message due to message window restriction",
+      "MESSAGE_SIGNATURE_NOT_CONFIGURED": "Подпись сообщения не настроена, пожалуйста настройте её в настройках профиля.",
+      "COPILOT_MSG_INPUT": "Задайте Copilot дополнительные промпты или спросите что-нибудь другое... Нажмите Enter, чтобы дополнить информацию",
+      "CLICK_HERE": "Нажмите здесь, чтобы обновить",
+      "WHATSAPP_TEMPLATES": "Шаблоны Whatsapp"
+    },
+    "REPLYBOX": {
+      "REPLY": "Ответить",
+      "PRIVATE_NOTE": "Личная заметка",
+      "SEND": "Отправить",
+      "CREATE": "Добавить заметку",
+      "INSERT_READ_MORE": "Читать далее",
+      "DISMISS_REPLY": "Удалить ответ",
+      "REPLYING_TO": "Ответить:",
+      "TIP_EMOJI_ICON": "Показать emoji панель",
+      "TIP_ATTACH_ICON": "Прикрепить файлы",
+      "TIP_AUDIORECORDER_ICON": "Записать аудио",
+      "TIP_AUDIORECORDER_PERMISSION": "Разрешить доступ к аудио",
+      "TIP_AUDIORECORDER_ERROR": "Не удалось открыть аудио",
+      "AUDIO_CONVERSION_FAILED": "Audio conversion failed. Please try again.",
+      "DRAG_DROP": "Перетащите сюда, чтобы прикрепить",
+      "IMAGE_UPLOAD_SUCCESS": "Изображение успешно загружено",
+      "START_AUDIO_RECORDING": "Начать запись аудио",
+      "STOP_AUDIO_RECORDING": "Остановить запись аудио",
+      "COPILOT_THINKING": "Copilot думает",
+      "EMAIL_HEAD": {
+        "TO": "Кому",
+        "CC": {
+          "LABEL": "Cc",
+          "PLACEHOLDER": "Письма, разделенные запятыми",
+          "ERROR": "Пожалуйста, введите действительный адрес электронной почты"
+        },
+        "BCC": {
+          "LABEL": "Bcc",
+          "PLACEHOLDER": "Письма, разделенные запятыми",
+          "ERROR": "Пожалуйста, введите действительный адрес электронной почты"
+        },
+        "SUBJECT": {
+          "LABEL": "Тема",
+          "PLACEHOLDER": "Enter a subject"
+        }
+      },
+      "UNDEFINED_VARIABLES": {
+        "TITLE": "Неопределенные переменные",
+        "MESSAGE": "У Вас {undefinedVariablesCount} неопределённых переменных в сообщении: {undefinedVariables}. Вы действительно хотите отправить сообщение?",
+        "CONFIRM": {
+          "YES": "Отправить",
+          "CANCEL": "Отменить"
+        }
+      },
+      "QUOTED_REPLY": {
+        "SHOW_TOOLTIP": "Show trimmed content",
+        "HIDE_TOOLTIP": "Hide trimmed content",
+        "REMOVE": "Remove quoted text"
+      }
+    },
+    "VISIBLE_TO_AGENTS": "Приватная заметка: видна только вам и вашей команде",
+    "CHANGE_STATUS": "Статус разговора изменен",
+    "CHANGE_STATUS_FAILED": "Не удалось изменить статус диалога",
+    "CHANGE_AGENT": "Назначенный оператор изменен",
+    "CHANGE_AGENT_FAILED": "Не удалось изменить назначение",
+    "ASSIGN_LABEL_SUCCESFUL": "Метка успешно назначена",
+    "ASSIGN_LABEL_FAILED": "Назначение метки не удалось",
+    "CHANGE_TEAM": "Команда назначенная в беседу изменена",
+    "SUCCESS_DELETE_CONVERSATION": "Диалог удален",
+    "FAIL_DELETE_CONVERSATION": "Не удалось удалить диалог! Попробуйте снова",
+    "FILE_SIZE_LIMIT": "Превышен лимит вложений в {MAXIMUM_SUPPORTED_FILE_UPLOAD_SIZE} MB",
+    "FILE_TYPE_NOT_SUPPORTED": "Тип файла {fileName} не поддерживается в этом диалоге",
+    "MESSAGE_ERROR": "Не удается отправить это сообщение, повторите попытку позже",
+    "SENT_BY": "Отправитель:",
+    "BOT": "Бот",
+    "NATIVE_APP": "Нативное приложение",
+    "NATIVE_APP_ADVISORY": "Это сообщение было отправлено из нативного приложения. Ответьте через ChatWoot, чтобы продолжить диалог.",
+    "SEND_FAILED": "Не удалось удалить сообщение! Попробуйте еще раз",
+    "TRY_AGAIN": "повторить",
+    "ASSIGNMENT": {
+      "SELECT_AGENT": "Выбрать Агента",
+      "REMOVE": "Удалить",
+      "ASSIGN": "Назначить"
+    },
+    "CONTEXT_MENU": {
+      "COPY": "Копировать",
+      "REPLY_TO": "Ответить на это сообщение",
+      "FORWARD_EMAIL": "Forward email",
+      "DELETE": "Удалить",
+      "CREATE_A_CANNED_RESPONSE": "Добавить в шаблонные ответы",
+      "TRANSLATE": "Перевести",
+      "COPY_PERMALINK": "Скопировать ссылку на сообщение",
+      "LINK_COPIED": "Ссылка на сообщение скопирована",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Вы действительно хотите удалить это сообщение?",
+        "MESSAGE": "Вы не можете отменить это действие",
+        "DELETE": "Удалить",
+        "CANCEL": "Отменить"
+      },
+      "REPORT_MESSAGE": {
+        "LABEL": "Report message",
+        "TITLE": "Report Captain message",
+        "DESCRIPTION": "Found an issue with this AI response? Let us know what went wrong and our team will review it to help improve Captain's accuracy.",
+        "PROBLEM_TYPE": "Problem type",
+        "PROBLEM_TYPE_PLACEHOLDER": "Select a problem type",
+        "DESCRIPTION_LABEL": "Описание",
+        "DESCRIPTION_PLACEHOLDER": "Describe the problem in detail",
+        "SUBMIT": "Report",
+        "SUCCESS": "Thanks for reporting. Our team will take a look.",
+        "ERROR": "Could not report this message. Please try again.",
+        "REASONS": {
+          "incorrect_information": "Incorrect information",
+          "inappropriate_response": "Inappropriate response",
+          "incomplete_response": "Incomplete response",
+          "outdated_information": "Outdated information",
+          "other": "Other"
+        }
+      }
+    },
+    "SIDEBAR": {
+      "CONTACT": "Контакт",
+      "COPILOT": "Copilot"
+    },
+    "VOICE_WIDGET": {
+      "INCOMING_CALL": "Входящий звонок",
+      "OUTGOING_CALL": "Исходящий звонок",
+      "CALL_IN_PROGRESS": "Идёт звонок",
+      "NOT_ANSWERED_YET": "Пока нет ответа",
+      "HANDLED_IN_ANOTHER_TAB": "Обрабатывается в другой вкладке",
+      "REJECT_CALL": "Отклонить",
+      "DISMISS_CALL": "Отклонить",
+      "JOIN_CALL": "Присоединиться к звонку",
+      "END_CALL": "Завершить звонок",
+      "MUTE": "Выключить микрофон",
+      "UNMUTE": "Включить микрофон",
+      "VIEW_CHAT_HISTORY": "Посмотреть историю чата",
+      "GO_TO_CONVERSATION": "Go to conversation thread"
+    }
+  },
+  "EMAIL_TRANSCRIPT": {
+    "TITLE": "Отправить субтитры разговора",
+    "DESC": "Отправить копию субтитров разговора на указанный адрес электронной почты",
+    "SUBMIT": "Отправить",
+    "CANCEL": "Отменить",
+    "SEND_EMAIL_SUCCESS": "Субтитры чата успешно отправлены",
+    "SEND_EMAIL_ERROR": "Произошла ошибка, попробуйте еще раз",
+    "SEND_EMAIL_PAYMENT_REQUIRED": "Отправка транскрипта на электронную почту не поддерживается вашим планом. Пожалуйста, обновите план, чтобы получить доступ к этой функции.",
+    "FORM": {
+      "SEND_TO_CONTACT": "Отправить субтитры клиенту",
+      "SEND_TO_AGENT": "Отправить транскрипт назначенному агенту",
+      "SEND_TO_OTHER_EMAIL_ADDRESS": "Отправить субтитры на другой адрес электронной почты",
+      "EMAIL": {
+        "PLACEHOLDER": "Введите адрес электронной почты",
+        "ERROR": "Пожалуйста, введите действительный адрес электронной почты"
+      }
+    }
+  },
+  "ONBOARDING": {
+    "TITLE": "Привет 👋, добро пожаловать в {installationName}!",
+    "DESCRIPTION": "Спасибо за регистрацию. Мы хотим, чтобы вы получили максимум от {installationName}. Вот несколько вещей, которые вы можете сделать в {installationName}, чтобы получить ещё больше приятных впечатлений.",
+    "GREETING_MORNING": "👋 Доброе утро, {name}. Добро пожаловать на {installationName}.",
+    "GREETING_AFTERNOON": "👋 Добрый день, {name}. Добро пожаловать на {installationName}.",
+    "GREETING_EVENING": "👋 Добрый день, {name}. Добро пожаловать на {installationName}.",
+    "READ_LATEST_UPDATES": "Читайте о наших последних обновлениях",
+    "ALL_CONVERSATION": {
+      "TITLE": "Все ваши диалоги в одном месте",
+      "DESCRIPTION": "Посмотреть все разговоры с клиентами в одной панели управления. Вы можете отфильтровать разговоры по входящему каналу, метке и статусу.",
+      "NEW_LINK": "Нажмите здесь, чтобы создать входящий канал"
+    },
+    "TEAM_MEMBERS": {
+      "TITLE": "Пригласить членов вашей команды",
+      "DESCRIPTION": "Так как вы готовы общаться с клиентом, пригласите в команду своих товарищей, чтобы помочь вам. Вы можете пригласить своих коллег по команде, добавив их адреса электронной почты в список агентов.",
+      "NEW_LINK": "Нажмите здесь, чтобы пригласить члена команды"
+    },
+    "LABELS": {
+      "TITLE": "Сгруппировать беседы с помощью меток",
+      "DESCRIPTION": "Метки дают более простой способ классифицировать разговор. Создайте несколько меток, например #support-enquiry, #billing-question и т.д., чтобы позже использовать их в беседе.",
+      "NEW_LINK": "Нажмите здесь, чтобы создать метки"
+    },
+    "CANNED_RESPONSES": {
+      "TITLE": "Создать шаблонные ответы",
+      "DESCRIPTION": "Предварительно написанные шаблонные ответы помогут вам быстро отвечать на диалоги. Агенты могут ввести символ '/' и короткое название, чтобы вставить ответ.",
+      "NEW_LINK": "Нажмите здесь, чтобы создать шаблонный ответ"
+    }
+  },
+  "CONVERSATION_SIDEBAR": {
+    "ASSIGNEE_LABEL": "Назначенный агент",
+    "SELF_ASSIGN": "Назначить мне",
+    "TEAM_LABEL": "Назначенная команда",
+    "SELECT": {
+      "PLACEHOLDER": "Ничего"
+    },
+    "ACCORDION": {
+      "CONTACT_DETAILS": "Контактные данные",
+      "CONVERSATION_ACTIONS": "Действия в беседе",
+      "CONVERSATION_LABELS": "Категории Диалога",
+      "CONVERSATION_INFO": "Информация о беседе",
+      "CONTACT_NOTES": "Заметки контактов",
+      "CONTACT_ATTRIBUTES": "Атрибуты контакта",
+      "PREVIOUS_CONVERSATION": "Предыдущие диалоги",
+      "MACROS": "Макросс",
+      "LINEAR_ISSUES": "Связанные проблемы",
+      "SHOPIFY_ORDERS": "Shopify Orders",
+      "SHARED_FILES": "Вложения"
+    },
+    "SHARED_FILES": {
+      "EMPTY": "Нет вложений",
+      "DOWNLOAD": "Загрузить файл",
+      "DOWNLOAD_ERROR": "Не удалось загрузить файл. Пожалуйста, попробуйте еще раз.",
+      "MEDIA_HEADING": "Медиа",
+      "FILES_HEADING": "Файлы",
+      "VIEW_ALL": "Посмотреть все",
+      "SHOW_LESS": "Показать меньше",
+      "MORE_COUNT": "+{count}",
+      "UNTITLED_FILE": "Файл без заголовка",
+      "JUMP_TO_MESSAGE": "Jump to message"
+    },
+    "SHOPIFY": {
+      "ORDER_ID": "Order #{id}",
+      "ERROR": "Error loading orders",
+      "NO_SHOPIFY_ORDERS": "No orders found",
+      "FINANCIAL_STATUS": {
+        "PENDING": "В ожидании",
+        "AUTHORIZED": "Authorized",
+        "PARTIALLY_PAID": "Partially Paid",
+        "PAID": "Paid",
+        "PARTIALLY_REFUNDED": "Partially Refunded",
+        "REFUNDED": "Refunded",
+        "VOIDED": "Voided"
+      },
+      "FULFILLMENT_STATUS": {
+        "FULFILLED": "Fulfilled",
+        "PARTIALLY_FULFILLED": "Partially Fulfilled",
+        "UNFULFILLED": "Unfulfilled"
+      }
+    }
+  },
+  "CONVERSATION_CUSTOM_ATTRIBUTES": {
+    "ADD_BUTTON_TEXT": "Создать атрибут",
+    "NO_RECORDS_FOUND": "Атрибуты не найдены",
+    "UPDATE": {
+      "SUCCESS": "Атрибут успешно обновлен",
+      "ERROR": "Не удается обновить атрибут. Повторите попытку позже"
+    },
+    "ADD": {
+      "TITLE": "Добавить",
+      "SUCCESS": "Атрибут успешно добавлен",
+      "ERROR": "Невозможно добавить атрибут. Пожалуйста, повторите попытку позже"
+    },
+    "DELETE": {
+      "SUCCESS": "Атрибут успешно удалён",
+      "ERROR": "Невозможно удалить атрибут. Пожалуйста, повторите попытку позже"
+    },
+    "ATTRIBUTE_SELECT": {
+      "TITLE": "Добавить атрибуты",
+      "PLACEHOLDER": "Поиск атрибутов",
+      "NO_RESULT": "Атрибуты не найдены"
+    }
+  },
+  "EMAIL_HEADER": {
+    "FROM": "От",
+    "TO": "Кому",
+    "BCC": "Bcc",
+    "CC": "Cc",
+    "SUBJECT": "Тема",
+    "DATE": "Дата",
+    "EXPAND": "Развернуть email"
+  },
+  "FORWARD_EMAIL": {
+    "HEADER_TITLE": "---------- Forwarded message ---------",
+    "TO_LABEL": "Кому:",
+    "TO_PLACEHOLDER": "Введите не менее 2 символов для поиска по электронной почте",
+    "MESSAGE_PLACEHOLDER": "Add a message (optional)",
+    "FORWARDED_TO": "Forwarded to {emails}",
+    "CONTACT_CANNOT_SEE": "{name} cannot see this"
+  },
+  "CONVERSATION_PARTICIPANTS": {
+    "SIDEBAR_MENU_TITLE": "Участвующие",
+    "SIDEBAR_TITLE": "Участники диалога",
+    "NO_RECORDS_FOUND": "Результаты не найдены",
+    "ADD_PARTICIPANTS": "Выберите участников",
+    "REMANING_PARTICIPANTS_TEXT": "+{count} другие",
+    "REMANING_PARTICIPANT_TEXT": "+{count} другие",
+    "TOTAL_PARTICIPANTS_TEXT": "{count} человек участвуют.",
+    "TOTAL_PARTICIPANT_TEXT": "{count} человек участвуют.",
+    "NO_PARTICIPANTS_TEXT": "Никто не участвует!",
+    "WATCH_CONVERSATION": "Присоединиться к диалогу",
+    "YOU_ARE_WATCHING": "Вы участвуете",
+    "API": {
+      "ERROR_MESSAGE": "Не удалось обновить, попробуйте снова!",
+      "SUCCESS_MESSAGE": "Участники обновлены!"
+    }
+  },
+  "TRANSLATE_MODAL": {
+    "TITLE": "Просмотреть перевод",
+    "DESC": "Вы можете просмотреть содержимое перевода в каждом языке.",
+    "ORIGINAL_CONTENT": "Оригинальное содержимое",
+    "TRANSLATED_CONTENT": "Перевод",
+    "NO_TRANSLATIONS_AVAILABLE": "Для этого содержимого нет доступных переводов"
+  },
+  "TYPING": {
+    "ONE": "{user} печатает",
+    "TWO": "{user} и {secondUser} печатают",
+    "MULTIPLE": "{user} и {count} печатают"
+  },
+  "COPILOT": {
+    "TRY_THESE_PROMPTS": "Попробуйте эти запросы"
+  },
+  "GALLERY_VIEW": {
+    "ERROR_DOWNLOADING": "Не удалось загрузить вложение, попробуйте еще раз"
+  }
+}

@@ -47,3 +47,22 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# ── Vendored upstream Chatwoot (chatwoot/) ──────────────────────────────────
+# The SOURCE is committed so our overlay can be reviewed as a diff against a
+# known upstream release. Heavy NON-CODE assets are excluded to keep the repo
+# pushable; the official Docker image ships them, and UPSTREAM.md records the
+# exact upstream commit so the full tree can be restored byte-for-byte.
+chatwoot/spec/
+chatwoot/public/videos/
+chatwoot/.github/screenshots/
+chatwoot/vendor/db/*.onnx
+chatwoot/tmp/
+chatwoot/log/
+chatwoot/storage/
+chatwoot/node_modules/
+chatwoot/public/packs/
+chatwoot/public/packs-test/
+
+# Local secrets for the Chatwoot stack — never commit.
+chatwoot-cortoba/.env

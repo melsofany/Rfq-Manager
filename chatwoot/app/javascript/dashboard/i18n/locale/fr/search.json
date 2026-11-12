@@ -1,0 +1,68 @@
+{
+  "SEARCH": {
+    "TABS": {
+      "ALL": "Tous les résultats",
+      "CONTACTS": "Contacts",
+      "CONVERSATIONS": "Conversations",
+      "MESSAGES": "Messages",
+      "ARTICLES": "Articles"
+    },
+    "SECTION": {
+      "CONTACTS": "Contacts",
+      "CONVERSATIONS": "Conversations",
+      "MESSAGES": "Messages",
+      "ARTICLES": "Articles"
+    },
+    "VIEW_MORE": "Voir plus",
+    "LOAD_MORE": "Charger plus",
+    "SEARCHING_DATA": "Recherche en cours",
+    "LOADING_DATA": "En cours de chargement",
+    "EMPTY_STATE": "Aucun {item} trouvé pour la requête '{query}'",
+    "EMPTY_STATE_FULL": "Aucun résultat pour la requête '{query}'",
+    "PLACEHOLDER_KEYBINDING": "/pour cibler",
+    "INPUT_PLACEHOLDER": "Tapez 3 caractères ou plus pour lancer la recherche",
+    "RECENT_SEARCHES": "Recherches récentes",
+    "CLEAR_ALL": "Effacer tout",
+    "MOST_RECENT": "Les plus récents",
+    "EMPTY_STATE_DEFAULT": "Recherche par identifiant de conversation, e-mail, numéro de téléphone, messages pour de meilleurs résultats de recherche. ",
+    "BOT_LABEL": "Bot",
+    "READ_MORE": "En savoir plus",
+    "READ_LESS": "Lire moins",
+    "WROTE": "a écrit :",
+    "FROM": "De",
+    "EMAIL": "Courriel",
+    "EMAIL_SUBJECT": "Objet",
+    "PRIVATE": "Note privée",
+    "TRANSCRIPT": "Transcription",
+    "CREATED_AT": "a créé {time}",
+    "UPDATED_AT": "a mis à jour {time}",
+    "SORT_BY": {
+      "RELEVANCE": "Pertinence"
+    },
+    "DATE_RANGE": {
+      "LAST_7_DAYS": "7 derniers jours",
+      "LAST_30_DAYS": "30 derniers jours",
+      "LAST_60_DAYS": "60 derniers jours",
+      "LAST_90_DAYS": "90 derniers jours",
+      "CUSTOM_RANGE": "Plage personnalisée :",
+      "CREATED_BETWEEN": "Créé entre",
+      "AND": "et",
+      "APPLY": "Appliquer",
+      "BEFORE_DATE": "Avant {date}",
+      "AFTER_DATE": "Après {date}",
+      "TIME_RANGE": "Filtrer par heure",
+      "CLEAR_FILTER": "Effacer le filtre"
+    },
+    "FILTERS": {
+      "FILTER_MESSAGE": "Filtrer les messages par :",
+      "FROM": "Expéditeur",
+      "IN": "Boîte de réception",
+      "AGENTS": "Agents",
+      "CONTACTS": "Contacts",
+      "INBOXES": "Boîtes de réception",
+      "NO_AGENTS": "Aucun agent trouvé",
+      "NO_CONTACTS": "Commencez par rechercher pour voir les résultats",
+      "NO_INBOXES": "Aucune boîte de réception trouvée"
+    }
+  }
+}

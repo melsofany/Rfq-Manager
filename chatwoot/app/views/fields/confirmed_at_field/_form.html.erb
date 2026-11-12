@@ -1,0 +1,5 @@
+<%= render "field", f: f, field: field do %>
+  <% value = field.data %>
+  <% value = Time.current if value.blank? && action_name == 'new' %>
+  <%= f.datetime_local_field field.attribute, step: 1, value: value, class: ui(:input) %>
+<% end %>

@@ -1,0 +1,12 @@
+export const LOCAL_STORAGE_KEYS = {
+  DISMISSED_UPDATES: 'dismissedUpdates',
+  DISMISSED_PLATFORM_BANNERS: 'dismissedPlatformBanners',
+  WIDGET_BUILDER: 'widgetBubble_',
+  DRAFT_MESSAGES: 'draftMessages',
+  COLOR_SCHEME: 'color_scheme',
+  MESSAGE_REPLY_TO: 'messageReplyTo',
+  RECENT_SEARCHES: 'recentSearches',
+  SIDEBAR_MINIMIZED_SECTIONS: 'sidebarMinimizedSections',
+  CAPTAIN_ASSISTANT_TOOLS_BANNER_DISMISSED:
+    'captain_assistant_tools_banner_dismissed',
+};

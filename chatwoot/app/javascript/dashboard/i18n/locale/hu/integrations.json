@@ -1,0 +1,1743 @@
+{
+  "STRIPE_INTEGRATION": {
+    "UNAVAILABLE": "A Stripe nem érhető el ehhez a fiókhoz. A beállítások ellenőrzéséhez forduljon a rendszergazdához.",
+    "TITLE": "Stripe",
+    "DESCRIPTION": "Tekintse meg az ügyfél adatait, előfizetéseit és számláit a beszélgetések mellett.",
+    "CONNECT": "Kapcsolódás",
+    "DISCONNECT": "Leválasztás a Chatwootról",
+    "DISCONNECT_NOTE": "A leválasztás eltávolítja a mentett hitelesítési adatokat a Chatwootból. A Stripe-ban távolítsa el az alkalmazást is, hogy visszavonja annak hozzáférését.",
+    "CONNECTED": "Csatlakoztatva",
+    "RECONNECT": "Stripe újracsatlakoztatása",
+    "REAUTHORIZATION_REQUIRED": "Újracsatlakozás szükséges",
+    "ACCOUNT": "Csatlakoztatott fiók",
+    "ACCOUNT_ID": "Fiók Azonosító",
+    "ENVIRONMENT": "Környezet",
+    "SANDBOX": "Sandbox",
+    "LIVE": "Élő",
+    "CONNECTED_ON": "Csatlakoztatás időpontja",
+    "OPEN_STRIPE": "Stripe-vezérlőpult megnyitása",
+    "ERROR": "Nem sikerült betölteni a Stripe-ot. Próbálja újra, vagy csatlakoztassa újra az integrációt.",
+    "EMPTY": "Ehhez a kontakthoz nem található Stripe-ügyfél az e-mail-címe alapján.",
+    "NO_EMAIL": "Adjon meg e-mail-címet a kontaktnál a Stripe-ügyfelek kereséséhez.",
+    "SELECT": "Válassza ki a megfelelő ügyfelet",
+    "CUSTOMER_OPTION": "{name} — {id}",
+    "MORE": "Az első 100 egyező ügyfél látható. Ha az ügyfél nem szerepel a listában, pontosítsa a kontakt e-mail-címét.",
+    "SUBSCRIPTIONS": "Legutóbbi öt előfizetés",
+    "SUBSCRIPTION": "Előfizetés",
+    "VIEW_SUBSCRIPTION": "{name} előfizetési adatainak megtekintése",
+    "COPY_ID": "Azonosító másolása",
+    "COPIED": "Másolva",
+    "QUANTITY": "Mennyiség: {count}",
+    "PRICE_INTERVAL": "{amount} / {interval}",
+    "INTERVAL": {
+      "day": "nap | {count} nap",
+      "week": "hét | {count} hét",
+      "month": "hónap | {count} hónap",
+      "year": "év | {count} év"
+    },
+    "VARIABLE_PRICE": "Használatalapú vagy sávos árazás",
+    "RENEWS": "Megújulás dátuma: {date}",
+    "PERIOD_START": "Időszak kezdete: {date}",
+    "PERIOD_END": "Időszak vége: {date}",
+    "TRIAL_ENDS": "Próbaidőszak vége: {date}",
+    "CANCELS": "Lemondás dátuma: {date}",
+    "CANCELS_AT_PERIOD_END": "Lemondás a számlázási időszak végén",
+    "CANCELED_ON": "Lemondva: {date}",
+    "MORE_ITEMS": "További előfizetési tételek nem jelennek meg.",
+    "PRICE_NOTE": "Az árak egységenként értendők, kedvezmények és adók nélkül. Nem a következő számla becsült összegei.",
+    "INVOICES": "Legutóbbi számlák",
+    "NO_SUBSCRIPTIONS": "Nem találhatók előfizetések.",
+    "NO_INVOICES": "Nem találhatók számlák."
+  },
+  "INTEGRATION_SETTINGS": {
+    "SHOPIFY": {
+      "HEADER": "Shopify",
+      "DELETE": {
+        "TITLE": "Delete Shopify Integration",
+        "MESSAGE": "Are you sure you want to delete the Shopify integration?"
+      },
+      "STORE_URL": {
+        "TITLE": "Connect Shopify Store",
+        "LABEL": "Store URL",
+        "PLACEHOLDER": "your-store.myshopify.com",
+        "HELP": "Enter your Shopify store's myshopify.com URL",
+        "INVALID_URL": "Adjon meg érvényes URL-t a Shopify-áruházhoz (például: sajat-aruhaz.myshopify.com)",
+        "CANCEL": "Mégse",
+        "SUBMIT": "Connect Store"
+      },
+      "HELP_TEXT": {
+        "TITLE": "A Shopify-integráció használata?",
+        "BODY": "Ez az integráció összekapcsolja a Chatwoot-munkaterületet a ***{storeDomain}*** Shopify-áruházzal. Az alábbiakra lesz lehetősége:\n\n**Rendelések követése a beszélgetésekben:** Beszélgetés megnyitásakor a Shopify oldalsávja automatikusan megjeleníti az ügyfél legutóbbi rendeléseit az e-mail-címe alapján. Így az ügyfélszolgálati csapat azonnal hozzájut a szükséges információkhoz, és nem kell lapok között váltania.\n\n**Rendelési adatok megtekintése:** A beszélgetési panelen közvetlenül megtekintheti a rendelés állapotát, teljesítési állapotát és végösszegét."
+      },
+      "ERROR": "There was an error connecting to Shopify. Please try again or contact support if the issue persists.",
+      "PENDING_INSTALL": {
+        "SUCCESS": "A Shopify-áruház csatlakoztatása sikerült.",
+        "ERROR": "Nem sikerült befejezni a Shopify telepítését. Próbálja újra."
+      },
+      "SELECT_ACCOUNT": {
+        "TITLE": "Válasszon munkaterületet",
+        "DESCRIPTION": "Válassza ki a Shopify-áruházhoz csatlakoztatandó munkaterületet. Korábbi kapcsolat visszaállításához válassza az eredeti munkaterületet.",
+        "UNAVAILABLE": "Nem található megfelelő munkaterület vagy érvényes telepítés. Indítsa újra a telepítést, vagy jelentkezzen be munkaterület-rendszergazdaként."
+      }
+    },
+    "HEADER": "Integrációk",
+    "DESCRIPTION": "Chatwoot integrates with multiple tools and services to improve your team's efficiency. Explore the list below to configure your favorite apps.",
+    "LEARN_MORE": "Learn more about integrations",
+    "LOADING": "Fetching integrations",
+    "SEARCH_PLACEHOLDER": "Search integrations...",
+    "NO_RESULTS": "No integrations found matching your search",
+    "CAPTAIN": {
+      "DISABLED": "Captain is not enabled on your account.",
+      "CLICK_HERE_TO_CONFIGURE": "Click here to configure",
+      "LOADING_CONSOLE": "Loading Captain Console...",
+      "FAILED_TO_LOAD_CONSOLE": "Failed to load Captain Console. Please refresh and try again."
+    },
+    "WEBHOOK": {
+      "SUBSCRIBED_EVENTS": "Feliratkozott események",
+      "LEARN_MORE": "Learn more about webhooks",
+      "PAYWALL": {
+        "TITLE": "Webhookok a fizetős csomagokban érhetők el",
+        "AVAILABLE_ON": "Webhookokkal valós időben fogadhat eseményeket a Chatwoot-fiókjából.",
+        "UPGRADE_PROMPT": "Váltson Startups, Business vagy Enterprise csomagra a webhookok használatához.",
+        "UPGRADE_NOW": "Upgrade now",
+        "CANCEL_ANYTIME": "Bármikor módosíthatja vagy lemondhatja csomagját."
+      },
+      "SECRET": {
+        "LABEL": "Secret",
+        "COPY": "Copy secret to clipboard",
+        "COPY_SUCCESS": "Secret copied to clipboard",
+        "TOGGLE": "Toggle secret visibility",
+        "CREATED_DESC": "Your webhook has been created. Use the secret below to verify webhook signatures. Please copy it now — you can also find it later in the webhook edit form.",
+        "DONE": "Done"
+      },
+      "COUNT": "{n} webhook | {n} webhooks",
+      "SEARCH_PLACEHOLDER": "Search webhooks...",
+      "NO_RESULTS": "No webhooks found matching your search",
+      "FORM": {
+        "CANCEL": "Mégse",
+        "DESC": "Webhook események valós idejű információt adnak arról, hogy mi történik a Chatwoot fiókodban. Kérünk a visszahívás beállításánál egy helyes URL-t adj meg.",
+        "SUBSCRIPTIONS": {
+          "LABEL": "Események",
+          "EVENTS": {
+            "CONVERSATION_CREATED": "Beszélgetés létrehozva",
+            "CONVERSATION_STATUS_CHANGED": "Beszélgetés státusza megváltozott",
+            "CONVERSATION_UPDATED": "Beszélgetés frissítve",
+            "MESSAGE_CREATED": "Üzenet létrehozva",
+            "MESSAGE_UPDATED": "Üzenet frissítve",
+            "WEBWIDGET_TRIGGERED": "A felhasználó által megnyitott élő chat widget",
+            "CONTACT_CREATED": "Kontakt létrehozva",
+            "CONTACT_UPDATED": "Kontakt frissítve",
+            "CONVERSATION_TYPING_ON": "Conversation Typing On",
+            "CONVERSATION_TYPING_OFF": "Conversation Typing Off",
+            "INBOX_UPDATED": "Postafiók frissítve"
+          }
+        },
+        "NAME": {
+          "LABEL": "Webhook Name",
+          "PLACEHOLDER": "Enter the name of the webhook"
+        },
+        "END_POINT": {
+          "LABEL": "Webhook URL",
+          "PLACEHOLDER": "Example: {webhookExampleURL}",
+          "ERROR": "Kérjük helyes URL-t adj meg"
+        },
+        "EDIT_SUBMIT": "Webhook frissítése",
+        "ADD_SUBMIT": "Webhook létrehozása"
+      },
+      "TITLE": "Webhook",
+      "CONFIGURE": "Beállítások",
+      "HEADER": "Webhook beállítások",
+      "HEADER_BTN_TXT": "Új webhook hozzáadása",
+      "LOADING": "Kapcsolódó Webhookok betöltése",
+      "SEARCH_404": "Nincs megfelelő elem",
+      "SIDEBAR_TXT": "<p><b>Webhook</b>-ok</p><p>A Webhook-ok HTTP visszahívások, melyek minden fiókhoz bállíthatóak. Chatwoot események, például beérkező üzenetek aktiválhatják a webhookokat. Több webhookot is beállíthatsz a fiókodhoz. <br /><br /> Egy <b>webhook</b> létrehozásához kattints a <b>Webhook hozzáadása</b> gombra. Le is törölheted a létrejött webhookokat a Törlés gombra kattintva.</p>",
+      "LIST": {
+        "404": "Nincs a fiókhoz rendelt Webhook.",
+        "TITLE": "Webhook kezelés",
+        "TABLE_HEADER": {
+          "WEBHOOK_ENDPOINT": "Webhook végpont",
+          "ACTIONS": "Műveletek"
+        }
+      },
+      "EDIT": {
+        "BUTTON_TEXT": "Szerkesztés",
+        "TITLE": "Webhook szerkesztése",
+        "API": {
+          "SUCCESS_MESSAGE": "A Webhook konfigurációja sikeresen frissítve",
+          "ERROR_MESSAGE": "Nem sikerült csatlakozni a Woot szerverhez, kérjük próbáld később"
+        }
+      },
+      "ADD": {
+        "CANCEL": "Mégse",
+        "TITLE": "Új webhook hozzáadása",
+        "API": {
+          "SUCCESS_MESSAGE": "A Webhook konfigurációja sikeresen hozzáadva",
+          "ERROR_MESSAGE": "Nem sikerült csatlakozni a Woot szerverhez, kérjük próbáld később"
+        }
+      },
+      "DELETE": {
+        "BUTTON_TEXT": "Törlés",
+        "API": {
+          "SUCCESS_MESSAGE": "Webhook sikeresen törölve",
+          "ERROR_MESSAGE": "Nem sikerült csatlakozni a Woot szerverhez, kérjük próbáld később"
+        },
+        "CONFIRM": {
+          "TITLE": "Törlés megerősítése",
+          "MESSAGE": "Biztosan törölni szeretnéd a webhookot? ({webhookURL})",
+          "YES": "Igen, Törlés ",
+          "NO": "Nem, tartsa meg"
+        }
+      }
+    },
+    "SLACK": {
+      "HEADER": "Slack",
+      "DELETE": "Törlés",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Az integráció törlése",
+        "MESSAGE": "Biztos, hogy törölni szeretné az integrációt? Ha így tesz, elveszíti a Slack munkaterületén lévő beszélgetésekhez való hozzáférést."
+      },
+      "HELP_TEXT": {
+        "TITLE": "Using Slack Integration",
+        "BODY": "With this integration, all of your incoming conversations will be synced to the ***{selectedChannelName}*** channel in your Slack workspace. You can manage all your customer conversations right within the channel and never miss a message.\n\nHere are the main features of the integration:\n\n**Respond to conversations from within Slack:** To respond to a conversation in the ***{selectedChannelName}*** Slack channel, simply type out your message and send it as a thread. This will create a response back to the customer through Chatwoot. It's that simple!\n\n **Create private notes:** If you want to create private notes instead of replies, start your message with ***`note:`***. This ensures that your message is kept private and won't be visible to the customer.\n\n**Associate an agent profile:** If the person who replied on Slack has an agent profile in Chatwoot under the same email, the replies will be associated with that agent profile automatically. This means you can easily track who said what and when. On the other hand, when the replier doesn't have an associated agent profile, the replies will appear from the bot profile to the customer.",
+        "BODY_ALERT": "Ezzel az integrációval a beérkező beszélgetések mindegyike szinkronizálódik a Slack-munkaterület ***{selectedChannelName}*** csatornájával, így a csapat azonnal foglalkozhat velük.\n\nAz integráció **Csak értesítések** módra van állítva, ezért a Slack-szál belső megbeszélésekre szolgál. Az ott közzétett tartalmak a Slackben maradnak, és nem jutnak el az ügyfélhez.\n\n**Válasz az ügyfélnek a Chatwootból:** Nyissa meg a beszélgetést a szálban megosztott hivatkozással, majd válaszoljon a Chatwoot kezelőfelületén. A Chatwootban küldött válaszok és belső megjegyzések továbbra is megjelennek a Slack-szálban, így mindenki értesül róluk.",
+        "SELECTED": "kiválasztás"
+      },
+      "MESSAGE_MODE": {
+        "TITLE": "A Slack-szál működése",
+        "DESCRIPTION": "Döntse el, hogy a Slack-szálban küldött válaszok eljutnak-e az ügyfélhez, vagy belső üzenetként maradnak.",
+        "OPTIONS": {
+          "TWO_WAY": {
+            "LABEL": "Kétirányú szinkronizálás",
+            "DESCRIPTION": "A Slack-szálban küldött válaszokat az ügyfél is megkapja. Ha belső üzenetet szeretne küldeni, kezdje az üzenetet ezzel: `note:`."
+          },
+          "ALERT": {
+            "LABEL": "Csak értesítések",
+            "DESCRIPTION": "A beszélgetések csak belső megbeszélés céljából jelennek meg a Slackben. A szálban megosztott tartalmak nem jutnak el az ügyfélhez."
+          }
+        },
+        "UPDATE_SUCCESS": "A Slack-szál működése sikeresen frissült."
+      },
+      "SELECT_CHANNEL": {
+        "OPTION_LABEL": "Csatorna kiválasztása",
+        "UPDATE": "Frissítés",
+        "BUTTON_TEXT": "Csatlakozás a csatornához",
+        "DESCRIPTION": "A Slack munkaterülete mostantól összekapcsolódik a Chatwoot-tal. Az integráció azonban jelenleg inaktív. Az aktiválásához és egy Chatwoot-hoz való csatlakoztatásához kattintson az alábbi gombra.\n\n**Figyelem:** Ha egy privát csatornát próbál csatlakoztatni, akkor a Chatwoot alkalmazást adja hozzá a Slack-csatornához, mielőtt ezt a lépést folytatná.",
+        "ATTENTION_REQUIRED": "Figyelem szükséges",
+        "EXPIRED": "A Slack integráció lejárt. Ha továbbra is szeretne üzeneteket kapni a Slacken, törölje az integrációt, és csatlakoztassa újra a munkaterületét."
+      },
+      "UPDATE_ERROR": "Hiba történt az integráció frissítésében, kérjük, próbálja újra",
+      "UPDATE_SUCCESS": "A csatorna sikeresen csatlakozott",
+      "FAILED_TO_FETCH_CHANNELS": "Hiba történt a csatornák lekérdezésében a Slackből, kérjük, próbálja meg újra"
+    },
+    "DYTE": {
+      "CLICK_HERE_TO_JOIN": "Kattintsd ide a csatlakozáshoz",
+      "LEAVE_THE_ROOM": "Szoba elhagyása",
+      "START_VIDEO_CALL_HELP_TEXT": "Új videóhívás indítása ügyféllel",
+      "JOIN_ERROR": "Hiba történt az híváshoz való csatlakozás során, kérjük próbáld újra",
+      "CREATE_ERROR": "Hiba történt a link létrehozása során, kérjük próbáld újra"
+    },
+    "OPEN_AI": {
+      "AI_ASSIST": "AI segítség",
+      "WITH_AI": " {option} with AI ",
+      "OPTIONS": {
+        "REPLY_SUGGESTION": "Válasz lehetőségek",
+        "SUMMARIZE": "Összefoglalás",
+        "REPHRASE": "Írás fejlesztése",
+        "FIX_SPELLING_GRAMMAR": "Helyesírás és nyelvtan kijavítása",
+        "SHORTEN": "Rövidítés",
+        "EXPAND": "Kiegészítés",
+        "MAKE_FRIENDLY": "Legyen személyes hangvételű",
+        "MAKE_FORMAL": "Legyen hivatalos hangvételű",
+        "SIMPLIFY": "Egyszerűsít",
+        "CONFIDENT": "Use confident tone",
+        "PROFESSIONAL": "Use professional tone",
+        "CASUAL": "Use casual tone",
+        "STRAIGHTFORWARD": "Use straightforward tone"
+      },
+      "REPLY_OPTIONS": {
+        "IMPROVE_REPLY": "Improve reply",
+        "IMPROVE_REPLY_SELECTION": "Improve the selection",
+        "CHANGE_TONE": {
+          "TITLE": "Change tone",
+          "OPTIONS": {
+            "PROFESSIONAL": "Professzionális",
+            "CASUAL": "Casual",
+            "STRAIGHTFORWARD": "Straightforward",
+            "CONFIDENT": "Confident",
+            "FRIENDLY": "Barátságos"
+          }
+        },
+        "GRAMMAR": "Fix grammar & spelling",
+        "SUGGESTION": "Suggest a reply",
+        "SUMMARIZE": "Summarize the conversation",
+        "ASK_COPILOT": "Ask Copilot"
+      },
+      "ASSISTANCE_MODAL": {
+        "DRAFT_TITLE": "Vázlatos szöveg",
+        "GENERATED_TITLE": "Generált szöveg",
+        "AI_WRITING": "AI éppen ír",
+        "BUTTONS": {
+          "APPLY": "Használja ezt a javaslatot",
+          "CANCEL": "Mégse"
+        }
+      },
+      "CTA_MODAL": {
+        "TITLE": "OpenAI-al integrálás",
+        "DESC": "Az OpenAI GPT modelljeivel fejlett AI funkciókat építhet be a menüjébe. A kezdéshez adja meg az API kulcsot az OpenAI-fiókjából.",
+        "KEY_PLACEHOLDER": "Adja meg az OpenAI API kulcsát",
+        "BUTTONS": {
+          "NEED_HELP": "Kell segítség?",
+          "DISMISS": "Elutasítás",
+          "FINISH": "Előkészületek befejezése"
+        },
+        "DISMISS_MESSAGE": "Az OpenAI integrációt később is beállíthatja, amikor csak akarja.",
+        "SUCCESS_MESSAGE": "OpenAI integráció sikeres beállítva"
+      },
+      "TITLE": "Javítás AI segítségével",
+      "SUMMARY_TITLE": "Összegzés Al segítségével",
+      "REPLY_TITLE": "Válasz a javaslatra az AI-val",
+      "SUBTITLE": "\nA jelenlegi piszkozat alapján továbbfejlesztett válasz jön létre mesterséges intelligencia használatával.",
+      "TONE": {
+        "TITLE": "Hangnem",
+        "OPTIONS": {
+          "PROFESSIONAL": "Professzionális",
+          "FRIENDLY": "Barátságos"
+        }
+      },
+      "BUTTONS": {
+        "GENERATE": "Generálás",
+        "GENERATING": "Generálás...",
+        "CANCEL": "Mégse"
+      },
+      "GENERATE_ERROR": "There was an error processing the content, please try again"
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "Törlés",
+      "API": {
+        "SUCCESS_MESSAGE": "Integráció sikeresen törölve"
+      }
+    },
+    "CONNECT": {
+      "BUTTON_TEXT": "Kapcsolódás"
+    },
+    "DASHBOARD_APPS": {
+      "TITLE": "Kezdőlap applikációi",
+      "HEADER_BTN_TXT": "Új kezdőlapi applikáció hozzáadása",
+      "SIDEBAR_TXT": "<p><b>Irányítópult-alkalmazások</b></p><p>Az irányítópult-alkalmazások segítségével a szervezetek beágyazhatnak egy alkalmazást a Chatwoot irányítópultjába, hogy kontextust biztosítsanak az ügyfélszolgálati ügynökök számára. Ezzel a funkcióval önállóan hozhat létre alkalmazást, és beágyazhatja azt az irányítópultba, hogy megadja a felhasználói információkat, rendeléseiket vagy korábbi fizetési előzményeiket.</p><p>Ha beágyazza alkalmazását a Chatwoot irányítópultjával, az alkalmazás ablakeseményként kapja meg a beszélgetés és a kapcsolatfelvétel kontextusát. Helyezzen el egy figyelőt az üzeneteseményhez az oldalon, hogy megkapja a kontextust.</p><p>Új irányítópult-alkalmazás hozzáadásához kattintson az „Új irányítópult-alkalmazás hozzáadása” gombra.</p>",
+      "DESCRIPTION": "Az irányítópult-alkalmazások segítségével a szervezetek beágyazhatnak egy alkalmazást az irányítópultba, hogy kontextust biztosítsanak az ügyfélszolgálati ügynökök számára. Ez a funkció lehetővé teszi, hogy önállóan hozzon létre egy alkalmazást, és beágyazza azt, hogy megadja a felhasználói információkat, rendeléseiket vagy korábbi fizetési előzményeiket.\n",
+      "LEARN_MORE": "Learn more about Dashboard Apps",
+      "COUNT": "{n} dashboard app | {n} dashboard apps",
+      "SEARCH_PLACEHOLDER": "Search dashboard apps...",
+      "NO_RESULTS": "No dashboard apps found matching your search",
+      "LIST": {
+        "404": "Ebben a fiókban még nincsenek konfigurálva kezdőlapi-alkalmazások",
+        "LOADING": "Kezdőlapi alkalmazások lekérése...",
+        "TABLE_HEADER": {
+          "NAME": "Név",
+          "ENDPOINT": "Végpont",
+          "ACTIONS": "Műveletek"
+        },
+        "EDIT_TOOLTIP": "App szerkesztése",
+        "DELETE_TOOLTIP": "App törlése"
+      },
+      "FORM": {
+        "TITLE_LABEL": "Név",
+        "TITLE_PLACEHOLDER": "Add meg a kezdőlapi applikáció nevét",
+        "TITLE_ERROR": "A kezdőlapi applikáció nevének megadása kötelező",
+        "URL_LABEL": "Végpont",
+        "URL_PLACEHOLDER": "Add meg azt a végpont URL-jét, ahol az alkalmazást tárolják",
+        "URL_ERROR": "Érvényes URL megadása kötelező"
+      },
+      "CREATE": {
+        "HEADER": "Új kezdőlapi applikáció hozzáadása",
+        "FORM_SUBMIT": "Elküldés",
+        "FORM_CANCEL": "Mégse",
+        "API_SUCCESS": "Kezdőlapi applikációk sikeresen konfigurálva",
+        "API_ERROR": "Nem tudtuk megjeleníteni az appot, kérlek próbáld újra"
+      },
+      "UPDATE": {
+        "HEADER": "Kezdőlapi app szerkesztése",
+        "FORM_SUBMIT": "Frissítés",
+        "FORM_CANCEL": "Mégse",
+        "API_SUCCESS": "Kezdőlapi applikációk sikeresen frissítve",
+        "API_ERROR": "Nem tudtuk frissíteni az appot, kérlek próbáld újra"
+      },
+      "DELETE": {
+        "CONFIRM_YES": "Igen, töröld",
+        "CONFIRM_NO": "Nem, tartsd meg",
+        "TITLE": "Törlés megerősítése",
+        "MESSAGE": "Biztosan törölni szeretnéd az appot? ({appName}?",
+        "API_SUCCESS": "Kezdőlapi applikációk sikeresen törölve",
+        "API_ERROR": "Nem tudtuk törölni az appot, kérlek próbáld újra"
+      }
+    },
+    "LINEAR": {
+      "HEADER": "Linear",
+      "ADD_OR_LINK_BUTTON": "Create/Link Linear Issue",
+      "LOADING": "Fetching linear issues...",
+      "LOADING_ERROR": "There was an error fetching the linear issues, please try again",
+      "CREATE": "Létrehozás",
+      "LINK": {
+        "SEARCH": "Search issues",
+        "SELECT": "Select issue",
+        "TITLE": "Link",
+        "EMPTY_LIST": "No linear issues found",
+        "LOADING": "Loading",
+        "ERROR": "There was an error fetching the linear issues, please try again",
+        "LINK_SUCCESS": "Issue linked successfully",
+        "LINK_ERROR": "There was an error linking the issue, please try again",
+        "LINK_TITLE": "Conversation (#{conversationId}) with {name}"
+      },
+      "ADD_OR_LINK": {
+        "TITLE": "Create/link linear issue",
+        "DESCRIPTION": "Create Linear issues from conversations, or link existing ones for seamless tracking.",
+        "FORM": {
+          "TITLE": {
+            "LABEL": "Cím",
+            "PLACEHOLDER": "Enter title",
+            "REQUIRED_ERROR": "Cím megadása kötelező"
+          },
+          "DESCRIPTION": {
+            "LABEL": "Leírás",
+            "PLACEHOLDER": "Enter description"
+          },
+          "TEAM": {
+            "LABEL": "Csapat",
+            "PLACEHOLDER": "Csapat kiválasztása",
+            "SEARCH": "Search team",
+            "REQUIRED_ERROR": "Team is required"
+          },
+          "ASSIGNEE": {
+            "LABEL": "Assignee",
+            "PLACEHOLDER": "Select assignee",
+            "SEARCH": "Search assignee"
+          },
+          "PRIORITY": {
+            "LABEL": "Prioritás",
+            "PLACEHOLDER": "Prioritás megadása",
+            "SEARCH": "Search priority"
+          },
+          "LABEL": {
+            "LABEL": "Cimke",
+            "PLACEHOLDER": "Select label",
+            "SEARCH": "Search label"
+          },
+          "STATUS": {
+            "LABEL": "Státusz",
+            "PLACEHOLDER": "Select status",
+            "SEARCH": "Search status"
+          },
+          "PROJECT": {
+            "LABEL": "Project",
+            "PLACEHOLDER": "Select project",
+            "SEARCH": "Search project"
+          }
+        },
+        "CREATE": "Létrehozás",
+        "CANCEL": "Mégse",
+        "CREATE_SUCCESS": "Issue created successfully",
+        "CREATE_ERROR": "There was an error creating the issue, please try again",
+        "LOADING_TEAM_ERROR": "There was an error fetching the teams, please try again",
+        "LOADING_TEAM_ENTITIES_ERROR": "There was an error fetching the team entities, please try again"
+      },
+      "ISSUE": {
+        "STATUS": "Státusz",
+        "PRIORITY": "Prioritás",
+        "ASSIGNEE": "Assignee",
+        "LABELS": "Cimkék",
+        "CREATED_AT": "Created at {createdAt}"
+      },
+      "UNLINK": {
+        "TITLE": "Unlink",
+        "SUCCESS": "Issue unlinked successfully",
+        "ERROR": "There was an error unlinking the issue, please try again"
+      },
+      "NO_LINKED_ISSUES": "No linked issues found",
+      "DELETE": {
+        "TITLE": "Are you sure you want to delete the integration?",
+        "MESSAGE": "Are you sure you want to delete the integration?",
+        "CONFIRM": "Igen, törlés",
+        "CANCEL": "Mégse"
+      },
+      "CTA": {
+        "TITLE": "Connect to Linear",
+        "AGENT_DESCRIPTION": "Linear workspace is not connected. Request your administrator to connect a workspace to use this integration.",
+        "DESCRIPTION": "Linear workspace is not connected. Click the button below to connect your workspace to use this integration.",
+        "BUTTON_TEXT": "Connect Linear workspace"
+      }
+    },
+    "GOOGLE_TRANSLATE": {
+      "HEADER": "Google Fordító",
+      "DELETE_MESSAGE": "Az ügynökök többé nem tudják a Google Fordítóval lefordítani az üzeneteket. Ha a Google Fordító van kiválasztva fordítási szolgáltatásként, az automatikus fordítás szünetel, amíg másik szolgáltatást nem választ.",
+      "SETUP": {
+        "TITLE": "Google Fordító beállítása",
+        "DESCRIPTION": "Google Cloud-projektre lesz szüksége. A beállítás körülbelül öt percet vesz igénybe.",
+        "STEPS": {
+          "ENABLE_API": {
+            "TITLE": "Cloud Translation API bekapcsolása",
+            "DESCRIPTION": "Válasszon projektet a Google Cloud Console-ban, majd engedélyezze a Cloud Translation API-t. Jegyezze fel a projektazonosítót.",
+            "LINK": "Cloud Translation API megnyitása"
+          },
+          "CREATE_KEY": {
+            "TITLE": "Szolgáltatásfiók kulcsának létrehozása",
+            "DESCRIPTION": "Hozzon létre szolgáltatásfiókot a Cloud Translation API User szerepkörrel. Nyissa meg a fiókot, lépjen a Kulcsok részre, és adjon hozzá JSON-kulcsot.",
+            "LINK": "Szolgáltatásfiókok megnyitása"
+          },
+          "CONNECT": {
+            "TITLE": "Csatlakozás itt",
+            "DESCRIPTION": "Kattintson a Csatlakozás gombra, adja meg a projektazonosítót, majd illessze be a kulcsfájlt. Mentés előtt ellenőrizzük az adatokat a Google-lal."
+          }
+        }
+      },
+      "DETAILS": {
+        "PROJECT": "Google Cloud-projekt",
+        "SERVICE": "Fordítási szolgáltatás",
+        "SERVICE_GOOGLE": "A Google Fordító végzi a beszélgetések fordítását. Automatikus fordítás bekapcsolásakor a bejövő üzeneteket az egyes ügynökök nyelvére fordítja, a válaszokat pedig az ügyfél nyelvén küldi el. Az ügynökök az üzenet menüjéből is használhatják fordításra.",
+        "SERVICE_OTHER": "A Captain van kiválasztva fordítási szolgáltatásként, ezért a Google Fordítót jelenleg nem használjuk. Az automatikus fordítást és az üzenetek Fordítás műveletét is a Captain végzi. A Google-integráció használatához váltson a Google Fordítóra.",
+        "CHANGE": "Megváltoztatás"
+      }
+    },
+    "NOTION": {
+      "HEADER": "Notion",
+      "DELETE": {
+        "TITLE": "Are you sure you want to delete the Notion integration?",
+        "MESSAGE": "Deleting this integration will remove access to your Notion workspace and stop all related functionality.",
+        "CONFIRM": "Igen, törlés",
+        "CANCEL": "Mégse"
+      }
+    }
+  },
+  "CAPTAIN": {
+    "NAME": "Captain",
+    "HEADER_KNOW_MORE": "Tudjon meg többet",
+    "OVERVIEW": {
+      "HEADER": "Áttekintés",
+      "WELCOME": {
+        "LABEL": "Captain-összefoglaló",
+        "LOADING": "Összefoglaló készítése…"
+      },
+      "INBOX_BANNER": {
+        "TEXT": "Ez az asszisztens még nincs postafiókhoz kapcsolva, ezért nem fog válaszolni a beszélgetésekre.",
+        "ACTION": "Postafiók csatlakoztatása",
+        "DISMISS": "Elutasítás"
+      },
+      "COVERAGE_BANNER": {
+        "TEXT": "{count} GYIK-javaslat vár ellenőrzésre, a lefedettség pedig {coverage}%. Hagyja jóvá őket, hogy az asszisztens még több ügyet oldhasson meg önállóan.",
+        "ACTION": "Javaslatok áttekintése",
+        "DISMISS": "Elutasítás"
+      },
+      "RANGES": {
+        "INSUFFICIENT_HISTORY": "Még nincs elegendő jelentési adat",
+        "THIS_WEEK": "This week",
+        "LAST_WEEK": "Múlt hét",
+        "LAST_DAYS": "Elmúlt {count} nap",
+        "THIS_MONTH": "This month",
+        "LAST_MONTH": "Last month"
+      },
+      "METRICS": {
+        "HANDLED": {
+          "LABEL": "Kezelt beszélgetések",
+          "HINT": "Azok a beszélgetések, amelyekben Captain válaszolt az ügyfélnek, vagy átadta a beszélgetést a csapatnak."
+        },
+        "AUTO_RESOLUTION": {
+          "LABEL": "Automatikus megoldási arány",
+          "HINT": "A kezelt beszélgetések azon aránya, amelyeket Captain a csapat segítsége nélkül oldott meg. A magasabb érték azt jelenti, hogy Captain több beszélgetést oldott meg önállóan."
+        },
+        "HANDOFF": {
+          "LABEL": "Átadási arány",
+          "HINT": "A kezelt beszélgetések azon aránya, amelyeket Captain átadott a csapatnak. Az alacsonyabb érték azt jelenti, hogy kevesebb beszélgetéshez volt szükség ügynökre."
+        },
+        "HOURS_SAVED": {
+          "LABEL": "Megtakarított idő",
+          "HINT": "Becsült időmegtakarítás az ügynökök válaszidejében a Captain használatával.",
+          "NOTE": "Számítás alapja: minden nyilvános Captain-válasz két perc megtakarítást jelent."
+        },
+        "REOPEN": {
+          "LABEL": "Újranyitási arány",
+          "HINT": "Azon, Captain által megoldott beszélgetések aránya, amelyeket az ügyfelek később újranyitottak.",
+          "NOTE": "Az alacsonyabb érték azt jelenti, hogy több megoldott beszélgetés maradt lezárva."
+        },
+        "DEPTH": {
+          "LABEL": "Üzenetek beszélgetésenként",
+          "HINT": "A Captain által kezelt beszélgetésekben átlagosan küldött válaszok száma.",
+          "NOTE": "Az alacsonyabb érték gyorsabb válaszadást jelezhet, de összetett kérdésekhez több válaszra lehet szükség."
+        }
+      },
+      "DRILLDOWN": {
+        "EMPTY": "Ehhez a mutatóhoz nem található adat.",
+        "ERROR": "Nem sikerült betölteni az adatokat. Próbálja újra.",
+        "LOAD_MORE": "Load more",
+        "RESULT_COUNT_CONVERSATION": "{count} beszélgetés | {count} beszélgetés"
+      },
+      "KNOWLEDGE": {
+        "TITLE": "Tudásbázis-lefedettség",
+        "COVERAGE": "{pct}% jóváhagyva",
+        "APPROVED": "Jóváhagyott GYIK-ek",
+        "SUGGESTIONS": "GYIK-javaslatok",
+        "DOCUMENTS": "Documents"
+      },
+      "LINKS": {
+        "DOCS": {
+          "TITLE": "Captain dokumentációja",
+          "DESCRIPTION": "Útmutatók és leírások a Captain használatához"
+        },
+        "PLAYGROUND": {
+          "TITLE": "Játszótér",
+          "DESCRIPTION": "Tesztelje az asszisztens válaszait"
+        },
+        "BILLING": {
+          "TITLE": "Számlázás",
+          "DESCRIPTION": "Kreditek és csomag kezelése"
+        }
+      },
+      "V2": {
+        "DRILLDOWN": {
+          "HANDLED": "Az időszak azon beszélgetései, amelyekben Captain részt vett.",
+          "RESOLVED": "Azok a beszélgetések, amelyeket Captain átadás vagy emberi válasz nélkül oldott meg.",
+          "HANDED_OFF": "A Captain részvétele után átadott epizódok.",
+          "REOPENED": "A Captain által megoldott, majd később újranyitott epizódok.",
+          "DURABLE": "A Captain által megoldott epizódok, amelyek legalább hét napig lezárva maradtak.",
+          "CLOSED_WITH_TEAM": "Olyan epizódok, amelyekben a Captain részt vett, de amelyeket sem önállóan nem oldott meg, sem nem adott tovább.",
+          "REOPENED_WITHIN_7_DAYS": "A Captain által megoldott, hét napon belül újranyitott epizódok.",
+          "STAYED_CLOSED": "A Captain által megoldott epizódok, amelyeknél hét napon belül nem rögzítettek újranyitást. A közelmúltban megoldott epizódok is szerepelnek.",
+          "HANDOFF_REASON": "{reason} okból átadott epizódok.",
+          "COUNT": "Nincs epizód | 1 epizód | {count} epizód",
+          "EPISODES_HINT": "Egy beszélgetés többször is megjelenhet, ha a Captain különálló epizódokban kezelte. Az epizódok kezdési időpont szerint vannak csoportosítva.",
+          "STARTED_AT": "Epizód kezdete: {time}",
+          "RETRY": "Újrapróbálkozás"
+        },
+        "EMPTY": "Erre az időszakra nem áll rendelkezésre adat.",
+        "SUMMARY": {
+          "GREETING": "Üdvözöljük, {name}!",
+          "DEFAULT_NAME": "vendég",
+          "EMPTY": "A Captain teljesítmény-összefoglalója akkor jelenik meg itt, ha már elegendő aktivitási adat áll rendelkezésre.",
+          "PREVIOUS": "Előző összefoglalópont",
+          "NEXT": "Következő összefoglalópont"
+        },
+        "UNITS": {
+          "DAYS": "{value} nap",
+          "HOURS": "{value} óra",
+          "MINUTES": "{value} perc"
+        },
+        "METRICS": {
+          "TIME_SAVED": {
+            "LABEL": "Az ügynökök munkaidejének és ráfordításának megtakarítása"
+          },
+          "DURABLE": {
+            "LABEL": "Lezárva maradt, Captain által megoldott beszélgetések",
+            "NOT_APPLICABLE_HINT": "Ebben az időszakban még nincs olyan megoldás, amelyet hét napig követni lehetne. A tartósság mutatója ezért nem érhető el.",
+            "HINT": "A Captain által megoldott beszélgetések azon aránya, amelyek hét nappal később is lezárva maradtak.",
+            "NOTE": "Csak azok a megoldások szerepelnek, amelyek óta már eltelt hét nap."
+          },
+          "MEDIAN_RESOLUTION": {
+            "LABEL": "Medián megoldási idő",
+            "HINT": "A beszélgetés Captainhez kerülésétől annak megoldásáig jellemzően eltelő idő.",
+            "NOTE": "Az alacsonyabb érték azt jelenti, hogy a beszélgetések általában hamarabb megoldódnak."
+          },
+          "DEPTH": {
+            "LABEL": "Üzenetek száma beszélgetésenként"
+          },
+          "OF_TOTAL": "/ {total}"
+        },
+        "RESOLUTION_FLOW": {
+          "ARIA_LABEL": "A beszélgetések alakulása a Captain kezelése és a csapat eredményei szerint",
+          "NODES": {
+            "HANDLED": "Kezelve",
+            "RESOLVED_BY_CAPTAIN": "Captain által megoldva",
+            "HANDED_OFF": "Átadva",
+            "CLOSED_WITH_TEAM": "A csapat által lezárva",
+            "REOPENED": "7 napon belül újranyitva",
+            "STAYED_CLOSED": "Lezárva maradt",
+            "OTHER_REASONS": "Egyéb okok"
+          }
+        },
+        "HANDOFF_REASONS": {
+          "TITLE": "Átadás okai",
+          "CUSTOMER_REQUEST": "Ügyfél kérésére",
+          "MISSING_KNOWLEDGE": "Hiányzó ismeretek",
+          "UNSUPPORTED_REQUEST": "Nem támogatott kérés",
+          "POLICY_RESTRICTION": "Szabályzati korlátozás",
+          "TOOL_FAILURE": "Eszközhiba",
+          "PENDING_CLARIFICATION": "Ügyfél pontosítására vár",
+          "PERCENTAGE": "({value}%)",
+          "USAGE_LIMIT": "Használati korlát",
+          "UNCLASSIFIED": "Besorolatlan"
+        },
+        "RESOLUTION_TREND": {
+          "TITLE": "Megoldási trend",
+          "COMPARISON_LABEL": "Azonos hétköznapokra igazított összehasonlítás",
+          "COMPARISON_HINT": "Hasonlítsa össze a megoldási arányokat azonos hétköznapokon, például hétfőt hétfővel.",
+          "COMPARISON_NOTE": "A mai adatokat a nap azonos időpontjáig hasonlítjuk össze.",
+          "CONVERSATION_COUNT": "Beszélgetések száma",
+          "RESOLUTION_RATE": "Megoldási arány",
+          "CURRENT_PERIOD": "Aktuális időszak",
+          "PREVIOUS_PERIOD": "Previous period",
+          "HANDLED": "Kezelve",
+          "RESOLVED": "Captain által megoldva",
+          "ARIA_LABEL": "A kezelt, illetve Captain által megoldott beszélgetések jelentési időszakonként",
+          "RATE_ARIA_LABEL": "Captain aktuális és előző megoldási aránya"
+        },
+        "CSAT": {
+          "TITLE": "Captain ügyfél-elégedettségi mutatója (CSAT)",
+          "AUTONOMOUS": "Captain által önállóan megoldott beszélgetések",
+          "AUTONOMOUS_HINT": "A Captain által a csapat segítsége nélkül megoldott beszélgetések átlagos ügyfélértékelése.",
+          "ASSISTED": "Captain által támogatott beszélgetések",
+          "ASSISTED_HINT": "Az átlagos ügyfélértékelés azoknál a beszélgetéseknél, amelyek megoldása előtt Captain segítséget nyújtott a csapatnak.",
+          "VS_HUMANS": "{value} az ügynökökhöz képest"
+        },
+        "USAGE": {
+          "TITLE": "Használat",
+          "CREDITS": "Credits",
+          "DOCUMENTS": "Documents",
+          "USED": "({percentage}% felhasználva)",
+          "VALUE": "{used}/{total}",
+          "REFRESH": "Használat frissítése",
+          "BUY_MORE": "Buy more credits"
+        },
+        "KNOWLEDGE": {
+          "SUGGESTED": "Javasolt GYIK-ek",
+          "REVIEW": "GYIK áttekintése"
+        }
+      }
+    },
+    "ASSISTANT_SWITCHER": {
+      "ASSISTANTS": "Asszisztensek",
+      "SWITCH_ASSISTANT": "Váltás az asszisztensek között",
+      "NEW_ASSISTANT": "Asszisztens létrehozása",
+      "EMPTY_LIST": "Nem található asszisztens, kérjük, hozzon létre egyet a kezdéshez"
+    },
+    "COPILOT": {
+      "TITLE": "Copilot",
+      "TRY_THESE_PROMPTS": "Try these prompts",
+      "PANEL_TITLE": "Kezdje el a Copilottal",
+      "KICK_OFF_MESSAGE": "Gyors összefoglalóra van szüksége, szeretné áttekinteni a korábbi beszélgetéseket, vagy jobb választ megfogalmazni? A Copilot gyorsítja a folyamatot.",
+      "SEND_MESSAGE": "Üzenet elküldése...",
+      "EMPTY_MESSAGE": "Hiba történt a válasz elkészítésekor. Kérjük, próbálja újra.",
+      "LOADER": "Captain gondolkodik",
+      "YOU": "Ön",
+      "USE": "Használja ezt",
+      "RESET": "Alaphelyzetbe állítás",
+      "NEW_CHAT": "Új csevegés",
+      "HISTORY": "Korábbi csevegések",
+      "NO_HISTORY": "Itt jelennek meg a korábbi Copilot-csevegései.",
+      "LOAD_MORE": "További csevegések betöltése",
+      "LOADING_CHAT": "Csevegés betöltése...",
+      "LOADING_HISTORY": "Korábbi csevegések betöltése...",
+      "SHOW_STEPS": "Mutassa a lépéseket",
+      "SELECT_ASSISTANT": "Asszisztens kiválasztása",
+      "PROMPTS": {
+        "SUMMARIZE": {
+          "LABEL": "Foglalja össze ezt a beszélgetést",
+          "CONTENT": "Foglalja össze a kulcspontokat az ügyfél és az ügyfélszolgálati ügynök között folytatott beszélgetésben, beleértve az ügyfél aggályait, kérdéseit és az ügyfélszolgálati ügynök által adott megoldásokat vagy válaszokat."
+        },
+        "SUGGEST": {
+          "LABEL": "Javasoljon választ",
+          "CONTENT": "Elemezze az ügyfél kérdését, és készítsen egy választ, amely hatékonyan kezeli az aggályokat vagy kérdéseket. Biztosítsa, hogy a válasz világos, tömör és hasznos információkat tartalmazzon."
+        },
+        "RATE": {
+          "LABEL": "Értékelje ezt a beszélgetést",
+          "CONTENT": "Vizsgálja felül a beszélgetést, hogy mennyire felel meg az ügyfél igényeinek. Osszon meg egy értékelést 5 pontból a hangnem, világosság és hatékonyság alapján."
+        },
+        "HIGH_PRIORITY": {
+          "LABEL": "Nagy prioritású beszélgetések",
+          "CONTENT": "Adjon egy összefoglalót az összes nagy prioritású nyitott beszélgetésről. Tartalmazza a beszélgetés azonosítóját, az ügyfél nevét (ha elérhető), az utolsó üzenet tartalmát és a kijelölt ügynököt. Ha releváns, csoportosítsa státusz szerint."
+        },
+        "LIST_CONTACTS": {
+          "LABEL": "Kapcsolatok listázása",
+          "CONTENT": "Mutassa meg a 10 legfontosabb kapcsolat listáját. Tartalmazza a nevet, e-mailt vagy telefonszámot (ha elérhető), az utolsó megtekintés idejét, címkéket (ha vannak)."
+        }
+      }
+    },
+    "PLAYGROUND": {
+      "USER": "Ön",
+      "ASSISTANT": "Asszisztens",
+      "MESSAGE_PLACEHOLDER": "Gépeld be üzeneted...",
+      "SEND_MESSAGE": "Üzenet elküldése",
+      "HEADER": "Játszótér",
+      "DESCRIPTION": "Használja ezt a játszóteret üzenetek küldéséhez az asszisztensnek, és ellenőrizze, hogy pontosan, gyorsan és a várt hangnemben válaszol-e.",
+      "CREDIT_NOTE": "Itt küldött üzenetek a Captain kreditjeit csökkentik.",
+      "CLEAR_CONVERSATION": "Beszélgetés törlése",
+      "RESPONSE_ERROR": "Captain nem tudta befejezni ezt a tesztfuttatást. Ellenőrizze a beállítást, és próbálja újra.",
+      "SETUP": {
+        "TITLE": "Tesztbeállítás",
+        "DESCRIPTION": "Az itt végzett módosítások csak erre a tesztkörnyezetre érvényesek, kivéve, ha külön ment egy elemet.",
+        "TOGGLE": "Tesztbeállítás váltása",
+        "CLOSE": "Tesztbeállítás bezárása",
+        "RESET": "Tesztbeállítás visszaállítása",
+        "TEMPORARY": "Ideiglenes",
+        "SESSION_ONLY": "Csak erre a munkamenetre",
+        "INCLUDE_IN_TEST": "Bekerül a tesztbe",
+        "ADD_TO_TEST": "Hozzáadás a teszthez (↵)",
+        "LOAD_ERROR": "Nem sikerült betölteni a mentett asszisztensbeállítást.",
+        "INVALID_CONFIGURATION": "Az üzenet elküldése előtt fejezze be vagy távolítsa el a tesztbe bevont ideiglenes forgatókönyveket.",
+        "SAVE_SCENARIO_SUCCESS": "A forgatókönyv mentése sikerült, és továbbra is szerepel a tesztben.",
+        "SAVE_SCENARIO_ERROR": "Nem sikerült menteni a forgatókönyvet.",
+        "SAVE_RULE_SUCCESS": "A szabály mentése sikerült, és továbbra is szerepel a tesztben.",
+        "SAVE_RULE_ERROR": "Nem sikerült menteni a szabályt.",
+        "RULE_ALREADY_SAVED": "Ezzel a pontos szabállyal már mentett egy elemet, ezért nem jött létre másolat.",
+        "SCENARIOS": {
+          "TAB_TITLE": "Scenarios",
+          "CREATE_TITLE": "Ideiglenes forgatókönyv hozzáadása",
+          "CREATE_HINT": "Próbáljon ki új működést az asszisztens beállításainak módosítása nélkül.",
+          "SAVED_SUMMARY": "Meglévő forgatókönyvek ({count})",
+          "ADD_PERMANENTLY": "Forgatókönyv végleges hozzáadása",
+          "DISABLED": "Letiltva",
+          "EMPTY": "Az asszisztenshez még nincs mentett forgatókönyv.",
+          "COMPOSER_PLACEHOLDER": "Ideiglenes forgatókönyv címe...",
+          "COLLAPSE": "Ideiglenes forgatókönyv összecsukása",
+          "EXPAND": "Ideiglenes forgatókönyv kibontása",
+          "REMOVE": "Ideiglenes forgatókönyv eltávolítása"
+        },
+        "GUIDELINES": {
+          "TAB_TITLE": "Irányelvek",
+          "CREATE_TITLE": "Ideiglenes irányelv hozzáadása",
+          "CREATE_HINT": "Mielőtt hozzáadná az asszisztenshez, tesztelje a válaszadás egyik beállítását.",
+          "SAVED_SUMMARY": "Meglévő irányelvek ({count})",
+          "ADD_PERMANENTLY": "Irányelv végleges hozzáadása",
+          "EMPTY": "Ehhez az asszisztenshez még nincsenek mentett válaszadási irányelvek.",
+          "COMPOSER_PLACEHOLDER": "Ideiglenes irányelv megadása...",
+          "PLACEHOLDER": "Add a response guideline",
+          "REMOVE": "Ideiglenes válaszadási irányelv eltávolítása"
+        },
+        "GUARDRAILS": {
+          "TAB_TITLE": "Guardrails",
+          "CREATE_TITLE": "Ideiglenes korlátozás hozzáadása",
+          "CREATE_HINT": "Az asszisztenshez adás előtt tesztelje a biztonsági korlátozást.",
+          "SAVED_SUMMARY": "Meglévő korlátozások ({count})",
+          "ADD_PERMANENTLY": "Korlátozás végleges hozzáadása",
+          "EMPTY": "Ehhez az asszisztenshez még nincsenek mentett korlátozások.",
+          "COMPOSER_PLACEHOLDER": "Ideiglenes korlátozás megadása...",
+          "PLACEHOLDER": "Add a guardrail",
+          "REMOVE": "Ideiglenes korlátozás eltávolítása"
+        },
+        "KNOWLEDGE": {
+          "TAB_TITLE": "Tudás",
+          "AVAILABLE_TITLE": "A Captain számára elérhető tudás",
+          "AVAILABLE_DESCRIPTION": "A mentett források összefoglalója itt látható, kezelésük pedig a tesztfelületen kívül történik.",
+          "DOCUMENTS": "Documents",
+          "FAQS": "FAQs",
+          "TEMPORARY_TITLE": "Ideiglenes tudás",
+          "ADD_PERMANENTLY": "Dokumentum végleges hozzáadása",
+          "LABEL": "Referenciaszöveg",
+          "PLACEHOLDER": "Illesszen be vagy írjon be új tudást ehhez a teszthez",
+          "HINT": "Ez a szöveg csak a tesztfelületen indított kérésekhez kapcsolódik, kivéve ha dokumentumként is hozzáadja."
+        },
+        "SAVE_KNOWLEDGE_SUCCESS": "A tudás dokumentumként hozzáadva.",
+        "SAVE_KNOWLEDGE_ERROR": "Nem sikerült a tudást dokumentumként hozzáadni."
+      },
+      "RUN_DETAILS": {
+        "SUMMARY": "Futtatás részletei · {duration} ms",
+        "HANDLER_VALUE": "Kezelte: {handler}",
+        "SCENARIOS": "Nincs forgatókönyv | Egy forgatókönyv | {count} forgatókönyv",
+        "RULES": "{count} szabály",
+        "KNOWLEDGE_ATTACHED": "Ehhez a futtatáshoz ideiglenes tudás is kapcsolódott.",
+        "NO_EVENTS": "Nem rögzítettünk eszközhívásokat vagy forgatókönyv-átadásokat.",
+        "HANDOFF": "{from} → {to}",
+        "STATUS": {
+          "RUNNING": "Folyamatban",
+          "COMPLETED": "Lezárt",
+          "FAILED": "Failed"
+        }
+      }
+    },
+    "PAYWALL": {
+      "TITLE": "Frissítsen a Captain AI használatához",
+      "AVAILABLE_ON": "A Captain nem érhető el az ingyenes csomagban.",
+      "UPGRADE_PROMPT": "Frissítse csomagját, hogy hozzáférjen asszisztenseinkhez, copilothoz és egyebekhez.",
+      "UPGRADE_NOW": "Upgrade now",
+      "CANCEL_ANYTIME": "You can change or cancel your plan anytime"
+    },
+    "ENTERPRISE_PAYWALL": {
+      "AVAILABLE_ON": "A Captain AI csak az Enterprise csomagokban érhető el.",
+      "UPGRADE_PROMPT": "Frissítse csomagját, hogy hozzáférjen asszisztenseinkhez, copilothoz és egyebekhez.",
+      "ASK_ADMIN": "Please reach out to your administrator for the upgrade."
+    },
+    "BANNER": {
+      "RESPONSES": "A válaszlimit több mint 80%-át felhasználta. A Captain AI további használatához kérjük, frissítsen.",
+      "DOCUMENTS": "Elérte a dokumentumok korlátját. Frissítsen a Captain AI használat folytatásához."
+    },
+    "FORM": {
+      "CANCEL": "Mégse",
+      "CREATE": "Létrehozás",
+      "EDIT": "Frissítés"
+    },
+    "ASSISTANTS": {
+      "HEADER": "Assistants",
+      "NO_ASSISTANTS_AVAILABLE": "There are no assistants available in your account.",
+      "ADD_NEW": "Create a new assistant",
+      "DELETE": {
+        "TITLE": "Are you sure to delete the assistant?",
+        "DESCRIPTION": "A művelet végleges. Az asszisztens törlésével eltávolítja azt az összes hozzákapcsolt bejövő postaládából, és véglegesen törli az egyéni eszközeit, valamint az összes létrehozott tudást.",
+        "CONFIRM": "Igen, törlés",
+        "SUCCESS_MESSAGE": "The assistant has been successfully deleted",
+        "ERROR_MESSAGE": "There was an error deleting the assistant, please try again."
+      },
+      "FORM_DESCRIPTION": "Fill out the details below to name your assistant, describe its purpose, and specify the product it will support.",
+      "CREATE": {
+        "TITLE": "Create an assistant",
+        "SUCCESS_MESSAGE": "The assistant has been successfully created",
+        "ERROR_MESSAGE": "There was an error creating the assistant, please try again."
+      },
+      "FORM": {
+        "UPDATE": "Frissítés",
+        "SECTIONS": {
+          "BASIC_INFO": "Basic Information",
+          "SYSTEM_MESSAGES": "System Messages",
+          "INSTRUCTIONS": "Instructions",
+          "FEATURES": "Lehetőségek",
+          "TOOLS": "Tools "
+        },
+        "NAME": {
+          "LABEL": "Név",
+          "PLACEHOLDER": "Enter assistant name",
+          "ERROR": "The name is required"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Leírás",
+          "PLACEHOLDER": "Enter assistant description",
+          "ERROR": "The description is required"
+        },
+        "PRODUCT_NAME": {
+          "LABEL": "Product Name",
+          "PLACEHOLDER": "Enter product name",
+          "ERROR": "The product name is required"
+        },
+        "WELCOME_MESSAGE": {
+          "LABEL": "Welcome Message",
+          "PLACEHOLDER": "Enter welcome message"
+        },
+        "HANDOFF_MESSAGE": {
+          "LABEL": "Átadási üzenet",
+          "PLACEHOLDER": "Enter handoff message"
+        },
+        "RESOLUTION_MESSAGE": {
+          "LABEL": "Resolution Message",
+          "PLACEHOLDER": "Enter resolution message"
+        },
+        "INACTIVITY_RESOLUTION": {
+          "TITLE": "Amikor az ügyfelek nem válaszolnak",
+          "DESCRIPTION": "Válassza ki, hogyan kezelje a Captain a beszélgetést.",
+          "MODE_LABEL": "Teendő, ha az ügyfél nem válaszol",
+          "REVIEW_AFTER": "Ellenőrzés ennyi idő elteltével",
+          "RESOLVE_AFTER": "Beszélgetés lezárása ennyi idő után",
+          "ALWAYS_WARNING": "A Captain a kiválasztott idő elteltével ellenőrzés nélkül lezárja az összes beszélgetést. Így olyan beszélgetések is lezárulhatnak, amelyek még segítséget igényelnek.",
+          "PENDING_INFO": "A beszélgetés függőben marad, amíg az ügyfél nem válaszol.",
+          "RESOLUTION_MESSAGE": {
+            "TITLE": "Üzenet küldése a beszélgetés lezárásakor",
+            "DESCRIPTION": "A Captain ezt a záróüzenetet küldi el a beszélgetés lezárása előtt."
+          },
+          "MODES": {
+            "DISABLED": {
+              "LABEL": "Várakozás az ügyfél válaszára",
+              "DESCRIPTION": "A Captain nem zárja le a beszélgetést. Kérésre azonban átadhatja az ügyet."
+            },
+            "LEGACY": {
+              "LABEL": "Mindig zárja le",
+              "DESCRIPTION": "A Captain minden beszélgetést lezár a kiválasztott idő elteltével."
+            },
+            "EVALUATED": {
+              "LABEL": "Captain általi ellenőrzés (ajánlott)",
+              "DESCRIPTION": "A Captain dönti el, hogy lezárja-e a beszélgetést, vagy átadja."
+            }
+          },
+          "DURATION_HOURS_ARIA_LABEL": "Órák a műveletig",
+          "DURATION_MINUTES_ARIA_LABEL": "Percek a műveletig",
+          "DURATION_HOURS_SHORT": "{count} óra",
+          "DURATION_MINUTES_SHORT": "{count} perc"
+        },
+        "INSTRUCTIONS": {
+          "LABEL": "Instructions",
+          "PLACEHOLDER": "Enter instructions for the assistant"
+        },
+        "FEATURES": {
+          "TITLE": "Lehetőségek",
+          "ALLOW_CONVERSATION_FAQS": "Generate FAQs from resolved conversations",
+          "ALLOW_MEMORIES": "Capture key details as memories from customer interactions.",
+          "ALLOW_CITATIONS": "Include source citations in responses",
+          "ALLOW_CONTACT_ATTRIBUTES": "Allow access to contact information"
+        },
+        "AUDIENCE": {
+          "EVERYONE": {
+            "LABEL": "Mindenki",
+            "DESC": "Captain minden csatlakoztatott postafiókban válaszol a beszélgetésekre."
+          },
+          "SPECIFIC": {
+            "LABEL": "Meghatározott célközönség",
+            "DESC": "Captain csak az alábbi feltételeknek megfelelő ügyfeleknek válaszol."
+          },
+          "ADD_CONDITION": "Feltétel hozzáadása",
+          "ADD_GROUP": "Feltételcsoport hozzáadása",
+          "EMPTY_TITLE": "Még nincsenek feltételek",
+          "EMPTY_BODY": "Adjon hozzá egy feltételt az ügyfelek célzásához, vagy hozzon létre feltételcsoportot a különböző ÉS/VAGY logikájú feltételek összekapcsolásához.",
+          "EMPTY_ERROR": "Adjon meg legalább egy feltételt a meghatározott célközönséghez.",
+          "MATCH_PREFIX": "Egyezzen",
+          "MATCH_SUFFIX": "az alábbiak közül",
+          "MATCH_ALL": "mind",
+          "MATCH_ANY": "bármelyik",
+          "GROUP_CONTACT": "Kontakt attribútumai",
+          "GROUP_CONVERSATION": "Beszélgetés",
+          "GROUP_CUSTOM": "Egyéni tulajdonságok",
+          "BROWSER_LANGUAGE": "Böngésző nyelve",
+          "CONVERSATION_LANGUAGE": "Első üzenet nyelve",
+          "LOGGED_IN": "Bejelentkezett felhasználó",
+          "LOGGED_IN_TRUE": "Igen",
+          "LOGGED_IN_FALSE": "Nem"
+        },
+        "SCHEDULE": {
+          "ALWAYS": {
+            "LABEL": "Bármikor",
+            "DESC": "Captain időponttól függetlenül minden beszélgetésre válaszol."
+          },
+          "BUSINESS_HOURS": {
+            "LABEL": "Nyitvatartási időben",
+            "DESC": "Captain csak az egyes postafiókok nyitvatartási idejében válaszol."
+          },
+          "OUTSIDE_BUSINESS_HOURS": {
+            "LABEL": "Nyitvatartási időn kívül",
+            "DESC": "Captain csak akkor válaszol, amikor az egyes postafiókok zárva vannak."
+          },
+          "HINT": "Azok a postafiókok, amelyekhez nincs beállítva nyitvatartási idő, mindig érintettek."
+        }
+      },
+      "EDIT": {
+        "TITLE": "Update the assistant",
+        "SUCCESS_MESSAGE": "The assistant has been successfully updated",
+        "ERROR_MESSAGE": "There was an error updating the assistant, please try again.",
+        "NOT_FOUND": "Could not find the assistant. Please try again."
+      },
+      "SETTINGS": {
+        "HEADER": "Beállítások",
+        "BASIC_SETTINGS": {
+          "TITLE": "Basic settings",
+          "DESCRIPTION": "Customize what the assistant says when ending a conversation or transferring to a human."
+        },
+        "SYSTEM_SETTINGS": {
+          "TITLE": "System settings",
+          "DESCRIPTION": "Customize what the assistant says when ending a conversation or transferring to a human.",
+          "DESCRIPTION_V2": "Állítsa be, mit tegyen Captain, ha az ügyfél nem válaszol, és adja meg az átadáskor küldött üzenetet."
+        },
+        "AUDIENCE": {
+          "TITLE": "Közönség",
+          "DESCRIPTION": "Válassza ki, hogy az asszisztens mindenkinek vagy csak meghatározott célközönségnek válaszoljon."
+        },
+        "SCHEDULE": {
+          "TITLE": "Ütemezés",
+          "DESCRIPTION": "Válassza ki, mikor válaszoljon Captain. Ezen az időszakon kívül a beszélgetések a csapathoz kerülnek."
+        },
+        "CONTROL_ITEMS": {
+          "TITLE": "The Fun Stuff",
+          "DESCRIPTION": "Add more control to the assistant. (a bit more visual like a story : Query guardrail → scenarios → output) Nudges user to actually utilise these.",
+          "OPTIONS": {
+            "GUARDRAILS": {
+              "TITLE": "Guardrails",
+              "DESCRIPTION": "Keeps things on track—only the kinds of questions you want your assistant to answer, nothing off-limits or off-topic."
+            },
+            "RESPONSE_GUIDELINES": {
+              "TITLE": "Response guidelines",
+              "DESCRIPTION": "The vibe and structure of your assistant’s replies—clear and friendly? Short and snappy? Detailed and formal?"
+            }
+          }
+        },
+        "DELETE": {
+          "TITLE": "Delete Assistant",
+          "DESCRIPTION": "A művelet végleges. Az asszisztens törlésével eltávolítja azt az összes hozzákapcsolt bejövő postaládából, és véglegesen törli az egyéni eszközeit, valamint az összes létrehozott tudást.",
+          "BUTTON_TEXT": "Delete {assistantName}"
+        }
+      },
+      "OPTIONS": {
+        "EDIT_ASSISTANT": "Edit Assistant",
+        "DELETE_ASSISTANT": "Delete Assistant",
+        "VIEW_CONNECTED_INBOXES": "View connected inboxes"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "No assistants available",
+        "SUBTITLE": "Create an assistant to provide quick and accurate responses to your users. It can learn from your help articles and past conversations.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain Assistant",
+          "NOTE": "Captain Assistant engages directly with customers, learns from your help docs and past conversations, and delivers instant, accurate responses. It handles the initial queries, providing quick resolutions before  transferring to an agent when needed."
+        }
+      },
+      "GUARDRAILS": {
+        "TITLE": "Guardrails",
+        "DESCRIPTION": "Keeps things on track—only the kinds of questions you want your assistant to answer, nothing off-limits or off-topic.",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Select all ({count})",
+          "UNSELECT_ALL": "Unselect all ({count})",
+          "BULK_DELETE_BUTTON": "Törlés"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Example guardrails",
+            "ADD": "Add all",
+            "ADD_SINGLE": "Add this",
+            "SAVE": "Add and save (↵)",
+            "PLACEHOLDER": "Type in another guardrail..."
+          },
+          "NEW": {
+            "TITLE": "Add a guardrail",
+            "CREATE": "Létrehozás",
+            "CANCEL": "Mégse",
+            "PLACEHOLDER": "Type in another guardrail...",
+            "TEST_ALL": "Test all"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Search..."
+        },
+        "EMPTY_MESSAGE": "No guardrails found. Create or add examples to begin.",
+        "SEARCH_EMPTY_MESSAGE": "No guardrails found for this search.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Guardrails added successfully",
+            "ERROR": "There was an error adding guardrails, please try again."
+          },
+          "UPDATE": {
+            "SUCCESS": "Guardrails updated successfully",
+            "ERROR": "There was an error updating guardrails, please try again."
+          },
+          "DELETE": {
+            "SUCCESS": "Guardrails deleted successfully",
+            "ERROR": "There was an error deleting guardrails, please try again."
+          }
+        }
+      },
+      "RESPONSE_GUIDELINES": {
+        "TITLE": "Response Guidelines",
+        "DESCRIPTION": "The vibe and structure of your assistant’s replies—clear and friendly? Short and snappy? Detailed and formal?",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Select all ({count})",
+          "UNSELECT_ALL": "Unselect all ({count})",
+          "BULK_DELETE_BUTTON": "Törlés"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Example response guidelines",
+            "ADD": "Add all",
+            "ADD_SINGLE": "Add this",
+            "SAVE": "Add and save (↵)",
+            "PLACEHOLDER": "Type in another response guideline..."
+          },
+          "NEW": {
+            "TITLE": "Add a response guideline",
+            "CREATE": "Létrehozás",
+            "CANCEL": "Mégse",
+            "PLACEHOLDER": "Type in another response guideline...",
+            "TEST_ALL": "Test all"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Search..."
+        },
+        "EMPTY_MESSAGE": "No response guidelines found. Create or add examples to begin.",
+        "SEARCH_EMPTY_MESSAGE": "No response guidelines found for this search.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Response Guidelines added successfully",
+            "ERROR": "There was an error adding response guidelines, please try again."
+          },
+          "UPDATE": {
+            "SUCCESS": "Response Guidelines updated successfully",
+            "ERROR": "There was an error updating response guidelines, please try again."
+          },
+          "DELETE": {
+            "SUCCESS": "Response Guidelines deleted successfully",
+            "ERROR": "There was an error deleting response guidelines, please try again."
+          }
+        }
+      },
+      "SCENARIOS": {
+        "TITLE": "Scenarios",
+        "DESCRIPTION": "Give your assistant some context—like “what to do when a user is stuck,” or “how to act during a refund request.”",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Select all ({count})",
+          "UNSELECT_ALL": "Unselect all ({count})",
+          "BULK_DELETE_BUTTON": "Törlés"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Example scenarios",
+            "ADD": "Add all",
+            "ADD_SINGLE": "Add this",
+            "TOOLS_USED": "Tools used :"
+          },
+          "NEW": {
+            "CREATE": "Add a scenario",
+            "TITLE": "Create a scenario",
+            "FORM": {
+              "TITLE": {
+                "LABEL": "Cím",
+                "PLACEHOLDER": "Enter a name for the scenario",
+                "ERROR": "Scenario name is required"
+              },
+              "DESCRIPTION": {
+                "LABEL": "Leírás",
+                "PLACEHOLDER": "Describe how and where this scenario will be used",
+                "ERROR": "Scenario description is required"
+              },
+              "INSTRUCTION": {
+                "LABEL": "How to handle",
+                "PLACEHOLDER": "Describe how and where this scenario will be handled",
+                "ERROR": "Scenario content is required"
+              },
+              "CREATE": "Létrehozás",
+              "CANCEL": "Mégse"
+            }
+          }
+        },
+        "UPDATE": {
+          "CANCEL": "Mégse",
+          "UPDATE": "Update changes"
+        },
+        "STATUS": {
+          "ENABLED": "Engedélyezve",
+          "DISABLED": "Letiltva",
+          "TOGGLE": "{title} be-/kikapcsolása"
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Search..."
+        },
+        "EMPTY_MESSAGE": "No scenarios found. Create or add examples to begin.",
+        "SEARCH_EMPTY_MESSAGE": "No scenarios found for this search.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Scenarios added successfully",
+            "ERROR": "There was an error adding scenarios, please try again."
+          },
+          "UPDATE": {
+            "SUCCESS": "Scenarios updated successfully",
+            "ERROR": "There was an error updating scenarios, please try again."
+          },
+          "TOGGLE": {
+            "ENABLED": "A forgatókönyv engedélyezése sikerült",
+            "DISABLED": "A forgatókönyv letiltása sikerült",
+            "ERROR": "Hiba történt a forgatókönyv állapotának frissítésekor. Próbálja újra."
+          },
+          "DELETE": {
+            "SUCCESS": "Scenarios deleted successfully",
+            "ERROR": "There was an error deleting scenarios, please try again."
+          }
+        }
+      }
+    },
+    "DOCUMENTS": {
+      "HEADER": "Documents",
+      "ADD_NEW": "Create a new document",
+      "FAQ_COUNT": "{n} GYIK | {n} GYIK",
+      "USED_IN_CONVERSATIONS": "{n} beszélgetésben használva | {n} beszélgetésben használva",
+      "NO_USED_CONVERSATIONS": "Egyetlen beszélgetés sem található ehhez a dokumentumhoz.",
+      "SELECTED": "{count} selected",
+      "SELECT_ALL": "Select all ({count})",
+      "UNSELECT_ALL": "Unselect all ({count})",
+      "BULK_DELETE_BUTTON": "Törlés",
+      "BULK_SYNC_BUTTON": "Frissítés",
+      "BULK_DELETE": {
+        "TITLE": "Delete documents?",
+        "DESCRIPTION": "Are you sure you want to delete the selected documents? This action cannot be undone.",
+        "CONFIRM": "Yes, delete all",
+        "SUCCESS_MESSAGE": "Documents deleted successfully",
+        "ERROR_MESSAGE": "There was an error deleting the documents, please try again."
+      },
+      "BULK_SYNC": {
+        "SUCCESS_MESSAGE_ONE": "1 dokumentum frissítése sorba állítva",
+        "SUCCESS_MESSAGE": "{count} dokumentum frissítése sorba állítva",
+        "ZERO_MESSAGE": "Nincs frissítésre kijelölt dokumentum.",
+        "ERROR_MESSAGE": "Hiba történt a frissítés sorba állításakor. Próbálja újra."
+      },
+      "SYNC": {
+        "QUEUED_MESSAGE": "A frissítés sorba állítva. Hamarosan frissítjük a dokumentumot.",
+        "ERROR_MESSAGE": "Nem sikerült sorba állítani a frissítést. Próbálja újra."
+      },
+      "FILTERS": {
+        "SOURCE": {
+          "ALL": "Minden forrás",
+          "WEB": "Weboldalak",
+          "PDF": "PDF fájlok"
+        },
+        "STATUS": {
+          "ANY": "Bármilyen állapot",
+          "UPDATED": "Frissítve",
+          "NEEDS_UPDATE": "Frissítést igényel",
+          "UPDATING": "Frissítés folyamatban",
+          "FAILED": "Failed"
+        },
+        "SORT": {
+          "RECENTLY_UPDATED": "Legutóbb frissítve",
+          "RECENTLY_CREATED": "Legutóbb létrehozva",
+          "MOST_USED": "Leggyakrabban használt beszélgetésekben"
+        },
+        "SEARCH_PLACEHOLDER": "Search..."
+      },
+      "SYNC_STATUS": {
+        "SYNCED": "Utoljára frissítve: {time}",
+        "SYNCING": "frissítés folyamatban...",
+        "STALE_SYNC": "a frissítés elakadt",
+        "FAILED": "Nem sikerült a szinkronizálás",
+        "NEVER_SYNCED": "még nem frissült"
+      },
+      "SYNC_ERRORS": {
+        "NOT_FOUND": "Az oldal nem található",
+        "ACCESS_DENIED": "Hozzáférés megtagadva",
+        "TIMEOUT": "Az oldal nem válaszolt időben",
+        "CONTENT_EMPTY": "Az oldal üres tartalmat adott vissza",
+        "FETCH_FAILED": "Nem sikerült lekérni az oldalt",
+        "SYNC_ERROR": "Váratlan hiba",
+        "DEFAULT": "Szinkronizálási hiba"
+      },
+      "RELATED_RESPONSES": {
+        "TITLE": "Related FAQs",
+        "EMPTY": "Ehhez a dokumentumhoz még nem készült GYIK."
+      },
+      "DETAILS": {
+        "DESCRIPTION": "Tekintse át a beolvasott tartalmat és a forrásból generált GYIK-kérdéseket.",
+        "SOURCE": "Forrás",
+        "GENERATED_FAQS": "Generált GYIK",
+        "USED_IN_CONVERSATIONS": "Beszélgetésekben használva",
+        "LAST_UPDATED": "Utoljára frissítve",
+        "NOT_AVAILABLE": "Not available",
+        "CONTENT_TAB": "Beolvasott tartalom",
+        "PDF_TAB": "PDF-adatok",
+        "CONTENT_TITLE": "Beolvasott tartalom",
+        "PDF_TITLE": "PDF-fájl",
+        "PDF_DESCRIPTION": "Tekintse át az eredeti PDF-forrást.",
+        "CHARACTER_COUNT": "{count} karakter kinyerve",
+        "COPY_CONTENT": "Másolás",
+        "COPY_SUCCESS": "A beolvasott tartalom a vágólapra másolva",
+        "COPY_ERROR": "Nem sikerült a beolvasott tartalom másolása",
+        "VIEW_RAW": "Nyers tartalom megtekintése",
+        "VIEW_PREVIEW": "Előnézet megtekintése",
+        "UNREADABLE_CONTENT": "Nem sikerült olvasható tartalmat kinyerni ebből a dokumentumból. A kinyert nyers tartalom megtekinthető.",
+        "EMPTY_CONTENT": "Ehhez a dokumentumhoz még nem áll rendelkezésre beolvasott tartalom."
+      },
+      "FORM_DESCRIPTION": "Enter the URL of the document to add it as a knowledge source and choose the assistant to associate it with.",
+      "CREATE": {
+        "TITLE": "Add a document",
+        "SUCCESS_MESSAGE": "The document has been successfully created",
+        "ERROR_MESSAGE": "There was an error creating the document, please try again."
+      },
+      "FORM": {
+        "TYPE": {
+          "LABEL": "Document Type",
+          "URL": "URL",
+          "PDF": "PDF File"
+        },
+        "URL": {
+          "LABEL": "URL",
+          "PLACEHOLDER": "Enter the URL of the document",
+          "ERROR": "Please provide a valid URL for the document"
+        },
+        "PDF_FILE": {
+          "LABEL": "PDF File",
+          "CHOOSE_FILE": "Choose PDF file",
+          "ERROR": "Please select a PDF file",
+          "HELP_TEXT": "Maximum file size: 10MB",
+          "INVALID_TYPE": "Please select a valid PDF file",
+          "TOO_LARGE": "File size exceeds 10MB limit"
+        },
+        "NAME": {
+          "LABEL": "Document Name (Optional)",
+          "PLACEHOLDER": "Enter a name for the document"
+        }
+      },
+      "DELETE": {
+        "TITLE": "Are you sure to delete the document?",
+        "DESCRIPTION": "This action is permanent. Deleting this document will permanently erase all generated knowledge.",
+        "CONFIRM": "Igen, törlés",
+        "SUCCESS_MESSAGE": "The document has been successfully deleted",
+        "ERROR_MESSAGE": "There was an error deleting the document, please try again."
+      },
+      "OPTIONS": {
+        "VIEW_DETAILS": "Részletek megtekintése",
+        "SYNC_NOW": "Frissítés most",
+        "RETRY_SYNC": "Frissítés újrapróbálása",
+        "DELETE_DOCUMENT": "Delete Document"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "No documents available",
+        "SUBTITLE": "Documents are used by your assistant to generate FAQs. You can import documents to provide context for your assistant.",
+        "FILTERED_TITLE": "Nincs egyező dokumentum",
+        "FILTERED_SUBTITLE": "Próbálja meg módosítani a forrást, az állapotot vagy a keresőkifejezést.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain Document",
+          "NOTE": "A document in Captain serves as a knowledge resource for the assistant. By connecting your help center or guides, Captain can analyze the content and provide accurate responses for customer inquiries."
+        }
+      }
+    },
+    "CUSTOM_TOOLS": {
+      "HEADER": "Tools",
+      "ADD_NEW": "Create a new tool",
+      "CATALOG": {
+        "BUTTON": "Eszközkatalógus",
+        "HEADER": "Eszközkatalógus",
+        "DESCRIPTION": "Böngésszen a Captain eszközkatalógusában található eszközkészletek között, és telepítse őket ehhez az asszisztenshez.",
+        "ALL": "Mind",
+        "EMPTY": "Ebben a kategóriában még nincsenek eszközkészletek.",
+        "LOAD_ERROR": "Nem sikerült betölteni az eszközkatalógust. Ellenőrizze a katalógus URL-jét a Captain beállításaiban.",
+        "TOOL_COUNT": "{n} eszköz | {n} eszköz",
+        "VERSION": "v{version}",
+        "UPDATED": "Updated {time}",
+        "REPOSITORY": "Kódtár",
+        "MANIFEST": "Manifestfájl",
+        "CONFIGURATION": "Beállítások",
+        "REQUIRED": "Kötelező",
+        "DETAILS_ERROR": "Nem sikerült betölteni az eszközkészlet adatait.",
+        "INSTALLED": "Telepítve",
+        "UPDATE_AVAILABLE": "Frissítés érhető el"
+      },
+      "INSTALL_LINK": {
+        "TITLE": "Válasszon egy asszisztenst",
+        "DESCRIPTION": "Válassza ki, melyik asszisztensre telepíti ezt az eszközkészletet.",
+        "PLACEHOLDER": "Select an assistant",
+        "LOAD_ERROR": "Nem sikerült betölteni az asszisztenseket. A próbálkozáshoz töltse újra az oldalt."
+      },
+      "INSTALL_MANIFEST": {
+        "TITLE": "Eszközkészlet telepítése",
+        "DESCRIPTION": "Telepítsen eszközkészletet a Captain eszközkatalógusából.",
+        "VERSION_LABEL": "v{version} · {revision}",
+        "UPDATE_NOTE": "Másik verzió van telepítve. A frissítés lecseréli az eszközöket, a bekapcsolt állapotukat viszont megőrzi. Adja meg újra a titkos adatokat.",
+        "TOOLS_LABEL": "Tools",
+        "CONFIGURATION_LABEL": "Beállítások",
+        "CONTINUE": "Continue",
+        "INSTALL": "Telepítés",
+        "UPDATE": "Frissítés",
+        "REINSTALL": "Újratelepítés",
+        "REINSTALL_NOTE": "Az eszközkészlet egyes eszközeit törölték. Az újratelepítés visszaállítja őket, és megőrzi a bekapcsolt állapotukat. Adja meg újra a titkos adatokat.",
+        "ALREADY_INSTALLED": "Már telepítve",
+        "SUCCESS_MESSAGE": "Eszközkészlet telepítve",
+        "ERROR_MESSAGE": "Nem sikerült telepíteni az eszközkészletet",
+        "PREVIEW_ERROR": "Nem sikerült betölteni az eszközkészletet"
+      },
+      "ASSISTANT_TOOLS_BANNER": {
+        "MESSAGE": "Az egyéni eszközök mostantól asszisztensenként kezelhetők. Az eszközök testreszabásához váltson asszisztenst.",
+        "LEARN_MORE": "Tudj meg többet",
+        "DISMISS": "Értesítés bezárása",
+        "MODAL_TITLE": "Az asszisztensek mostantól saját eszközökkel rendelkeznek",
+        "MODAL_DESCRIPTION": "Mostantól minden asszisztens külön egyéni eszközlistával rendelkezik. A meglévő eszközöket átmásoltuk minden asszisztenshez, így semmi sem veszett el.",
+        "MODAL_INSTRUCTIONS": "Eszköz hozzáadásakor, szerkesztésekor, kikapcsolásakor vagy törlésekor a módosítás csak az éppen megtekintett asszisztensre vonatkozik. Az eszközök áttekintéséhez vagy testreszabásához váltson asszisztenst az oldal tetején.",
+        "ACKNOWLEDGE": "Got it"
+      },
+      "SOFT_LIMIT_WARNING": "Having more than 10 tools may reduce the assistant's reliability in selecting the right tool. Consider removing unused tools for better results.",
+      "EMPTY_STATE": {
+        "TITLE": "No custom tools available",
+        "SUBTITLE": "Create custom tools to connect your assistant with external APIs and services, enabling it to fetch data and perform actions on your behalf.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Custom Tools",
+          "NOTE": "Custom tools allow your assistant to interact with external APIs and services. Create tools to fetch data, perform actions, or integrate with your existing systems to enhance your assistant's capabilities."
+        }
+      },
+      "FORM_DESCRIPTION": "Configure your custom tool to connect with external APIs",
+      "OPTIONS": {
+        "EDIT_TOOL": "Edit tool",
+        "VIEW_TOOL": "Eszköz megtekintése",
+        "DELETE_TOOL": "Delete tool"
+      },
+      "STATUS": {
+        "ENABLED": "Engedélyezve",
+        "DISABLED": "Letiltva",
+        "TOGGLE": "{title} be-/kikapcsolása"
+      },
+      "TOGGLE": {
+        "ENABLED": "Az eszköz engedélyezése sikerült",
+        "DISABLED": "Az eszköz letiltása sikerült",
+        "ERROR": "Nem sikerült frissíteni az eszköz állapotát"
+      },
+      "DISABLE_CONFIRMATION": {
+        "TITLE": "{title} letiltása?",
+        "DESCRIPTION_ONE": "Ezt az eszközt {count} bekapcsolt forgatókönyv használja. Letiltása miatt előfordulhat, hogy a forgatókönyv nem fog megfelelően működni.",
+        "DESCRIPTION_OTHER": "Ezt az eszközt {count} bekapcsolt forgatókönyv használja. Letiltása miatt előfordulhat, hogy ezek a forgatókönyvek nem fognak megfelelően működni.",
+        "CONFIRM": "Eszköz letiltása"
+      },
+      "CREATE": {
+        "TITLE": "Create Custom Tool",
+        "SUCCESS_MESSAGE": "Custom tool created successfully",
+        "ERROR_MESSAGE": "Failed to create custom tool"
+      },
+      "VIEW": {
+        "TITLE": "Egyéni eszköz adatai",
+        "REQUEST": "Kérés és válasz",
+        "INSTALLED_NOTE": "Ez az eszköz csak olvasásra használható, mert az Eszközkatalógusból telepítették."
+      },
+      "EDIT": {
+        "TITLE": "Edit Custom Tool",
+        "SUCCESS_MESSAGE": "Custom tool updated successfully",
+        "ERROR_MESSAGE": "Failed to update custom tool"
+      },
+      "DELETE": {
+        "TITLE": "Delete Custom Tool",
+        "DESCRIPTION": "Are you sure you want to delete this custom tool? This action cannot be undone.",
+        "CONFIRM": "Igen, törlés",
+        "SUCCESS_MESSAGE": "Custom tool deleted successfully",
+        "ERROR_MESSAGE": "Failed to delete custom tool"
+      },
+      "PAYWALL": {
+        "TITLE": "Upgrade to use tools with Captain",
+        "AVAILABLE_ON": "Captain Tools are only available in Business and Enterprise plans. Please upgrade to Business plan to use the feature.",
+        "UPGRADE_PROMPT": "",
+        "UPGRADE_NOW": "Számlázási beállítások megnyitása",
+        "CANCEL_ANYTIME": ""
+      },
+      "ENTERPRISE_PAYWALL": {
+        "AVAILABLE_ON": "Captain Tools are only available in the paid plans.",
+        "UPGRADE_PROMPT": "Please upgrade to a paid plan to use this feature.",
+        "ASK_ADMIN": "Please reach out to your administrator for the upgrade."
+      },
+      "TEST": {
+        "BUTTON": "Test connection",
+        "SUCCESS": "Endpoint returned HTTP {status}",
+        "ERROR": "Connection failed",
+        "DISABLED_HINT": "Testing is only available for endpoints without templates or request bodies."
+      },
+      "FORM": {
+        "TITLE": {
+          "LABEL": "Tool Name",
+          "PLACEHOLDER": "Order Lookup",
+          "ERROR": "Tool name is required",
+          "MAX_LENGTH_ERROR": "Tool name must be {max} characters or fewer"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Leírás",
+          "PLACEHOLDER": "Looks up order details by order ID"
+        },
+        "HTTP_METHOD": {
+          "LABEL": "Method"
+        },
+        "ENDPOINT_URL": {
+          "LABEL": "Endpoint URL",
+          "PLACEHOLDER": "https://api.example.com/orders/{'{{'} order_id {'}}'}",
+          "ERROR": "Valid URL is required"
+        },
+        "AUTH_TYPE": {
+          "LABEL": "Authentication Type"
+        },
+        "EMAIL_VERIFICATION": {
+          "LABEL": "E-mail-cím ellenőrzésének megkövetelése",
+          "DESCRIPTION": "A Captain csak akkor használhatja ezt az eszközt, ha az ügyfél egyszer használatos kóddal igazolta az e-mail-címét.",
+          "IMPLIED": "A paraméter az ügyfél ellenőrzött e-mail-címét használja, ezért az e-mail-cím ellenőrzése mindig kötelező."
+        },
+        "AUTH_TYPES": {
+          "NONE": "Nincs",
+          "BEARER": "Bearer Token",
+          "BASIC": "Basic Auth",
+          "API_KEY": "API kulcs"
+        },
+        "AUTH_CONFIG": {
+          "BEARER_TOKEN": "Bearer Token",
+          "BEARER_TOKEN_PLACEHOLDER": "Enter your bearer token",
+          "USERNAME": "Username",
+          "USERNAME_PLACEHOLDER": "Enter username",
+          "PASSWORD": "Jelszó",
+          "PASSWORD_PLACEHOLDER": "Enter password",
+          "API_KEY": "Header Name",
+          "API_KEY_PLACEHOLDER": "X-API-Key",
+          "API_VALUE": "Header Value",
+          "API_VALUE_PLACEHOLDER": "Enter API key value"
+        },
+        "SECTIONS": {
+          "TEMPLATES": "Sablonok",
+          "TEMPLATES_HELP_TEXT": "A Liquid szintaxist is támogatja, például: {'{{'} order_id {'}}'} vagy {'{{'} response.status {'}}'}."
+        },
+        "HEADERS": {
+          "LABEL": "Fejlécek",
+          "HELP_TEXT": "Minden kéréshez rögzített fejléceket küldünk. Az értékek pontosan a megadott formában kerülnek elküldésre; a hitelesítő adatokhoz használja a Hitelesítés részt.",
+          "NAME_PLACEHOLDER": "Fejléc neve (pl. cal-api-version)",
+          "VALUE_PLACEHOLDER": "Fejléc értéke",
+          "NAME_REQUIRED": "A fejléc neve kötelező",
+          "NAME_DUPLICATE": "A fejlécneveknek egyedieknek kell lenniük",
+          "ADD": "Fejléc hozzáadása"
+        },
+        "PARAMETERS": {
+          "LABEL": "Parameters",
+          "HELP_TEXT": "Define the parameters that will be extracted from user queries"
+        },
+        "ADD_PARAMETER": "Add Parameter",
+        "PARAM_NAME": {
+          "PLACEHOLDER": "Parameter name (e.g., order_id)"
+        },
+        "PARAM_TYPE": {
+          "PLACEHOLDER": "Típus"
+        },
+        "PARAM_TYPES": {
+          "STRING": "String",
+          "NUMBER": "Szám",
+          "BOOLEAN": "Boolean",
+          "ARRAY": "Array",
+          "OBJECT": "Object"
+        },
+        "PARAM_DESCRIPTION": {
+          "PLACEHOLDER": "Description of the parameter"
+        },
+        "PARAM_REQUIRED": {
+          "LABEL": "Kötelező"
+        },
+        "RISK": {
+          "MEDIUM": "Ez az eszköz ügyféladatokat adhat vissza. Érdemes lehet megkövetelni az e-mail-cím ellenőrzését.",
+          "HIGH": "Úgy tűnik, ez az eszköz ügyféladatokat olvas vagy módosít. Követelje meg az e-mail-cím ellenőrzését, hogy csak ellenőrzött ügyfél használhassa.",
+          "TITLE": "Mentés e-mail-cím ellenőrzése nélkül?",
+          "GO_BACK": "Visszaugrás",
+          "SAVE_ANYWAY": "Mentés ennek ellenére",
+          "EMAIL_PARAM": "Ez az e-mail-cím nincs ellenőrizve. Az ügyfél más e-mail-címét is megadhatja.",
+          "USE_VERIFIED_EMAIL": "Ellenőrzött e-mail-cím használata"
+        },
+        "VERIFIED_VALUES": {
+          "ADD": "Ellenőrzött e-mail-cím hozzáadása",
+          "EMAIL": "Kontakt e-mail-címe",
+          "EMAIL_DESCRIPTION": "A kontakt ellenőrzött e-mail-címe",
+          "HELP": "A Chatwoot tölti ki az e-mail-cím alapján, amelyet a kontakt egyszer használatos kóddal megerősített. A Captain nem láthatja és nem módosíthatja ezt az ügyfélbeszélgetésekben."
+        },
+        "REQUEST_TEMPLATE": {
+          "LABEL": "Request Body Template (Optional)",
+          "PLACEHOLDER": "{'{'}\n  \"order_id\": \"{'{{'} order_id {'}}'}\"\n{'}'}"
+        },
+        "RESPONSE_TEMPLATE": {
+          "LABEL": "Response Template (Optional)",
+          "PLACEHOLDER": "Order {'{{'} order_id {'}}'} status: {'{{'} status {'}}'}"
+        },
+        "ERRORS": {
+          "PARAM_NAME_REQUIRED": "Parameter name is required"
+        }
+      }
+    },
+    "RESPONSES": {
+      "HEADER": "FAQs",
+      "ADD_NEW": "Create new FAQ",
+      "NO_USED_CONVERSATIONS": "Ehhez a GYIK-hez nem található beszélgetés.",
+      "DOCUMENTABLE": {
+        "CONVERSATION": "Conversation #{id}"
+      },
+      "SELECTED": "{count} selected",
+      "SELECT_ALL": "Select all ({count})",
+      "UNSELECT_ALL": "Unselect all ({count})",
+      "SEARCH_PLACEHOLDER": "Search FAQs...",
+      "ERRORS": {
+        "LOAD": "Nem sikerült betölteni a GYIK-eket. Próbálja újra."
+      },
+      "BULK_DELETE_BUTTON": "Törlés",
+      "BULK_DELETE": {
+        "TITLE": "Delete FAQs?",
+        "DESCRIPTION": "Are you sure you want to delete the selected FAQs? This action cannot be undone.",
+        "CONFIRM": "Yes, delete all",
+        "SUCCESS_MESSAGE": "FAQs deleted successfully",
+        "ERROR_MESSAGE": "There was an error deleting the FAQs, please try again."
+      },
+      "DELETE": {
+        "TITLE": "Are you sure to delete the FAQ?",
+        "DESCRIPTION": "",
+        "CONFIRM": "Igen, törlés",
+        "SUCCESS_MESSAGE": "FAQ deleted successfully",
+        "ERROR_MESSAGE": "There was an error deleting the FAQ, please try again."
+      },
+      "SUGGESTIONS_BANNER": {
+        "TITLE": "Captain a gyakran ismétlődő ügyfélkérdésekből GYIK-javaslatokat állított össze.",
+        "ACTION": "Javaslatok áttekintése"
+      },
+      "FORM_DESCRIPTION": "Add a question and its corresponding answer to the knowledge base and select the assistant it should be associated with.",
+      "CREATE": {
+        "TITLE": "Add an FAQ",
+        "SUCCESS_MESSAGE": "The response has been added successfully.",
+        "ERROR_MESSAGE": "An error occurred while adding the response. Please try again."
+      },
+      "FORM": {
+        "QUESTION": {
+          "LABEL": "Question",
+          "PLACEHOLDER": "Enter the question here",
+          "ERROR": "Please provide a valid question."
+        },
+        "ANSWER": {
+          "LABEL": "Answer",
+          "PLACEHOLDER": "Enter the answer here",
+          "ERROR": "Please provide a valid answer."
+        }
+      },
+      "EDIT": {
+        "TITLE": "Update the FAQ",
+        "SUCCESS_MESSAGE": "The FAQ has been successfully updated",
+        "ERROR_MESSAGE": "There was an error updating the FAQ, please try again",
+        "APPROVE_SUCCESS_MESSAGE": "The FAQ was marked as approved"
+      },
+      "OPTIONS": {
+        "APPROVE": "Approve",
+        "EDIT_RESPONSE": "Szerkesztés",
+        "DELETE_RESPONSE": "Törlés"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "No FAQs Found",
+        "SUBTITLE": "FAQs help your assistant provide quick and accurate answers to questions from your customers. They can be generated automatically from your content or can be added manually.",
+        "CLEAR_SEARCH": "Clear active filters",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain FAQ",
+          "NOTE": "Captain FAQs detects common customer questions—whether missing from your knowledge base or frequently asked—and generates relevant FAQs to improve support. You can review each suggestion and decide whether to approve or reject it."
+        }
+      }
+    },
+    "FAQ_SUGGESTIONS": {
+      "HEADER": "GYIK-javaslatok",
+      "SEARCH_PLACEHOLDER": "Javaslatok keresése...",
+      "QUEUE_COUNT": "{count} áttekintendő javaslat | {count} áttekintendő javaslat",
+      "QUEUE_HINT": "Ügyféligény szerinti rangsorolás",
+      "SOURCE_COUNT": "{count} beszélgetés | {count} beszélgetés",
+      "REVIEW": "Források áttekintése",
+      "APPROVE": "Approve",
+      "APPROVE_FAQ": "GYIK jóváhagyása",
+      "DISMISS": "Elutasítás",
+      "SAVE": "Save changes",
+      "DETAILS": {
+        "TITLE": "GYIK-javaslat áttekintése",
+        "DESCRIPTION": "Captain {count} beszélgetést csoportosított ebbe a javaslatba. Tekintse át a bizonyítékokat, és pontosítsa a GYIK-et jóváhagyás előtt. | Captain {count} beszélgetést csoportosított ebbe a javaslatba. Tekintse át a bizonyítékokat, és pontosítsa a GYIK-et jóváhagyás előtt.",
+        "SOURCES": "Forrásbeszélgetések",
+        "SOURCE_PROGRESS": "{visible}/{total}",
+        "NO_SOURCES": "Nem található elérhető forrásbeszélgetés.",
+        "RETRY": "Újrapróbálás"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Nincs több áttekintendő javaslat",
+        "SUBTITLE": "Az új GYIK-javaslatok itt jelennek meg, amikor készen állnak az áttekintésre.",
+        "CLEAR_SEARCH": "Keresés törlése"
+      },
+      "SUCCESS": {
+        "APPROVED": "A GYIK jóváhagyva, és hozzáadva a Captain tudásanyagához.",
+        "DISMISSED": "Javaslat elvetve.",
+        "SAVED": "Javaslat frissítve."
+      },
+      "ERRORS": {
+        "LOAD": "Hiba történt a GYIK-javaslatok betöltésekor. Próbálja újra.",
+        "LOAD_DETAILS": "Hiba történt a forrásbeszélgetések betöltésekor.",
+        "APPROVE": "Hiba történt a GYIK jóváhagyásakor. Próbálja újra.",
+        "DISMISS": "Hiba történt a javaslat elvetésekor. Próbálja újra.",
+        "SAVE": "Hiba történt a javaslat mentésekor. Próbálja újra."
+      }
+    },
+    "INBOXES": {
+      "HEADER": "Connected Inboxes",
+      "ADD_NEW": "Connect a new inbox",
+      "OPTIONS": {
+        "DISCONNECT": "Leválasztás"
+      },
+      "DELETE": {
+        "TITLE": "Are you sure to disconnect the inbox?",
+        "DESCRIPTION": "",
+        "CONFIRM": "Igen, törlés",
+        "SUCCESS_MESSAGE": "The inbox was successfully disconnected.",
+        "ERROR_MESSAGE": "There was an error disconnecting the inbox, please try again."
+      },
+      "FORM_DESCRIPTION": "Choose an inbox to connect with the assistant.",
+      "CREATE": {
+        "TITLE": "Connect an Inbox",
+        "SUCCESS_MESSAGE": "The inbox was successfully connected.",
+        "ERROR_MESSAGE": "An error occurred while connecting the inbox. Please try again."
+      },
+      "FORM": {
+        "INBOX": {
+          "LABEL": "Fiók",
+          "PLACEHOLDER": "Choose the inbox to deploy the assistant.",
+          "ERROR": "An inbox selection is required."
+        }
+      },
+      "EMPTY_STATE": {
+        "TITLE": "No Connected Inboxes",
+        "SUBTITLE": "Connecting an inbox allows the assistant to handle initial questions from your customers before transferring them to you."
+      }
+    }
+  }
+}

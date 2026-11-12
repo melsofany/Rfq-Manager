@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} المحادثات المحددة",
+    "NONE": "لا شيء",
+    "CLEAR_SELECTION": "مسح",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "نعم",
+    "CANCEL": "إلغاء",
+    "SEARCH_INPUT_PLACEHOLDER": "بحث",
+    "ASSIGN_AGENT_TOOLTIP": "تعيين وكيل",
+    "ASSIGN_TEAM_TOOLTIP": "تعيين فريق",
+    "ASSIGN_SUCCESFUL": "تم تعيين المحادثات بنجاح.",
+    "ASSIGN_FAILED": "فشل في تعيين المحادثات، الرجاء المحاولة مرة أخرى.",
+    "RESOLVE_SUCCESFUL": "تم تسوية المحادثات بنجاح.",
+    "RESOLVE_FAILED": "فشل في حل المحادثات، يرجى المحاولة مرة أخرى.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "المحادثات المرئية في هذه الصفحة هي المحددة فقط.",
+    "UPDATE": {
+      "CHANGE_STATUS": "تغيير الحالة",
+      "SNOOZE_UNTIL": "تأجيل",
+      "UPDATE_SUCCESFUL": "تم تحديث حالة المحادثة بنجاح.",
+      "UPDATE_FAILED": "فشل تحديث المحادثات، الرجاء المحاولة مرة أخرى."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "لا يمكن حل المحادثات بسبب عدم وجود السمات المطلوبة",
+      "PARTIAL_SUCCESS": "بعض المحادثات تحتاج إلى سمات مطلوبة قبل الحل وتم تخطيها"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "إضافة وسم",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "تعيين التسميات المحددة",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "تم تعيين التسميات بنجاح.",
+      "ASSIGN_FAILED": "فشل في تعيين التسميات ، الرجاء المحاولة مرة أخرى.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "لا شيء",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "تم تعيين الفرق بنجاح.",
+      "ASSIGN_FAILED": "فشل تعيين الفريق، الرجاء المحاولة مرة أخرى."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

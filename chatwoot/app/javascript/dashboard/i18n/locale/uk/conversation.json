@@ -1,0 +1,617 @@
+{
+  "CONVERSATION": {
+    "REFERRAL": {
+      "AD_LABEL": "Ad",
+      "POST_LABEL": "Post",
+      "VIEW_AD": "View ad",
+      "WELCOME_MESSAGE_LABEL": "Pre-filled message: ",
+      "REPLIED_BELOW": "Customer replied below"
+    },
+    "SELECT_A_CONVERSATION": "Будь ласка, виберіть бесіду з лівої панелі",
+    "CSAT_REPLY_MESSAGE": "Будь ласка, оцініть розмову",
+    "404": "На жаль, не вдалося знайти розмову. Будь ласка, спробуйте ще раз",
+    "SWITCH_VIEW_LAYOUT": "Змінити розкладку",
+    "DASHBOARD_APP_TAB_MESSAGES": "Текст повідомлень",
+    "UNVERIFIED_SESSION": "Користувач не верифікований",
+    "NO_MESSAGE_1": "Ой! Схоже, у вашій поштовій скринці немає ніяких повідомлень.",
+    "NO_MESSAGE_2": " щоб надіслати повідомлення на вашу сторінку!",
+    "NO_INBOX_1": "Галас! Схоже, ви ще не додали скриньк.",
+    "NO_INBOX_2": " для початку",
+    "NO_INBOX_AGENT": "Ой! Схоже, ви не маєте доступу до скриньки \"Вхідні\". Будь ласка, зверніться до адміністратора",
+    "SEARCH_MESSAGES": "Пошук повідомлень у розмовах",
+    "VIEW_ORIGINAL": "View original",
+    "VIEW_TRANSLATED": "View translated",
+    "TRANSLATING": "Translating…",
+    "TRANSLATING_TO": "Translating to {language}…",
+    "VIEW_ORIGINAL_IN": "View original ({language})",
+    "VIEW_TRANSLATED_IN": "View translated ({language})",
+    "TRANSLATION_FAILED": "Could not translate, sent as typed",
+    "CONTACT_TRANSLATION_FAILED": "Could not translate",
+    "EMPTY_STATE": {
+      "CMD_BAR": "відкрити командне меню",
+      "KEYBOARD_SHORTCUTS": "переглянути комбінації клавіш"
+    },
+    "SEARCH": {
+      "TITLE": "Пошук повідомлень",
+      "RESULT_TITLE": "Результати пошуку",
+      "LOADING_MESSAGE": "Триває збір даних...",
+      "PLACEHOLDER": "Введіть текст для пошуку повідомлень",
+      "NO_MATCHING_RESULTS": "Результатів не знайдено."
+    },
+    "UNREAD_MESSAGES": "Непрочитані повідомлення",
+    "UNREAD_MESSAGE": "Непрочитане повідомлення",
+    "CONTACT_HISTORY": {
+      "OLDER": "Previous conversation",
+      "NEWER": "Next conversation",
+      "OLDER_WITH": "Previous conversation with {name} · {time}",
+      "NEWER_WITH": "Next conversation with {name} · {time}",
+      "CUSTOMER": "this customer",
+      "REPLY_TO_OLDER": "Reply to this older conversation",
+      "GO_TO_LATEST": "Go to latest conversation"
+    },
+    "CLICK_HERE": "Натисніть тут",
+    "LOADING_INBOXES": "Завантаження скриньок",
+    "LOADING_CONVERSATIONS": "Завантаження бесід",
+    "CANNOT_REPLY": "Ви не можете відповісти через",
+    "24_HOURS_WINDOW": "24-годинне обмеження на повідомлення",
+    "48_HOURS_WINDOW": "48-годинне обмеження на повідомлення",
+    "API_HOURS_WINDOW": "Ви можете відповідати лише в межах {hours} годин",
+    "NOT_ASSIGNED_TO_YOU": "Ця розмова не призначена на вас. Ви бажаєте призначити цю розмову на себе?",
+    "ASSIGN_TO_ME": "Призначити мені",
+    "BOT_HANDOFF_MESSAGE": "This conversation is currently handled by {assigneeName}.",
+    "BOT_HANDOFF_FALLBACK_ASSIGNEE": "an AI agent",
+    "BOT_HANDOFF_ACTION": "Take over",
+    "BOT_HANDOFF_REOPEN_ACTION": "Позначити розмову відкритою",
+    "BOT_HANDOFF_SUCCESS": "Розмова була призначена на вас",
+    "BOT_HANDOFF_ERROR": "Failed to take over the conversation. Please try again.",
+    "TWILIO_WHATSAPP_CAN_REPLY": "Ви можете відповісти на цю розмову тільки за допомогою шаблонного повідомлення через",
+    "TWILIO_WHATSAPP_24_HOURS_WINDOW": "24-годинне обмеження на повідомлення",
+    "OLD_INSTAGRAM_INBOX_REPLY_BANNER": "This Instagram account was migrated to the new Instagram channel inbox. All new messages will show up there. You won’t be able to send messages from this conversation anymore.",
+    "INSTAGRAM_RESTRICTION_BANNER": "Instagram messaging is currently affected by an API-level issue on Meta’s side, not a problem with Chatwoot. Some messages or actions may be delayed or unavailable. We’re working closely with Meta to resolve it as quickly as possible.",
+    "INSTAGRAM_RESTRICTION_STATUS_LINK": "View status updates",
+    "REPLYING_TO": "Ви відповідаєте:",
+    "REMOVE_SELECTION": "Видалити вибране",
+    "DOWNLOAD": "Звантажити",
+    "UNKNOWN_FILE_TYPE": "Невідомий файл",
+    "SAVE_CONTACT": "Save Contact",
+    "NO_CONTENT": "No content to display",
+    "SHARED_ATTACHMENT": {
+      "CONTACT": "{sender} has shared a contact",
+      "LOCATION": "{sender} has shared a location",
+      "FILE": "{sender} has shared a file",
+      "MEETING": "{sender} розпочав зустріч"
+    },
+    "UPLOADING_ATTACHMENTS": "Завантаження вкладень...",
+    "REPLIED_TO_STORY": "Відповів(-ла) на вашу історію",
+    "UNSUPPORTED_MESSAGE": "This message is unsupported. You can view this message on the Facebook / Instagram app.",
+    "UNSUPPORTED_MESSAGE_FACEBOOK": "Це повідомлення не підтримується. Ви можете переглянути це повідомлення у додатку Facebook Messenger",
+    "UNSUPPORTED_MESSAGE_INSTAGRAM": "Це повідомлення не підтримується. Ви можете переглянути це повідомлення у додатку Instagram.",
+    "UNSUPPORTED_MESSAGE_TIKTOK": "This message is unsupported. You can view this message on the TikTok app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_TITLE": "Message content unavailable",
+    "UNSUPPORTED_MESSAGE_WHATSAPP": "We’re unable to display this message because Meta hasn’t provided its content. This can happen with WhatsApp Coexistence setups. To view the message, please check it in your WhatsApp Business app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_DETAILS": "For more details, refer to {documentation}.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_LEARN_MORE": "Meta’s documentation",
+    "WHATSAPP_FLOW_RESPONSE": "Submitted a flow response",
+    "WHATSAPP_REFERRAL": {
+      "AD": "Ad"
+    },
+    "SUCCESS_DELETE_MESSAGE": "Повідомлення успішно видалено",
+    "FAIL_DELETE_MESSSAGE": "Не вдалося видалити повідомлення! Спробуйте ще раз",
+    "NO_RESPONSE": "Немає відповіді",
+    "REQUEST_CONTACT_INFO": {
+      "ACTION": "Ask the customer to share their WhatsApp phone number",
+      "PENDING_ACTION": "Contact information request pending",
+      "STATES": {
+        "PENDING": "Waiting for contact information",
+        "SHARED": "Phone number shared",
+        "IDENTITY_CONFLICT": "Phone number needs review"
+      }
+    },
+    "RESPONSE": "Response",
+    "RATING_TITLE": "Оцінка",
+    "FEEDBACK_TITLE": "Зворотній зв'язок",
+    "REPLY_MESSAGE_NOT_FOUND": "Повідомлення недоступне",
+    "CAPTAIN_GENERATION": {
+      "TITLE": "How was this reply generated?",
+      "GENERATED_BY": "Generated by Captain",
+      "LOADING": "Loading details…",
+      "EMPTY": "No generation details available for this message.",
+      "TIMELINE": "Generation steps",
+      "STEP_TOOL": "Called {name}",
+      "STEP_HANDOFF": "Handed off to {name}",
+      "REASONING": "Reasoning",
+      "SOURCES": "Knowledge base",
+      "SOURCES_SUMMARY": "{count} result | {count} results",
+      "MODEL": "Generated with {model}",
+      "CREDITS": "Credits: {credits}"
+    },
+    "CARD": {
+      "SHOW_LABELS": "Показати мітки",
+      "HIDE_LABELS": "Сховати мітки",
+      "LABELS_COUNT": "{count} labels"
+    },
+    "VOICE_CALL": {
+      "INCOMING_CALL": "Incoming call",
+      "OUTGOING_CALL": "Outgoing call",
+      "CALL_IN_PROGRESS": "Call in progress",
+      "NO_ANSWER": "No answer",
+      "NO_ANSWER_OUTBOUND_LABEL": "No answer",
+      "NO_ANSWER_OUTBOUND_SUBTEXT": "Contact didn't pick up",
+      "MISSED_CALL": "Missed call",
+      "MISSED_CALL_INBOUND_SUBTEXT": "No agent picked up",
+      "MISSED_CALL_DECLINED_BY": "Declined by {agentName}",
+      "CALL_ENDED": "Call ended",
+      "HANDLED_BY": "Handled by {agentName}",
+      "NOT_ANSWERED_YET": "Not answered yet",
+      "CALLING": "Calling…",
+      "THEY_ANSWERED": "They answered",
+      "YOU_ANSWERED": "You answered",
+      "AGENT_ANSWERED": "{agentName} answered",
+      "JOIN_CALL": "Доєднатися до виклику",
+      "CALL_BACK": "Call back",
+      "TRANSCRIPT_SHOW_MORE": "Show more",
+      "TRANSCRIPT_SHOW_LESS": "Show less"
+    },
+    "HEADER": {
+      "RESOLVE_ACTION": "Вирішити",
+      "REOPEN_ACTION": "Відкрити знову",
+      "OPEN_ACTION": "Відкриті",
+      "MORE_ACTIONS": "More actions",
+      "OPEN": "Ще",
+      "CLOSE": "Закрити",
+      "DETAILS": "подробиці",
+      "COPY_ID_SUCCESS": "Conversation ID copied to clipboard",
+      "SNOOZED_UNTIL": "Відкладено до",
+      "SNOOZED_UNTIL_TOMORROW": "Відкладено до завтра",
+      "SNOOZED_UNTIL_NEXT_WEEK": "Відкладено до наступного тижня",
+      "SNOOZED_UNTIL_NEXT_REPLY": "Відкладено до наступної відповіді",
+      "WHATSAPP_CALL": "Start WhatsApp call",
+      "WHATSAPP_CALL_FAILED": "Could not start the WhatsApp call.",
+      "VOICE_CALL": "Start call",
+      "VOICE_CALL_FAILED": "Could not start the call.",
+      "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+      "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+      "SLA_STATUS": {
+        "FRT": "FRT {status}",
+        "NRT": "NRT {status}",
+        "RT": "RT {status}",
+        "MISSED": "пропущено",
+        "DUE": "до"
+      }
+    },
+    "RESOLVE_DROPDOWN": {
+      "MARK_PENDING": "Позначити як \"В очікуванні\"",
+      "SNOOZE_UNTIL": "Відкласти",
+      "SNOOZE": {
+        "TITLE": "Відкласти до",
+        "NEXT_REPLY": "Наступна відповідь",
+        "TOMORROW": "Завтра",
+        "NEXT_WEEK": "Наступного тижня"
+      }
+    },
+    "MENTION": {
+      "AGENTS": "Агенти",
+      "TEAMS": "Команди"
+    },
+    "PICKER": {
+      "VARIABLE": {
+        "SEARCH_PLACEHOLDER": "Search variables",
+        "DESCRIPTION": "Опис",
+        "VALUE": "Value",
+        "NO_VALUE": "No value for this conversation"
+      },
+      "EMOJI": {
+        "SEARCH_PLACEHOLDER": "Пошук смайлів",
+        "EMPTY_STATE": "Type to search emojis"
+      },
+      "MACRO": {
+        "SEARCH_PLACEHOLDER": "Search macros",
+        "ACTION_COUNT": "1 action | {count} actions"
+      },
+      "MENTION": {
+        "SEARCH_PLACEHOLDER": "Search agents and teams",
+        "FILTER": {
+          "ALL": "Всі"
+        },
+        "AVAILABILITY": "Присутність",
+        "ROLE": "Тип агента",
+        "AUTO_ASSIGN": "Auto assign",
+        "ENABLED": "Увімкнено",
+        "DISABLED": "Вимкнено",
+        "YOU_ARE_A_MEMBER": "You are a member of this team"
+      }
+    },
+    "CUSTOM_SNOOZE": {
+      "TITLE": "Відкласти до",
+      "APPLY": "Відкласти",
+      "CANCEL": "Скасувати"
+    },
+    "SUGGESTIONS": {
+      "SUGGEST": "Suggest with Captain",
+      "EMPTY": "No new suggestions",
+      "ACCEPT": "Accept",
+      "APPLY_HINT": "Click to apply",
+      "REJECT": "Відхилити",
+      "ACCEPT_ALL": "Accept all",
+      "ERROR": "Could not load suggestions. Please try again.",
+      "APPLY_ERROR": "Could not apply the suggested labels. Please try again."
+    },
+    "PRIORITY": {
+      "TITLE": "Пріоритет",
+      "OPTIONS": {
+        "NONE": "Нiчого",
+        "URGENT": "Терміновий",
+        "HIGH": "Високий",
+        "MEDIUM": "Середній",
+        "LOW": "Низький"
+      },
+      "CHANGE_PRIORITY": {
+        "SELECT_PLACEHOLDER": "Нiчого",
+        "INPUT_PLACEHOLDER": "Оберіть пріоритет",
+        "NO_RESULTS": "Результатів не знайдено",
+        "SUCCESSFUL": "Змінено пріоритет для бесід з ID {conversationId} на {priority}",
+        "FAILED": "Не вдалося змінити пріоритет. Будь ласка, спробуйте ще раз."
+      }
+    },
+    "DELETE_CONVERSATION": {
+      "TITLE": "Delete conversation #{conversationId}",
+      "DESCRIPTION": "Are you sure you want to delete this conversation?",
+      "CONFIRM": "Видалити"
+    },
+    "CARD_CONTEXT_MENU": {
+      "PENDING": "Позначити як \"В очікуванні\"",
+      "RESOLVED": "Позначити як вирішене",
+      "MARK_AS_UNREAD": "Позначити як непрочитане",
+      "MARK_AS_READ": "Позначити як прочитане",
+      "REOPEN": "Повторно відкрити розмову",
+      "SNOOZE": {
+        "TITLE": "Відкласти",
+        "NEXT_REPLY": "До наступної відповіді",
+        "TOMORROW": "До завтра",
+        "NEXT_WEEK": "До наступного тижня"
+      },
+      "ASSIGN_AGENT": "Призначити агента",
+      "ASSIGN_LABEL": "Призначити мітку",
+      "SEARCH_LABELS": "Пошук міток",
+      "NO_LABELS_FOUND": "Міток не знайдено",
+      "AGENTS_LOADING": "Завантаження агентів...",
+      "ASSIGN_TEAM": "Призначити команду",
+      "DELETE": "Delete conversation",
+      "OPEN_IN_NEW_TAB": "Open in new tab",
+      "COPY_LINK": "Copy conversation link",
+      "COPY_LINK_SUCCESS": "Conversation link copied to clipboard",
+      "API": {
+        "AGENT_ASSIGNMENT": {
+          "SUCCESFUL": "Ідентифікатор розмови {conversationId} призначено для \"{agentName}\"",
+          "FAILED": "Не вдалося призначити агента. Будь ласка, спробуйте ще раз."
+        },
+        "LABEL_ASSIGNMENT": {
+          "SUCCESFUL": "Assigned label #{labelName} to conversation id {conversationId}",
+          "FAILED": "Не вдалося призначити мітку. Будь-ласка, спробуйте ще раз."
+        },
+        "LABEL_REMOVAL": {
+          "SUCCESFUL": "Removed label #{labelName} from conversation id {conversationId}",
+          "FAILED": "Couldn't remove label. Please try again."
+        },
+        "TEAM_ASSIGNMENT": {
+          "SUCCESFUL": "Призначено команду \"{team}\" до ID розмови {conversationId}",
+          "FAILED": "Не вдалося призначити команду. Будь ласка, спробуйте ще раз."
+        }
+      }
+    },
+    "FOOTER": {
+      "MESSAGE_SIGN_TOOLTIP": "Підпис повідомлення",
+      "ENABLE_SIGN_TOOLTIP": "Увімкнути підпис",
+      "DISABLE_SIGN_TOOLTIP": "Вимкнути підпис",
+      "MSG_INPUT": "Shift + Enter для нового рядка. Для вибору швидкої відповіді, уведіть '/'.",
+      "PRIVATE_MSG_INPUT": "Shift + Enter для нового рядка. Видиме лише для співробітників",
+      "MESSAGING_RESTRICTED": "You cannot reply to this conversation",
+      "MESSAGING_RESTRICTED_WHATSAPP": "You can only reply using a template message due to 24-hour message window restriction",
+      "MESSAGING_RESTRICTED_API": "You can only reply using a template message due to message window restriction",
+      "MESSAGE_SIGNATURE_NOT_CONFIGURED": "Не налаштовано підпис повідомлення, будь ласка, налаштуйте його в налаштуваннях профілю.",
+      "COPILOT_MSG_INPUT": "Надайте Copilot додаткові підказки або запитайте що-небудь ще... Натисніть Enter для відправлення відповіді",
+      "CLICK_HERE": "Натисніть тут для оновлення",
+      "WHATSAPP_TEMPLATES": "Шаблони Whatsapp"
+    },
+    "REPLYBOX": {
+      "REPLY": "Відповісти",
+      "PRIVATE_NOTE": "Особиста нотатка",
+      "SEND": "Надіслати",
+      "CREATE": "Додати нотатку",
+      "INSERT_READ_MORE": "Детальніше",
+      "DISMISS_REPLY": "Відхилити відповідь",
+      "REPLYING_TO": "Відповісти:",
+      "TIP_EMOJI_ICON": "Показати емодзі",
+      "TIP_ATTACH_ICON": "Прикріпити файли",
+      "TIP_AUDIORECORDER_ICON": "Записати аудіо",
+      "TIP_AUDIORECORDER_PERMISSION": "Надати доступ до аудіо",
+      "TIP_AUDIORECORDER_ERROR": "Не вдалося відкрити аудіо",
+      "AUDIO_CONVERSION_FAILED": "Audio conversion failed. Please try again.",
+      "DRAG_DROP": "Перетягніть сюди, щоб прикріпити",
+      "IMAGE_UPLOAD_SUCCESS": "Зображення успішно завантажено",
+      "START_AUDIO_RECORDING": "Почати аудіозапис",
+      "STOP_AUDIO_RECORDING": "Зупинити аудіозапис",
+      "COPILOT_THINKING": "Copilot думає",
+      "EMAIL_HEAD": {
+        "TO": "Для",
+        "CC": {
+          "LABEL": "Копія",
+          "PLACEHOLDER": "Адреси електронної пошти, розділені комами",
+          "ERROR": "Будь ласка, введіть коректну адресу електронної пошти"
+        },
+        "BCC": {
+          "LABEL": "Прихована копія",
+          "PLACEHOLDER": "Адреси електронної пошти, розділені комами",
+          "ERROR": "Будь ласка, введіть коректну адресу електронної пошти"
+        },
+        "SUBJECT": {
+          "LABEL": "Тема",
+          "PLACEHOLDER": "Enter a subject"
+        }
+      },
+      "UNDEFINED_VARIABLES": {
+        "TITLE": "Невизначені змінні",
+        "MESSAGE": "У вас є {undefinedVariablesCount} невизначених змінних у вашому повідомленні: {undefinedVariables}. Бажаєте надіслати повідомлення в будь-якому випадку?",
+        "CONFIRM": {
+          "YES": "Надіслати",
+          "CANCEL": "Скасувати"
+        }
+      },
+      "QUOTED_REPLY": {
+        "SHOW_TOOLTIP": "Show trimmed content",
+        "HIDE_TOOLTIP": "Hide trimmed content",
+        "REMOVE": "Remove quoted text"
+      }
+    },
+    "VISIBLE_TO_AGENTS": "Приватна нотатка: видима тільки вам та вашій команді",
+    "CHANGE_STATUS": "Статус бесіди змінено",
+    "CHANGE_STATUS_FAILED": "Не вдалося змінити статус розмови",
+    "CHANGE_AGENT": "Оператора бесіди змінено",
+    "CHANGE_AGENT_FAILED": "Не вдалося змінити виконавця",
+    "ASSIGN_LABEL_SUCCESFUL": "Мітка успішно призначена",
+    "ASSIGN_LABEL_FAILED": "Призначення мітки не вдалося",
+    "CHANGE_TEAM": "Команда змінена",
+    "SUCCESS_DELETE_CONVERSATION": "Conversation deleted successfully",
+    "FAIL_DELETE_CONVERSATION": "Couldn't delete conversation! Try again",
+    "FILE_SIZE_LIMIT": "Файл перевищує максимальний розмір вкладень {MAXIMUM_SUPPORTED_FILE_UPLOAD_SIZE} МБ",
+    "FILE_TYPE_NOT_SUPPORTED": "Тип файлу {fileName} не підтримується у цій розмові",
+    "MESSAGE_ERROR": "Не вдалося надіслати повідомлення, будь ласка, повторіть спробу пізніше",
+    "SENT_BY": "Надіслав:",
+    "BOT": "Бот",
+    "NATIVE_APP": "Native app",
+    "NATIVE_APP_ADVISORY": "This message was sent from the native app. Reply from Chatwoot to maintain the message window.",
+    "SEND_FAILED": "Не вдалося надіслати повідомлення! Повторіть спробу",
+    "TRY_AGAIN": "повторити",
+    "ASSIGNMENT": {
+      "SELECT_AGENT": "Виберіть агента",
+      "REMOVE": "Видалити",
+      "ASSIGN": "Призначити"
+    },
+    "CONTEXT_MENU": {
+      "COPY": "Копіювати",
+      "REPLY_TO": "Відповісти на це повідомлення",
+      "FORWARD_EMAIL": "Forward email",
+      "DELETE": "Видалити",
+      "CREATE_A_CANNED_RESPONSE": "Додати швидку відповідь",
+      "TRANSLATE": "Перекласти",
+      "COPY_PERMALINK": "Копіювати посилання на повідомлення",
+      "LINK_COPIED": "URL повідомлення скопійовано до буфера обміну",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Ви справді бажаєте вилучити це повідомлення?",
+        "MESSAGE": "Ви не зможете скасувати цю дію",
+        "DELETE": "Видалити",
+        "CANCEL": "Скасувати"
+      },
+      "REPORT_MESSAGE": {
+        "LABEL": "Report message",
+        "TITLE": "Report Captain message",
+        "DESCRIPTION": "Found an issue with this AI response? Let us know what went wrong and our team will review it to help improve Captain's accuracy.",
+        "PROBLEM_TYPE": "Problem type",
+        "PROBLEM_TYPE_PLACEHOLDER": "Select a problem type",
+        "DESCRIPTION_LABEL": "Опис",
+        "DESCRIPTION_PLACEHOLDER": "Describe the problem in detail",
+        "SUBMIT": "Report",
+        "SUCCESS": "Thanks for reporting. Our team will take a look.",
+        "ERROR": "Could not report this message. Please try again.",
+        "REASONS": {
+          "incorrect_information": "Incorrect information",
+          "inappropriate_response": "Inappropriate response",
+          "incomplete_response": "Incomplete response",
+          "outdated_information": "Outdated information",
+          "other": "Other"
+        }
+      }
+    },
+    "SIDEBAR": {
+      "CONTACT": "Контакт",
+      "COPILOT": "Copilot"
+    },
+    "VOICE_WIDGET": {
+      "INCOMING_CALL": "Incoming call",
+      "OUTGOING_CALL": "Outgoing call",
+      "CALL_IN_PROGRESS": "Call in progress",
+      "NOT_ANSWERED_YET": "Not answered yet",
+      "HANDLED_IN_ANOTHER_TAB": "Оброблюється в іншій вкладці",
+      "REJECT_CALL": "Відхилити",
+      "DISMISS_CALL": "Відхилити",
+      "JOIN_CALL": "Доєднатися до виклику",
+      "END_CALL": "Завершити виклик",
+      "MUTE": "Mute mic",
+      "UNMUTE": "Unmute mic",
+      "VIEW_CHAT_HISTORY": "View chat history",
+      "GO_TO_CONVERSATION": "Go to conversation thread"
+    }
+  },
+  "EMAIL_TRANSCRIPT": {
+    "TITLE": "Надіслати стенограму розмови",
+    "DESC": "Відправте копію стенограми розмови на вказану адресу електронної пошти",
+    "SUBMIT": "Додати",
+    "CANCEL": "Скасувати",
+    "SEND_EMAIL_SUCCESS": "Текст розмови надісланий",
+    "SEND_EMAIL_ERROR": "Сталася помилка, будь ласка, спробуйте ще раз",
+    "SEND_EMAIL_PAYMENT_REQUIRED": "Email transcript is not available on your current plan. Please upgrade to use this feature.",
+    "FORM": {
+      "SEND_TO_CONTACT": "Надіслати клієнту стенограму",
+      "SEND_TO_AGENT": "Надіслати стенограму агенту",
+      "SEND_TO_OTHER_EMAIL_ADDRESS": "Відправити стенограму на іншу електронну адресу",
+      "EMAIL": {
+        "PLACEHOLDER": "Введіть адресу електронної пошти",
+        "ERROR": "Будь ласка, введіть коректну адресу електронної пошти"
+      }
+    }
+  },
+  "ONBOARDING": {
+    "TITLE": "Привіт, 👋, Ласкаво просимо на {installationName}!",
+    "DESCRIPTION": "Дякуємо за реєстрацію. Ми хочемо отримати максимум від {installationName}. Ось кілька речей, які ви можете зробити в {installationName}, щоб отримати приємний досвід.",
+    "GREETING_MORNING": "👋 Good morning, {name}. Welcome to {installationName}.",
+    "GREETING_AFTERNOON": "👋 Good afternoon, {name}. Welcome to {installationName}.",
+    "GREETING_EVENING": "👋 Good evening, {name}. Welcome to {installationName}.",
+    "READ_LATEST_UPDATES": "Читати наші останні оновлення",
+    "ALL_CONVERSATION": {
+      "TITLE": "Всі ваші розмови в одному місці",
+      "DESCRIPTION": "Переглядайте всі розмови з Ваших клієнтів в одній панелі. Ви можете фільтрувати розмови за допомогою каналу, міток та статусу.",
+      "NEW_LINK": "Натисніть тут, щоб створити вхідний канал"
+    },
+    "TEAM_MEMBERS": {
+      "TITLE": "Запросити членів команди",
+      "DESCRIPTION": "Оскільки Ви готуєтеся поговорити зі своїм клієнтом, запросіть ваших партнерів по команді, щоб допомогти вам. Ви можете запросити ваших товаришів по команді, додавши їх адреси електронної пошти до списку співробітників.",
+      "NEW_LINK": "Натисніть тут, щоб запросити учасника"
+    },
+    "LABELS": {
+      "TITLE": "Організувуйте бесіди за допомогою міток",
+      "DESCRIPTION": "Мітки забезпечують простіший спосіб вести категоризацію ваших розмов. Створіть деякі мітки, такі як #support-enquy, #billing-question і т. п., щоб ви могли використовувати їх в розмовах пізніше.",
+      "NEW_LINK": "Натисніть тут, щоб створити мітки"
+    },
+    "CANNED_RESPONSES": {
+      "TITLE": "Create canned responses",
+      "DESCRIPTION": "Pre-written quick reply templates help you quickly respond to a conversation. Agents can type the '/' character followed by the shortcode to insert a response.",
+      "NEW_LINK": "Click here to create a canned response"
+    }
+  },
+  "CONVERSATION_SIDEBAR": {
+    "ASSIGNEE_LABEL": "Призначений агент",
+    "SELF_ASSIGN": "Призначити мені",
+    "TEAM_LABEL": "Призначена команда",
+    "SELECT": {
+      "PLACEHOLDER": "Нiчого"
+    },
+    "ACCORDION": {
+      "CONTACT_DETAILS": "Контактні дані",
+      "CONVERSATION_ACTIONS": "Дії при бесіді",
+      "CONVERSATION_LABELS": "Мітки бесіди",
+      "CONVERSATION_INFO": "Інформація про бесіду",
+      "CONTACT_NOTES": "Нотатки контакту",
+      "CONTACT_ATTRIBUTES": "Атрибути контакту",
+      "PREVIOUS_CONVERSATION": "Попередні бесіди",
+      "MACROS": "Макрос",
+      "LINEAR_ISSUES": "Linked Linear Issues",
+      "SHOPIFY_ORDERS": "Shopify Orders",
+      "SHARED_FILES": "Attachments"
+    },
+    "SHARED_FILES": {
+      "EMPTY": "No attachments yet",
+      "DOWNLOAD": "Download file",
+      "DOWNLOAD_ERROR": "Could not download the file. Please try again.",
+      "MEDIA_HEADING": "Media",
+      "FILES_HEADING": "Files",
+      "VIEW_ALL": "Переглянути все",
+      "SHOW_LESS": "Show less",
+      "MORE_COUNT": "+{count}",
+      "UNTITLED_FILE": "Untitled file",
+      "JUMP_TO_MESSAGE": "Jump to message"
+    },
+    "SHOPIFY": {
+      "ORDER_ID": "Order #{id}",
+      "ERROR": "Error loading orders",
+      "NO_SHOPIFY_ORDERS": "No orders found",
+      "FINANCIAL_STATUS": {
+        "PENDING": "Очікує",
+        "AUTHORIZED": "Authorized",
+        "PARTIALLY_PAID": "Partially Paid",
+        "PAID": "Paid",
+        "PARTIALLY_REFUNDED": "Partially Refunded",
+        "REFUNDED": "Refunded",
+        "VOIDED": "Voided"
+      },
+      "FULFILLMENT_STATUS": {
+        "FULFILLED": "Fulfilled",
+        "PARTIALLY_FULFILLED": "Partially Fulfilled",
+        "UNFULFILLED": "Unfulfilled"
+      }
+    }
+  },
+  "CONVERSATION_CUSTOM_ATTRIBUTES": {
+    "ADD_BUTTON_TEXT": "Створити атрибут",
+    "NO_RECORDS_FOUND": "Атрибути не знайдено",
+    "UPDATE": {
+      "SUCCESS": "Атрибут успішно оновлено",
+      "ERROR": "Не вдалося оновити атрибут. Будь ласка, спробуйте ще раз пізніше"
+    },
+    "ADD": {
+      "TITLE": "Додати",
+      "SUCCESS": "Атрибут додано успішно",
+      "ERROR": "Неможливо додати атрибут. Будь ласка, спробуйте ще раз пізніше"
+    },
+    "DELETE": {
+      "SUCCESS": "Атрибут успішно видалено",
+      "ERROR": "Неможливо видалити атрибут. Будь ласка, спробуйте ще раз пізніше"
+    },
+    "ATTRIBUTE_SELECT": {
+      "TITLE": "Додати атрибут",
+      "PLACEHOLDER": "Атрибути пошуку",
+      "NO_RESULT": "Атрибути не знайдено"
+    }
+  },
+  "EMAIL_HEADER": {
+    "FROM": "Від",
+    "TO": "Для",
+    "BCC": "Прихована копія",
+    "CC": "Копія",
+    "SUBJECT": "Тема",
+    "DATE": "Date",
+    "EXPAND": "Expand email"
+  },
+  "FORWARD_EMAIL": {
+    "HEADER_TITLE": "---------- Forwarded message ---------",
+    "TO_LABEL": "Для:",
+    "TO_PLACEHOLDER": "Enter at least 2 characters to search by email",
+    "MESSAGE_PLACEHOLDER": "Add a message (optional)",
+    "FORWARDED_TO": "Forwarded to {emails}",
+    "CONTACT_CANNOT_SEE": "{name} cannot see this"
+  },
+  "CONVERSATION_PARTICIPANTS": {
+    "SIDEBAR_MENU_TITLE": "Підключені агенти",
+    "SIDEBAR_TITLE": "Учасники бесіди",
+    "NO_RECORDS_FOUND": "Результатів не знайдено",
+    "ADD_PARTICIPANTS": "Виберіть учасників",
+    "REMANING_PARTICIPANTS_TEXT": "+{count} інших",
+    "REMANING_PARTICIPANT_TEXT": "+{count} інших",
+    "TOTAL_PARTICIPANTS_TEXT": "{count} людей беруть участь.",
+    "TOTAL_PARTICIPANT_TEXT": "{count} людей беруть участь.",
+    "NO_PARTICIPANTS_TEXT": "Нікого немає!",
+    "WATCH_CONVERSATION": "Підключитись до бесіди",
+    "YOU_ARE_WATCHING": "Ви підключились",
+    "API": {
+      "ERROR_MESSAGE": "Не вдалося оновити, спробуйте ще раз!",
+      "SUCCESS_MESSAGE": "Учасники оновлені!"
+    }
+  },
+  "TRANSLATE_MODAL": {
+    "TITLE": "Переглянути переклад",
+    "DESC": "Ви можете переглянути переклад контент в кожній мові.",
+    "ORIGINAL_CONTENT": "Оригінальний текст",
+    "TRANSLATED_CONTENT": "Переклад",
+    "NO_TRANSLATIONS_AVAILABLE": "Немає доступних перекладів"
+  },
+  "TYPING": {
+    "ONE": "{user} is typing",
+    "TWO": "{user} and {secondUser} are typing",
+    "MULTIPLE": "{user} and {count} others are typing"
+  },
+  "COPILOT": {
+    "TRY_THESE_PROMPTS": "Try these prompts"
+  },
+  "GALLERY_VIEW": {
+    "ERROR_DOWNLOADING": "Unable to download attachment. Please try again"
+  }
+}

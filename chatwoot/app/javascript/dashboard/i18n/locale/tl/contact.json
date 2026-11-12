@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "Hindi magagamit",
+    "EMAIL_ADDRESS": "Alamat ng email",
+    "PHONE_NUMBER": "Numero ng Telepono",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Tagakilala",
+    "COPY_SUCCESSFUL": "Matagumpay na nakopya sa clipboard",
+    "COMPANY": "Kumpanya",
+    "LOCATION": "Lokasyon",
+    "BROWSER_LANGUAGE": "Wika ng browser",
+    "CONVERSATION_TITLE": "Mga Detalye ng Usapan",
+    "VIEW_PROFILE": "Tingnan ang profile",
+    "BROWSER": "Browser",
+    "OS": "Sistema ng pagpapatakbo",
+    "INITIATED_FROM": "Nagsimula mula sa",
+    "INITIATED_AT": "Nagsimula noong",
+    "IP_ADDRESS": "IP Address",
+    "CREATED_AT_LABEL": "Nilikha",
+    "NEW_MESSAGE": "Bagong mensahe",
+    "CALL": "Tawagan",
+    "CALL_INITIATED": "Tinutawagan ang kontak…",
+    "CALL_FAILED": "Hindi masimulan ang tawag. Pakisubukang muli.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Pumili ng voice inbox"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "Walang mga naunang pag-uusap na kaugnay sa taong ito.",
+      "TITLE": "Mga Naunang Pag-uusap",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Mga label ng contact",
+        "ERROR": "Hindi ma-update ang mga label"
+      },
+      "CONVERSATION": {
+        "TITLE": "Mga label ng usapan",
+        "ADD_BUTTON": "Magdagdag ng mga label"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "Magdagdag ng mga label",
+        "PLACEHOLDER": "Maghanap ng mga label",
+        "NO_RESULT": "Walang nahanap na mga label",
+        "CREATE_LABEL": "Lumikha ng bagong label"
+      }
+    },
+    "MERGE_CONTACT": "Pagsamahin ang contact",
+    "CONTACT_ACTIONS": "Mga aksyon sa pakikipag-ugnayan",
+    "MUTE_CONTACT": "I-block ang kontak",
+    "UNMUTE_CONTACT": "I-unblock ang kontak",
+    "MUTED_SUCCESS": "Matagumpay na na-block ang kontak na ito. Hindi ka na makakatanggap ng mga abiso para sa mga susunod na pag-uusap.",
+    "UNMUTED_SUCCESS": "Matagumpay na na-unblock ang kontak na ito.",
+    "SEND_TRANSCRIPT": "Ipadala ang transcript",
+    "EDIT_LABEL": "I-edit",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "Mga Pasadyang Katangian",
+      "CONTACT_LABELS": "Mga label ng contact",
+      "PREVIOUS_CONVERSATIONS": "Mga Nakaraang Usapan",
+      "NO_RECORDS_FOUND": "Walang natagpuang katangian"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "I-edit ang Contact",
+    "TITLE": "I-edit ang contact",
+    "DESC": "I-edit ang mga detalye ng contact"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "Tanggalin ang Contact",
+    "TITLE": "Tanggalin ang contact",
+    "DESC": "Tanggalin ang mga detalye ng contact",
+    "CONFIRM": {
+      "TITLE": "Kumpirmahin ang pagbura",
+      "MESSAGE": "Sigurado ka bang gusto mong tanggalin ",
+      "YES": "Oo, I-delete",
+      "NO": "Hindi, Panatilihin"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Matagumpay na nabura ang contact",
+      "ERROR_MESSAGE": "Hindi mabura ang contact. Pakisubukang muli mamaya."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "Isumite",
+      "CANCEL": "Kanselahin",
+      "AVATAR": {
+        "LABEL": "Avatar ng contact"
+      },
+      "NAME": {
+        "PLACEHOLDER": "Ilagay ang buong pangalan ng contact",
+        "LABEL": "Buong pangalan"
+      },
+      "BIO": {
+        "PLACEHOLDER": "Ilagay ang bio ng contact",
+        "LABEL": "Talambuhay"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "Ilagay ang email address ng contact",
+        "LABEL": "Alamat ng email",
+        "DUPLICATE": "Ang email address na ito ay ginagamit na para sa ibang kontak.",
+        "ERROR": "Mangyaring maglagay ng wastong email address."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "Ilagay ang numero ng telepono ng contact",
+        "LABEL": "Numero ng Telepono",
+        "HELP": "Ang numero ng telepono ay dapat nasa format na E.164 hal: +1415555555 [+][country code][area code][local phone number]. Maaari mong piliin ang dial code mula sa dropdown.",
+        "ERROR": "Ang numero ng telepono ay dapat walang laman o nasa format na E.164",
+        "DIAL_CODE_ERROR": "Mangyaring pumili ng dial code mula sa listahan",
+        "DUPLICATE": "Ang numero ng teleponong ito ay ginagamit na para sa ibang kontak."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "Ilagay ang lokasyon ng contact",
+        "LABEL": "Lokasyon"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "Ilagay ang pangalan ng kumpanya",
+        "LABEL": "Pangalan ng Kumpanya"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Ilagay ang pangalan ng bansa",
+        "LABEL": "Pangalan ng Bansa",
+        "SELECT_PLACEHOLDER": "Piliin",
+        "REMOVE": "Alisin",
+        "SELECT_COUNTRY": "Piliin ang Bansa"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Ilagay ang pangalan ng lungsod",
+        "LABEL": "Pangalan ng Lungsod"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Ilagay ang Facebook username",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Ilagay ang username sa Twitter",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Ilagay ang LinkedIn username",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Ilagay ang GitHub username",
+          "LABEL": "GitHub"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang avatar ng kontak",
+        "ERROR_MESSAGE": "Hindi matanggal ang avatar ng kontak. Pakisubukang muli mamaya."
+      }
+    },
+    "SUCCESS_MESSAGE": "Matagumpay na naisave ang contact",
+    "ERROR_MESSAGE": "Nagkaroon ng error, pakisubukang muli"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "Magsimula ng pag-uusap",
+    "TITLE": "Bagong pag-uusap",
+    "DESC": "Magsimula ng bagong pag-uusap sa pamamagitan ng pagpapadala ng bagong mensahe.",
+    "NO_INBOX": "Hindi makahanap ng inbox upang simulan ang bagong pag-uusap sa taong ito.",
+    "FORM": {
+      "TO": {
+        "LABEL": "Para sa"
+      },
+      "INBOX": {
+        "LABEL": "Sa pamamagitan ng inbox",
+        "PLACEHOLDER": "Pumili ng source inbox",
+        "ERROR": "Pumili ng inbox"
+      },
+      "SUBJECT": {
+        "LABEL": "Paksa",
+        "PLACEHOLDER": "Paksa",
+        "ERROR": "Hindi maaaring walang laman ang Paksa"
+      },
+      "MESSAGE": {
+        "LABEL": "Mensahe",
+        "PLACEHOLDER": "Isulat ang iyong mensahe dito",
+        "ERROR": "Hindi maaaring walang laman ang mensahe"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Pumili ng mga file",
+        "HELP_TEXT": "I-drag at i-drop ang mga file dito o pumili ng mga file na ilalakip"
+      },
+      "SUBMIT": "Ipadala ang mensahe",
+      "CANCEL": "Kanselahin",
+      "SUCCESS_MESSAGE": "Naipadala ang mensahe!",
+      "GO_TO_CONVERSATION": "Tingnan",
+      "ERROR_MESSAGE": "Hindi maipadala! Subukang muli"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "Mga social profile"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Magdagdag ng pasadyang katangian",
+    "COPY_SUCCESSFUL": "Matagumpay na nakopya sa clipboard",
+    "SHOW_MORE": "Ipakita ang lahat ng katangian",
+    "SHOW_LESS": "Ipakita ang mas kaunting katangian",
+    "ACTIONS": {
+      "COPY": "Kopyahin ang katangian",
+      "DELETE": "Tanggalin ang katangian",
+      "EDIT": "I-edit ang katangian"
+    },
+    "ADD": {
+      "TITLE": "Gumawa ng pasadyang katangian",
+      "DESC": "Magdagdag ng pasadyang impormasyon sa taong ito."
+    },
+    "FORM": {
+      "CREATE": "Magdagdag ng attribute",
+      "CANCEL": "Kanselahin",
+      "NAME": {
+        "LABEL": "Pangalan ng pasadyang attribute",
+        "PLACEHOLDER": "Hal: shopify id",
+        "ERROR": "Hindi wastong pangalan ng pasadyang katangian"
+      },
+      "VALUE": {
+        "LABEL": "Halaga ng katangian",
+        "PLACEHOLDER": "Halimbawa: 11901 "
+      },
+      "ADD": {
+        "TITLE": "Lumikha ng bagong katangian ",
+        "SUCCESS": "Matagumpay na naidagdag ang katangian",
+        "ERROR": "Hindi maidaragdag ang katangian. Pakisubukang muli mamaya"
+      },
+      "UPDATE": {
+        "SUCCESS": "Matagumpay na na-update ang katangian",
+        "ERROR": "Hindi ma-update ang katangian. Pakisubukang muli mamaya"
+      },
+      "DELETE": {
+        "SUCCESS": "Matagumpay na natanggal ang katangian",
+        "ERROR": "Hindi mabura ang katangian. Pakisubukang muli mamaya"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Magdagdag ng mga katangian",
+        "PLACEHOLDER": "Maghanap ng mga katangian",
+        "NO_RESULT": "Walang natagpuang mga katangian"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Pumili ng halaga",
+          "SEARCH_INPUT_PLACEHOLDER": "Maghanap ng halaga",
+          "NO_RESULT": "Walang nahanap na resulta"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Kinakailangan ang wastong halaga",
+      "INVALID_URL": "Hindi wastong URL",
+      "INVALID_INPUT": "Hindi wastong input"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Pagsamahin ang mga contact",
+    "DESCRIPTION": "Pagsamahin ang mga kontak upang pagsamahin ang dalawang profile sa isa, kabilang ang lahat ng mga katangian at pag-uusap. Sa kaso ng pagtatalo, mauuna ang mga katangian ng pangunahing kontak.",
+    "PRIMARY": {
+      "TITLE": "Pangunahing contact",
+      "HELP_LABEL": "Upang tanggalin"
+    },
+    "PARENT": {
+      "TITLE": "Kontak na pagsasamahin",
+      "PLACEHOLDER": "Maghanap ng kontak",
+      "HELP_LABEL": "Panatilihin"
+    },
+    "SUMMARY": {
+      "TITLE": "Buod",
+      "DELETE_WARNING": "Ang kontak ni <strong>{primaryContactName}</strong> ay mabubura.",
+      "ATTRIBUTE_WARNING": "Ang mga detalye ng kontak ng <strong>{primaryContactName}</strong> ay kokopyahin sa <strong>{parentContactName}</strong>."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "May nangyaring mali. Pakisubukang muli mamaya."
+    },
+    "FORM": {
+      "SUBMIT": " Pagsamahin ang mga contact",
+      "CANCEL": "Kanselahin",
+      "CHILD_CONTACT": {
+        "ERROR": "Pumili ng contact na pagsasamahin"
+      },
+      "SUCCESS_MESSAGE": "Matagumpay na naisama ang contact",
+      "ERROR_MESSAGE": "Hindi maipagsasama ang mga contact, subukang muli!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "Mga Contact",
+      "SEARCH_TITLE": "Maghanap ng mga kontak",
+      "ACTIVE_TITLE": "Aktibong mga kontak",
+      "SEARCH_PLACEHOLDER": "Maghanap...",
+      "MESSAGE_BUTTON": "Mensahe",
+      "SEND_MESSAGE": "Magpadala ng mensahe",
+      "BLOCK_CONTACT": "I-block ang kontak",
+      "UNBLOCK_CONTACT": "I-unblock ang kontak",
+      "BREADCRUMB": {
+        "CONTACTS": "Mga Contact"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Magdagdag ng kontak",
+          "EXPORT_CONTACT": "I-export ang mga kontak",
+          "IMPORT_CONTACT": "I-import ang mga kontak",
+          "SAVE_CONTACT": "I-save ang kontak",
+          "EMAIL_ADDRESS_DUPLICATE": "Ang email address na ito ay ginagamit na para sa ibang kontak.",
+          "PHONE_NUMBER_DUPLICATE": "Ang numero ng teleponong ito ay ginagamit na para sa ibang kontak.",
+          "SUCCESS_MESSAGE": "Matagumpay na na-save ang kontak",
+          "ERROR_MESSAGE": "Hindi maisa-save ang kontak. Pakisubukang muli mamaya."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "Matagumpay na na-block ang kontak na ito",
+        "BLOCK_ERROR_MESSAGE": "Hindi ma-block ang kontak. Pakisubukang muli mamaya.",
+        "UNBLOCK_SUCCESS_MESSAGE": "Matagumpay na na-unblock ang kontak na ito",
+        "UNBLOCK_ERROR_MESSAGE": "Hindi ma-unblock ang kontak. Pakisubukang muli mamaya.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Mag-import ng mga kontak",
+          "DESCRIPTION": "Mag-import ng mga kontak gamit ang isang CSV file.",
+          "DOWNLOAD_LABEL": "I-download ang isang halimbawang csv.",
+          "LABEL": "CSV File:",
+          "CHOOSE_FILE": "Pumili ng file",
+          "CHANGE": "Palitan",
+          "CANCEL": "Kanselahin",
+          "IMPORT": "I-import",
+          "SUCCESS_MESSAGE": "Ipapaalam sa iyo sa pamamagitan ng email kapag natapos na ang pag-import.",
+          "ERROR_MESSAGE": "Nagkaroon ng error, pakisubukang muli"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "I-export ang mga kontak",
+          "DESCRIPTION": "Mabilis na i-export ang isang csv file na may kumpletong detalye ng iyong mga kontak",
+          "CONFIRM": "I-export",
+          "SUCCESS_MESSAGE": "Nagsimula na ang pag-export. Makakatanggap ka ng abiso sa email kapag handa na ang export file para i-download.",
+          "ERROR_MESSAGE": "Nagkaroon ng error, pakisubukang muli"
+        },
+        "SORT_BY": {
+          "LABEL": "Ayusin ayon sa",
+          "OPTIONS": {
+            "NAME": "Pangalan",
+            "EMAIL": "Email",
+            "PHONE_NUMBER": "Numero ng telepono",
+            "COMPANY": "Kumpanya",
+            "COUNTRY": "Bansa",
+            "CITY": "Lungsod",
+            "LAST_ACTIVITY": "Huling aktibidad",
+            "CREATED_AT": "Nilikhang petsa"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Pag-aayos",
+          "OPTIONS": {
+            "ASCENDING": "Pataas",
+            "DESCENDING": "Pababa"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "Gusto mo bang i-save ang filter na ito?",
+            "CONFIRM": "I-save ang filter",
+            "LABEL": "Pangalan",
+            "PLACEHOLDER": "Ilagay ang pangalan ng filter",
+            "ERROR": "Maglagay ng wastong pangalan",
+            "SUCCESS_MESSAGE": "Matagumpay na naisave ang filter",
+            "ERROR_MESSAGE": "Hindi ma-save ang filter. Pakisubukang muli mamaya."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "Kumpirmahin ang Pag-delete",
+            "DESCRIPTION": "Sigurado ka bang gusto mong tanggalin ang filter na ito?",
+            "CONFIRM": "Oo, Tanggalin",
+            "CANCEL": "Hindi, Kanselahin",
+            "SUCCESS_MESSAGE": "Matagumpay na natanggal ang filter",
+            "ERROR_MESSAGE": "Hindi matanggal ang filter. Pakisubukang muli mamaya."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "Pangalan",
+      "EMAIL": "Email",
+      "PHONE_NUMBER": "Numero ng telepono",
+      "IDENTIFIER": "Tagakilanlan",
+      "COUNTRY": "Bansa",
+      "CITY": "Lungsod",
+      "COMPANY": "Kumpanya",
+      "CREATED_AT": "Nilikhang noong",
+      "LAST_ACTIVITY": "Huling aktibidad",
+      "REFERER_LINK": "Link ng nag-refer",
+      "BLOCKED": "Naharang",
+      "BLOCKED_TRUE": "Tama",
+      "BLOCKED_FALSE": "Mali",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "I-clear ang mga filter",
+        "UPDATE_SEGMENT": "I-update ang segment",
+        "APPLY_FILTERS": "Ipatupad ang mga filter",
+        "ADD_FILTER": "Magdagdag ng filter"
+      },
+      "TITLE": "I-filter ang mga kontak",
+      "EDIT_SEGMENT": "I-edit ang bahagi",
+      "SEGMENT": {
+        "LABEL": "Pangalan ng bahagi",
+        "INPUT_PLACEHOLDER": "Ilagay ang pangalan ng bahagi"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} pang mga filter",
+        "CLEAR_FILTERS": "Tanggalin ang mga filter"
+      }
+    },
+    "CARD": {
+      "OF": "ng",
+      "VIEW_DETAILS": "Tingnan ang mga detalye",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "I-edit ang mga detalye ng kontak",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Ilagay ang unang pangalan"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Ilagay ang apelyido"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Ilagay ang email address",
+            "DUPLICATE": "Ang email address na ito ay ginagamit na para sa ibang kontak."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Ilagay ang numero ng telepono",
+            "DUPLICATE": "Ang numero ng telepono na ito ay ginagamit na para sa ibang kontak."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Ilagay ang pangalan ng lungsod"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Piliin ang bansa"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Ilagay ang bio"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "Ilagay ang pangalan ng kumpanya"
+          }
+        },
+        "UPDATE_BUTTON": "I-update ang kontak",
+        "SUCCESS_MESSAGE": "Matagumpay na na-update ang kontak",
+        "ERROR_MESSAGE": "Hindi ma-update ang kontak. Pakisubukang muli mamaya."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "I-edit ang mga social link",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Magdagdag ng Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Magdagdag ng GitHub"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Magdagdag ng Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Magdagdag ng Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Magdagdag ng TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Magdagdag ng LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Magdagdag ng Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "Ang aksyong ito ay permanente at hindi na mababawi.",
+        "BUTTON": "Tanggalin ngayon"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Nilikha noong {date}",
+      "LAST_ACTIVITY": "Huling aktibo noong {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Permanenteng tanggalin ang kontak na ito. Hindi na ito mababawi",
+      "DELETE_CONTACT": "Tanggalin ang kontak",
+      "DELETE_DIALOG": {
+        "TITLE": "Kumpirmahin ang pagtanggal",
+        "DESCRIPTION": "Sigurado ka bang gusto mong tanggalin ang kontak na ito?",
+        "CONFIRM": "Oo, Tanggalin",
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na natanggal ang kontak",
+          "ERROR_MESSAGE": "Hindi matanggal ang kontak. Pakisubukang muli mamaya."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Hindi ma-upload ang avatar. Pakisubukang muli mamaya.",
+          "SUCCESS_MESSAGE": "Matagumpay na na-upload ang avatar"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Matagumpay na natanggal ang avatar",
+          "ERROR_MESSAGE": "Hindi matanggal ang avatar. Pakisubukang muli mamaya."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Mga Katangian",
+        "HISTORY": "Kasaysayan",
+        "NOTES": "Mga Tala",
+        "MEDIA": "Media",
+        "MERGE": "Pagsamahin"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "Walang mga nakaraang pag-uusap na nauugnay sa kontak na ito"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Maghanap ng mga katangian",
+        "UNUSED_ATTRIBUTES": "{count} Ginamit na katangian | {count} Hindi nagamit na mga katangian",
+        "EMPTY_STATE": "Walang magagamit na custom na katangian ng kontak sa account na ito. Maaari kang gumawa ng custom na katangian sa mga setting.",
+        "YES": "Oo",
+        "NO": "Hindi",
+        "TRIGGER": {
+          "SELECT": "Pumili ng halaga",
+          "INPUT": "Ilagay ang halaga"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Hindi wastong numero",
+          "REQUIRED": "Kinakailangan ang wastong halaga",
+          "INVALID_INPUT": "Hindi wastong ipinasok",
+          "INVALID_URL": "Hindi wastong URL",
+          "INVALID_DATE": "Hindi wastong petsa"
+        },
+        "NO_ATTRIBUTES": "Walang natagpuang mga katangian",
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na na-update ang katangian",
+          "DELETE_SUCCESS_MESSAGE": "Matagumpay na natanggal ang katangian",
+          "UPDATE_ERROR": "Hindi ma-update ang katangian. Pakisubukang muli mamaya",
+          "DELETE_ERROR": "Hindi matanggal ang katangian. Pakisubukang muli mamaya"
+        }
+      },
+      "MERGE": {
+        "TITLE": "Pagsamahin ang kontak",
+        "DESCRIPTION": "Pagsamahin ang dalawang profile sa isa, kasama ang lahat ng katangian at pag-uusap. Kung may salungatan, mauuna ang mga katangian ng pangunahing kontak.",
+        "PRIMARY": "Pangunahing kontak",
+        "PRIMARY_HELP_LABEL": "Isasave",
+        "PRIMARY_REQUIRED_ERROR": "Mangyaring pumili ng kontak na pagsasamahin bago magpatuloy",
+        "PARENT": "Pagsasamahin",
+        "PARENT_HELP_LABEL": "Ibubura",
+        "EMPTY_STATE": "Walang nahanap na mga contact",
+        "PLACEHOLDER": "Maghanap ng pangunahing kontak",
+        "SEARCH_PLACEHOLDER": "Maghanap ng kontak",
+        "SEARCH_ERROR_MESSAGE": "Hindi mahanap ang mga kontak. Pakisubukang muli mamaya.",
+        "SUCCESS_MESSAGE": "Matagumpay na na-merge ang kontak",
+        "ERROR_MESSAGE": "Hindi maipagsasama ang mga kontak, subukang muli!",
+        "IS_SEARCHING": "Naghahanap...",
+        "BUTTONS": {
+          "CANCEL": "Kanselahin",
+          "CONFIRM": "Pagsamahin ang kontak"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Magdagdag ng tala",
+        "WROTE": "sumulat",
+        "YOU": "Ikaw",
+        "SAVE": "I-save ang tala",
+        "ADD_NOTE": "Magdagdag ng tala sa kontak",
+        "EXPAND": "Palawakin",
+        "COLLAPSE": "I-collapse",
+        "NO_NOTES": "Walang tala, maaari kang magdagdag ng mga tala mula sa pahina ng detalye ng kontak.",
+        "EMPTY_STATE": "Walang tala na nauugnay sa kontak na ito. Maaari kang magdagdag ng tala sa pamamagitan ng pag-type sa kahon sa itaas.",
+        "CONVERSATION_EMPTY_STATE": "Wala pang mga tala. Gamitin ang pindutan na Magdagdag ng tala upang gumawa ng isa."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "Walang mga kontak na natagpuan sa account na ito",
+      "SUBTITLE": "Simulan ang pagdagdag ng mga bagong kontak sa pamamagitan ng pag-click sa button sa ibaba",
+      "BUTTON_LABEL": "Magdagdag ng kontak",
+      "SEARCH_EMPTY_STATE_TITLE": "Walang mga kontak na tumutugma sa iyong paghahanap 🔍",
+      "LIST_EMPTY_STATE_TITLE": "Walang mga kontak na available sa view na ito 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "Walang aktibong mga kontak sa ngayon 🌙"
+    },
+    "LOAD_MORE": "Mag-load pa"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Magtalaga ng mga label",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Matagumpay na naitalaga ang mga label.",
+    "ASSIGN_LABELS_FAILED": "Nabigong italaga ang mga label",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Piliin ang mga label na nais mong idagdag sa mga napiling contact.",
+    "NO_LABELS_FOUND": "Walang magagamit na mga label pa.",
+    "SELECTED_COUNT": "{count} napili",
+    "CLEAR_SELECTION": "Tanggalin ang pagpili",
+    "SELECT_ALL": "Piliin lahat ({count})",
+    "DELETE_CONTACTS": "Tanggalin",
+    "DELETE_SUCCESS": "Matagumpay na natanggal ang mga kontak.",
+    "DELETE_FAILED": "Nabigong tanggalin ang mga contact.",
+    "DELETE_DIALOG": {
+      "TITLE": "Tanggalin ang mga napiling kontak",
+      "SINGULAR_TITLE": "Tanggalin ang napiling kontak",
+      "DESCRIPTION": "Permanente nitong buburahin ang {count} napiling mga kontak. Hindi na ito maaaring bawiin.",
+      "SINGULAR_DESCRIPTION": "Permanente nitong buburahin ang napiling kontak. Hindi na ito maaaring bawiin.",
+      "CONFIRM_MULTIPLE": "Tanggalin ang mga kontak",
+      "CONFIRM_SINGLE": "Tanggalin ang kontak"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "Hindi namin makumpleto ang paghahanap. Pakisubukang muli."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "Tingnan",
+      "SUCCESS_MESSAGE": "Matagumpay na naipadala ang mensahe!",
+      "ERROR_MESSAGE": "Nagkaroon ng error habang nililikha ang pag-uusap. Pakisubukang muli mamaya.",
+      "NO_INBOX_ALERT": "Walang magagamit na inbox upang makapagsimula ng pag-uusap sa kontak na ito.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "Para sa:",
+        "TAG_INPUT_PLACEHOLDER": "Maglagay ng hindi bababa sa 2 karakter upang maghanap ayon sa pangalan, email, o numero ng telepono",
+        "CONTACT_CREATING": "Lumilikha ng kontak..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Sa pamamagitan ng:",
+        "BUTTON": "Ipakita ang mga inbox"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Paksa :",
+        "SUBJECT_PLACEHOLDER": "Ilagay ang iyong paksa ng email dito",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Maglagay ng hindi bababa sa 2 karakter upang maghanap gamit ang email",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Maglagay ng hindi bababa sa 2 karakter upang maghanap gamit ang email",
+        "BCC_BUTTON": "Bcc"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "Isulat ang iyong mensahe dito..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Pumili ng hulma",
+        "SEARCH_PLACEHOLDER": "Maghanap ng mga hulma",
+        "EMPTY_STATE": "Walang nahanap na mga hulma",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp hulma: {templateName}",
+          "VARIABLES": "Mga baryabol",
+          "BACK": "Bumalik",
+          "SEND_MESSAGE": "Magpadala ng mensahe"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Pumili ng hulma",
+        "SEARCH_PLACEHOLDER": "Maghanap ng mga hulma",
+        "EMPTY_STATE": "Walang nahanap na mga hulma",
+        "TEMPLATE_PARSER": {
+          "BACK": "Bumalik",
+          "SEND_MESSAGE": "Magpadala ng mensahe"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Itapon",
+        "SEND": "Ipadala ({keyCode})"
+      }
+    }
+  }
+}

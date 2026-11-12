@@ -1,0 +1,92 @@
+{
+  "PAGINATION_FOOTER": {
+    "SHOWING": "显示第 {startItem} - {endItem} 项，共 {totalItems} 项",
+    "CURRENT_PAGE_INFO": "第 {currentPage} 页，共 {totalPages} 页"
+  },
+  "COMBOBOX": {
+    "PLACEHOLDER": "请选择一个选项……",
+    "EMPTY_SEARCH_RESULTS": "未找到与搜索词 `{searchTerm}` 匹配的项",
+    "EMPTY_STATE": "未找到结果。",
+    "SEARCH_PLACEHOLDER": "搜索……",
+    "MORE": "+{count} 更多"
+  },
+  "DROPDOWN_MENU": {
+    "SEARCH_PLACEHOLDER": "搜索……",
+    "EMPTY_STATE": "未找到结果。",
+    "SEARCHING": "搜索中……"
+  },
+  "DIALOG": {
+    "BUTTONS": {
+      "CANCEL": "取消",
+      "CONFIRM": "确认"
+    }
+  },
+  "PHONE_INPUT": {
+    "SEARCH_PLACEHOLDER": "搜索国家/地区",
+    "ERROR": "电话号码应为空或E.164格式",
+    "DIAL_CODE_ERROR": "请从列表中选择拨号代码"
+  },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "作者不可用"
+    }
+  },
+  "BREADCRUMB": {
+    "ARIA_LABEL": "面包屑导航"
+  },
+  "SWITCH": {
+    "TOGGLE": "切换开关"
+  },
+  "LABEL": {
+    "TAG_BUTTON": "标签"
+  },
+  "FEATURE_ANNOUNCEMENT": {
+    "BADGE": "New",
+    "DISMISS": "Got it",
+    "PREVIOUS": "Previous",
+    "NEXT": "Next",
+    "DISMISS_HINT": "Press {key} to close",
+    "ESCAPE_KEY": "Esc",
+    "CLOSE": "关闭"
+  },
+  "FEATURE_SPOTLIGHT": {
+    "LEARN_MORE": "了解更多",
+    "WATCH_VIDEO": "观看视频"
+  },
+  "DURATION_INPUT": {
+    "MINUTES": "分钟",
+    "HOURS": "小时",
+    "DAYS": "天",
+    "PLACEHOLDER": "输入耗时"
+  },
+  "CHANNEL_SELECTOR": {
+    "COMING_SOON": "即将到来！"
+  },
+  "SLASH_COMMANDS": {
+    "HEADING_1": "Heading 1",
+    "HEADING_2": "Heading 2",
+    "HEADING_3": "Heading 3",
+    "BOLD": "Bold",
+    "ITALIC": "Italic",
+    "STRIKETHROUGH": "Strikethrough",
+    "CODE": "Code",
+    "BULLET_LIST": "Bullet List",
+    "ORDERED_LIST": "Ordered List",
+    "TABLE": "Table",
+    "IMAGE": "Image",
+    "VIDEO": "Video",
+    "DIVIDER": "Divider"
+  },
+  "VIDEO_EMBED": {
+    "TAB_EMBED": "Embed link",
+    "TAB_UPLOAD": "Upload",
+    "PLACEHOLDER": "Paste a video link",
+    "HINT": "Works with YouTube, Vimeo, Loom, Wistia, Arcade, Bunny, CodePen, GuideJar and mp4 links",
+    "ERROR": "That doesn't look like a supported video link",
+    "UPLOAD_LABEL": "Choose a video file",
+    "UPLOAD_HINT": "MP4 · up to {size}MB · or drop it here",
+    "UPLOAD_ERROR": "Only MP4 files can be uploaded",
+    "ADD": "Embed",
+    "CANCEL": "取消"
+  }
+}

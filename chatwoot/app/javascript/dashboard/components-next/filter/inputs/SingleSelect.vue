@@ -1,0 +1,214 @@
+<script setup>
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { picoSearch } from '@chatwoot/pico-search';
+import Icon from 'next/icon/Icon.vue';
+import EmojiIcon from 'next/emoji-icon-picker/EmojiIcon.vue';
+import Button from 'next/button/Button.vue';
+import DropdownContainer from 'next/dropdown-menu/base/DropdownContainer.vue';
+import DropdownSection from 'next/dropdown-menu/base/DropdownSection.vue';
+import DropdownBody from 'next/dropdown-menu/base/DropdownBody.vue';
+import DropdownItem from 'next/dropdown-menu/base/DropdownItem.vue';
+
+const {
+  options,
+  asyncSearch,
+  isSearching,
+  disableSearch,
+  disableDeselect,
+  placeholderIcon,
+  placeholder,
+  placeholderTrailingIcon,
+  searchPlaceholder,
+  dropdownMaxHeight,
+} = defineProps({
+  options: {
+    type: Array,
+    required: true,
+  },
+  asyncSearch: {
+    type: Boolean,
+    default: false,
+  },
+  isSearching: {
+    type: Boolean,
+    default: false,
+  },
+  disableSearch: {
+    type: Boolean,
+    default: false,
+  },
+  placeholderIcon: {
+    type: String,
+    default: 'i-lucide-plus',
+  },
+  placeholder: {
+    type: String,
+    default: '',
+  },
+  placeholderTrailingIcon: {
+    type: Boolean,
+    default: false,
+  },
+  searchPlaceholder: {
+    type: String,
+    default: '',
+  },
+  dropdownMaxHeight: {
+    type: String,
+    default: 'max-h-80',
+  },
+  disableDeselect: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const emit = defineEmits(['search']);
+
+// the input is re-inserted on every dropdown open (v-if),
+// where the native autofocus attribute is ignored so focus it via a directive instead
+const vFocus = { mounted: el => el.focus() };
+
+const { t } = useI18n();
+const selected = defineModel({
+  type: Object,
+  required: true,
+});
+
+const searchTerm = ref('');
+
+const searchResults = computed(() => {
+  if (asyncSearch) return options;
+  if (!options) return [];
+  return picoSearch(options, searchTerm.value, ['name']);
+});
+
+const selectedItem = computed(() => {
+  if (!options) return null;
+  if (!selected.value) return null;
+
+  // there are cases where the selected value is an array
+  const optionToSearch = Array.isArray(selected.value)
+    ? selected.value[0]
+    : selected.value;
+
+  if (!optionToSearch) return null;
+  // extract the selected item from the options array
+  // this ensures that options like icon is also included
+  return (
+    options.find(option => option.id === optionToSearch.id) ||
+    // async options may not include the selected option, fall back to it
+    (asyncSearch && optionToSearch.id !== undefined ? optionToSearch : null)
+  );
+});
+
+const toggleSelected = option => {
+  // Ensure that the `icon` prop is not included, icon is a VNode which has circular references
+  // This causes an error when creating a clone using JSON.parse(JSON.stringify())
+  const optionToToggle = {
+    id: option.id,
+    name: option.name,
+  };
+
+  if (selected.value && selected.value.id === optionToToggle.id) {
+    if (!disableDeselect) selected.value = null;
+  } else {
+    selected.value = optionToToggle;
+  }
+};
+</script>
+
+<template>
+  <DropdownContainer class="min-w-0">
+    <template #trigger="{ toggle }">
+      <Button
+        v-if="selectedItem"
+        sm
+        slate
+        faded
+        type="button"
+        :icon="selectedItem.icon"
+        :label="selectedItem.name"
+        @click="toggle"
+      >
+        <template v-if="selectedItem.emoji" #icon>
+          <EmojiIcon
+            :value="selectedItem.emoji"
+            :color="selectedItem.iconColor"
+            class="flex-shrink-0 size-4"
+          />
+        </template>
+      </Button>
+      <Button
+        v-else
+        sm
+        slate
+        faded
+        type="button"
+        :trailing-icon="placeholderTrailingIcon"
+        @click="toggle"
+      >
+        <template #icon>
+          <Icon :icon="placeholderIcon" class="text-n-slate-11" />
+        </template>
+        <span class="text-n-slate-11 min-w-0 truncate">{{
+          placeholder || t('COMBOBOX.PLACEHOLDER')
+        }}</span>
+      </Button>
+    </template>
+    <DropdownBody class="top-0 min-w-56 z-50" strong>
+      <div v-if="!disableSearch" class="relative">
+        <Icon class="absolute size-4 left-2 top-2" icon="i-lucide-search" />
+        <input
+          v-model="searchTerm"
+          v-focus
+          class="p-1.5 pl-8 text-n-slate-11 bg-n-alpha-1 rounded-lg w-full"
+          :placeholder="searchPlaceholder || t('COMBOBOX.SEARCH_PLACEHOLDER')"
+          @input="emit('search', $event.target.value)"
+        />
+      </div>
+      <DropdownSection :height="dropdownMaxHeight">
+        <template v-if="isSearching">
+          <DropdownItem disabled>
+            {{ t('DROPDOWN_MENU.SEARCHING') }}
+          </DropdownItem>
+        </template>
+        <template v-else-if="searchResults.length">
+          <DropdownItem
+            v-for="option in searchResults"
+            :key="option.id"
+            :icon="option.icon"
+            @click="toggleSelected(option)"
+          >
+            <template v-if="option.emoji" #icon>
+              <EmojiIcon
+                :value="option.emoji"
+                :color="option.iconColor"
+                class="flex-shrink-0 size-4"
+              />
+            </template>
+            <template #label>
+              {{ option.name }}
+              <Icon
+                v-if="selectedItem && selectedItem.id === option.id"
+                icon="i-lucide-check"
+                class="bg-n-blue-text pointer-events-none"
+              />
+            </template>
+          </DropdownItem>
+        </template>
+        <template v-else-if="searchTerm">
+          <DropdownItem disabled>
+            {{ t('COMBOBOX.EMPTY_SEARCH_RESULTS', { searchTerm: searchTerm }) }}
+          </DropdownItem>
+        </template>
+        <template v-else>
+          <DropdownItem disabled>
+            {{ t('COMBOBOX.EMPTY_STATE') }}
+          </DropdownItem>
+        </template>
+      </DropdownSection>
+    </DropdownBody>
+  </DropdownContainer>
+</template>

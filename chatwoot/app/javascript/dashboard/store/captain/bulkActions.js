@@ -1,0 +1,64 @@
+import CaptainBulkActionsAPI from 'dashboard/api/captain/bulkActions';
+import { createStore } from '../storeFactory';
+import { throwErrorMessage } from 'dashboard/store/utils/api';
+
+export default createStore({
+  name: 'CaptainBulkAction',
+  API: CaptainBulkActionsAPI,
+  actions: mutations => ({
+    processBulkAction: async function processBulkAction(
+      { commit },
+      { type, actionType, ids }
+    ) {
+      commit(mutations.SET_UI_FLAG, { isUpdating: true });
+      try {
+        const response = await CaptainBulkActionsAPI.create({
+          type: type,
+          ids,
+          fields: { status: actionType },
+        });
+        commit(mutations.SET_UI_FLAG, { isUpdating: false });
+        return response.data;
+      } catch (error) {
+        commit(mutations.SET_UI_FLAG, { isUpdating: false });
+        return throwErrorMessage(error);
+      }
+    },
+
+    handleBulkDelete: async function handleBulkDelete(
+      { dispatch },
+      { type = 'AssistantResponse', ids }
+    ) {
+      const response = await dispatch('processBulkAction', {
+        type,
+        actionType: 'delete',
+        ids,
+      });
+
+      if (type === 'AssistantResponse') {
+        // Update the response store after successful API call
+        await dispatch('captainResponses/removeBulkResponses', ids, {
+          root: true,
+        });
+      } else if (type === 'AssistantDocument') {
+        await dispatch('captainDocuments/removeBulkRecords', ids, {
+          root: true,
+        });
+      }
+      return response;
+    },
+
+    handleBulkSync: async function handleBulkSync({ dispatch }, { ids }) {
+      const response = await dispatch('processBulkAction', {
+        type: 'AssistantDocument',
+        actionType: 'sync',
+        ids,
+      });
+
+      await dispatch('captainDocuments/markSyncing', response.ids || [], {
+        root: true,
+      });
+      return response;
+    },
+  }),
+});

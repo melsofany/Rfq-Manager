@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Automação",
+    "DESCRIPTION": "A automação pode substituir e simplificar processos existentes que requerem esforço manual, como a adição de etiquetas e a atribuição de conversas ao agente mais adequado. Isso permite que o time se concentre em seus pontos fortes e reduza o tempo gasto em tarefas rotineiras.",
+    "LEARN_MORE": "Aprenda mais sobre automação",
+    "COUNT": "{n} automação | {n} automações",
+    "HEADER_BTN_TXT": "Criar Automação",
+    "LOADING": "Buscando regras de automação",
+    "SEARCH_PLACEHOLDER": "Pesquisar regras de automação...",
+    "NO_RESULTS": "Nenhuma regra de automação encontrada correspondente à sua busca",
+    "ADD": {
+      "TITLE": "Adicionar regra de automação",
+      "SUBMIT": "Criar",
+      "CANCEL_BUTTON_TEXT": "Cancelar",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Nome da Regra",
+          "PLACEHOLDER": "Inserir nome da regra",
+          "ERROR": "O nome é obrigatório"
+        },
+        "DESC": {
+          "LABEL": "Descrição",
+          "PLACEHOLDER": "Inserir descrição de regra",
+          "ERROR": "Descrição obrigatória"
+        },
+        "EVENT": {
+          "LABEL": "Evento",
+          "PLACEHOLDER": "Por favor, selecione um",
+          "ERROR": "O campo evento é obrigatório"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Selecione um monitor ativo",
+          "ERROR": "Selecione um monitor ativo",
+          "FETCH_FAILED": "Não foi possível carregar os monitores. Tente novamente mais tarde.",
+          "API_UNAVAILABLE": "Este monitor não está mais disponível. Selecione um monitor ativo e tente novamente.",
+          "EMPTY": "Ainda não há monitores ativos. Crie ou retome um monitor para usar este evento.",
+          "GO_TO_MONITORS": "Ir para monitores",
+          "RETRY": "Tentar novamente",
+          "UNAVAILABLE": "Monitor indisponível",
+          "UNAVAILABLE_HELP": "Este monitor não está disponível para automação. Selecione um monitor ativo para ativar esta regra.",
+          "HELP": "É executado uma vez quando o monitor corresponde pela primeira vez a uma conversa com base em uma nova atividade em tempo real. Verificações históricas não acionam ações."
+        },
+        "RUN_TYPE": {
+          "LABEL": "Quando esta regra deve ser executada?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Executar imediatamente",
+              "DESCRIPTION": "É executada no momento em que um evento ocorre, desde que as condições sejam atendidas."
+            },
+            "WAIT": {
+              "LABEL": "Executar após um período de espera",
+              "DESCRIPTION": "Aguarda o tempo definido e executa a regra apenas se as condições continuarem as mesmas. Caso algo mude durante esse período, a regra será ignorada."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Condição de espera",
+          "WHEN_LABEL": "Quando",
+          "STATUS_LABEL": "O status é",
+          "FOR_LABEL": "Aguardar por",
+          "INBOX_LABEL": "Caixa de Entrada",
+          "ERROR": "O período de espera deve ser entre 10 minutos e 30 dias",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "A conversa permanece em um status",
+            "CUSTOMER_UNRESPONSIVE": "O cliente não respondeu",
+            "AGENT_UNRESPONSIVE": "Nenhum atendente respondeu"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minuto | {count} minutos",
+            "HOURS": "{count} hora | {count} horas",
+            "DAYS": "{count} dia | {count} dias"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "A contagem começa quando a conversa entra nesse status. Se ela ainda estiver nele após {duration}, as ações abaixo serão executadas. Se o status mudar antes disso, nada acontecerá.",
+            "CUSTOMER_UNRESPONSIVE": "A contagem começa quando um atendente responde. Se o cliente não responder em até {duration}, as ações abaixo serão executadas. Se ele responder antes, nada acontecerá, e a próxima resposta do atendente iniciará a contagem novamente.",
+            "AGENT_UNRESPONSIVE": "A contagem começa quando um cliente envia uma mensagem. Se nenhum atendente responder em até {duration}, as ações abaixo serão executadas. Se alguém responder antes disso, nada acontecerá."
+          },
+          "FOOTNOTE": "Apenas novas atividades iniciam uma contagem. Conversas que já estiverem nesse estado só serão consideradas na próxima vez que houver alguma atividade nelas."
+        },
+        "CONDITIONS": {
+          "LABEL": "Condições"
+        },
+        "ACTIONS": {
+          "LABEL": "Ações"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Adicionar condição",
+      "ACTION_BUTTON_LABEL": "Adicionar ação",
+      "API": {
+        "SUCCESS_MESSAGE": "Regra de automação adicionada com sucesso",
+        "ERROR_MESSAGE": "Não foi possível criar uma regra de automação, por favor, tente novamente mais tarde"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Nome",
+        "ACTIVE": "Ativo",
+        "CREATED_ON": "Criado em"
+      },
+      "404": "Nenhuma regra de automação encontrada",
+      "404_DELAYED": "Ainda não há regras executadas após um período de espera",
+      "TABS": {
+        "INSTANT": "Executadas imediatamente",
+        "DELAYED": "Executadas após um período de espera"
+      },
+      "DELAY_BADGE": "Executadas após {delay}",
+      "MONITOR_PAUSED": "Monitor pausado",
+      "MONITOR_DELETED": "Monitor excluído",
+      "MONITOR_UNAVAILABLE": "Recurso de monitor indisponível",
+      "DELAY_DISABLED_BANNER": "A execução com atraso está desativada para esta conta, portanto as regras abaixo que executam após um período de espera estão pausadas até que ela seja ativada novamente."
+    },
+    "DELETE": {
+      "TITLE": "Excluir regra de automação",
+      "SUBMIT": "Excluir",
+      "CANCEL_BUTTON_TEXT": "Cancelar",
+      "CONFIRM": {
+        "TITLE": "Confirmar exclusão",
+        "MESSAGE": "Você tem certeza que deseja excluir? ",
+        "YES": "Sim, excluir ",
+        "NO": "Não, Mantenha "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Regra de automação excluída com sucesso",
+        "ERROR_MESSAGE": "Não foi possível excluir uma regra de automação, por favor, tente novamente mais tarde"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Editar regra de automação",
+      "SUBMIT": "Atualizar",
+      "CANCEL_BUTTON_TEXT": "Cancelar",
+      "API": {
+        "SUCCESS_MESSAGE": "Regra de automação atualizada com sucesso",
+        "ERROR_MESSAGE": "Não foi possível atualizar a regra de automação, por favor, tente novamente mais tarde"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Duplicar",
+      "API": {
+        "SUCCESS_MESSAGE": "Automação duplicada com sucesso",
+        "ERROR_MESSAGE": "Não foi possível duplicar regra de automação, por favor, tente novamente mais tarde"
+      }
+    },
+    "FORM": {
+      "EDIT": "Alterar",
+      "CREATE": "Criar",
+      "DELETE": "Excluir",
+      "CANCEL": "Cancelar",
+      "RESET_MESSAGE": "Alterar o evento irá redefinir as condições e eventos que você adicionou abaixo"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Você precisa ter pelo menos uma condição para salvar",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Atributos personalizados do contato",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Atributos personalizados da conversa",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Descreva o que procurar, por exemplo: cliente deseja cancelar"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Você precisa ter pelo menos uma ação para salvar",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Escreva sua mensagem aqui",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Selecione times",
+      "EMAIL_INPUT_PLACEHOLDER": "Insira o e-mail",
+      "URL_INPUT_PLACEHOLDER": "Insira a URL",
+      "INSERT_CONTACT_EMAIL": "Usar o e-mail do contato"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Ativar regra de automação",
+      "DEACTIVATION_TITLE": "Desativar regra de automação",
+      "ACTIVATION_DESCRIPTION": "Esta ação ativará a regra de automação '{automationName}'. Tem certeza que deseja continuar?",
+      "DEACTIVATION_DESCRIPTION": "Esta ação irá desativar a regra de automação '{automationName}'. Tem certeza que deseja continuar?",
+      "ACTIVATION_SUCCESFUL": "Regra de automação ativada com sucesso",
+      "DEACTIVATION_SUCCESFUL": "Regra de automação desativada com sucesso",
+      "ACTIVATION_ERROR": "Não foi possível ativar a automação, por favor tente novamente mais tarde",
+      "DEACTIVATION_ERROR": "Não foi possível desativar a automação, por favor, tente novamente mais tarde",
+      "CONFIRMATION_LABEL": "Sim",
+      "CANCEL_LABEL": "Não"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Não foi possível enviar o anexo, por favor, tente novamente",
+      "LABEL_IDLE": "Enviar Anexo",
+      "LABEL_UPLOADING": "Enviando...",
+      "LABEL_UPLOADED": "Upload feito com sucesso",
+      "LABEL_UPLOAD_FAILED": "Faha no envio"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "A chave do atributo é necessária",
+      "FILTER_OPERATOR_REQUIRED": "Operador do filtro é necessário",
+      "VALUE_REQUIRED": "Valor obrigatório",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "O valor deve ser entre 1 e 998",
+      "ACTION_PARAMETERS_REQUIRED": "Os parâmetros de ação são necessários",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "Pelo menos uma condição é necessária",
+      "ATLEAST_ONE_ACTION_REQUIRED": "Pelo menos uma ação é necessária"
+    },
+    "NONE_OPTION": "Nenhuma",
+    "LAST_RESPONDING_AGENT": "Último Agente que Respondeu",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Conversa Criada",
+      "CONVERSATION_UPDATED": "Conversa Atualizada",
+      "MESSAGE_CREATED": "Mensagem Criada",
+      "CONVERSATION_RESOLVED": "Conversa Resolvida",
+      "CONVERSATION_OPENED": "Conversa Aberta",
+      "MONITOR_MATCHED": "Monitor encontrou uma correspondência"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Atribuir ao Agente",
+      "ASSIGN_TEAM": "Atribuir um Time",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remover Time Atribuído",
+      "ADD_LABEL": "Adicionar uma Etiqueta",
+      "REMOVE_LABEL": "Remover uma Etiqueta",
+      "SEND_EMAIL_TO_TEAM": "Enviar um e-mail para o Time",
+      "SEND_EMAIL_TRANSCRIPT": "Enviar uma transcrição por e-mail",
+      "MUTE_CONVERSATION": "Silenciar Conversa",
+      "SNOOZE_CONVERSATION": "Adiar Conversa",
+      "RESOLVE_CONVERSATION": "Resolver Conversa",
+      "SEND_WEBHOOK_EVENT": "Enviar evento de Webhook",
+      "SEND_ATTACHMENT": "Enviar Anexo",
+      "SEND_MESSAGE": "Enviar Mensagem",
+      "ADD_PRIVATE_NOTE": "Adicionar uma Nota Privada",
+      "CHANGE_PRIORITY": "Alterar Prioridade",
+      "ADD_SLA": "Adicionar SLA",
+      "OPEN_CONVERSATION": "Abrir conversa",
+      "PENDING_CONVERSATION": "Marcar conversa como pendente"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Mensagem Recebida",
+      "OUTGOING": "Mensagem de Saída"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Nenhuma",
+      "LOW": "Baixa",
+      "MEDIUM": "Média",
+      "HIGH": "Alta",
+      "URGENT": "Urgente"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Tipo da Mensagem",
+      "PRIVATE_NOTE": "Mensagem Privada",
+      "MESSAGE_CONTAINS": "Conteúdo da mensagem",
+      "EMAIL": "E-mail",
+      "INBOX": "Caixa de Entrada",
+      "CONVERSATION_LANGUAGE": "Idioma da conversa",
+      "PHONE_NUMBER": "Número de Telefone",
+      "STATUS": "Status",
+      "BROWSER_LANGUAGE": "Idioma do navegador",
+      "MAIL_SUBJECT": "Assunto do e-mail",
+      "COUNTRY_NAME": "País/região",
+      "COMPANY_NAME": "Empresa",
+      "REFERER_LINK": "Link de origem",
+      "ASSIGNEE_NAME": "Agente atribuído",
+      "TEAM_NAME": "Time",
+      "PRIORITY": "Prioridade",
+      "LABELS": "Etiquetas",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

@@ -1,0 +1,1743 @@
+{
+  "STRIPE_INTEGRATION": {
+    "UNAVAILABLE": "Stripe is unavailable for this account. Contact your administrator to check the integration configuration.",
+    "TITLE": "Stripe",
+    "DESCRIPTION": "View customer details, subscriptions, and invoices alongside your conversations.",
+    "CONNECT": "Ikonekta",
+    "DISCONNECT": "Disconnect from Chatwoot",
+    "DISCONNECT_NOTE": "Disconnecting removes the saved credentials from Chatwoot. Uninstall the app in Stripe to revoke its access there.",
+    "CONNECTED": "Connected",
+    "RECONNECT": "Reconnect Stripe",
+    "REAUTHORIZATION_REQUIRED": "Reconnect required",
+    "ACCOUNT": "Connected account",
+    "ACCOUNT_ID": "Account ID",
+    "ENVIRONMENT": "Environment",
+    "SANDBOX": "Sandbox",
+    "LIVE": "Naka-live",
+    "CONNECTED_ON": "Connected on",
+    "OPEN_STRIPE": "Open Stripe dashboard",
+    "ERROR": "Unable to load Stripe. Please try again or reconnect the integration.",
+    "EMPTY": "No Stripe customer matches this contact's email.",
+    "NO_EMAIL": "Add an email to this contact to look up Stripe customers.",
+    "SELECT": "Select a matching customer",
+    "CUSTOMER_OPTION": "{name} — {id}",
+    "MORE": "Showing the first 100 matching customers. Refine the contact email if the customer is not listed.",
+    "SUBSCRIPTIONS": "Latest five subscriptions",
+    "SUBSCRIPTION": "Subscription",
+    "VIEW_SUBSCRIPTION": "View {name} subscription details",
+    "COPY_ID": "Copy ID",
+    "COPIED": "Copied",
+    "QUANTITY": "Quantity: {count}",
+    "PRICE_INTERVAL": "{amount} / {interval}",
+    "INTERVAL": {
+      "day": "day | {count} days",
+      "week": "week | {count} weeks",
+      "month": "month | {count} months",
+      "year": "year | {count} years"
+    },
+    "VARIABLE_PRICE": "Usage-based or tiered pricing",
+    "RENEWS": "Renews {date}",
+    "PERIOD_START": "Period starts {date}",
+    "PERIOD_END": "Period ends {date}",
+    "TRIAL_ENDS": "Trial ends {date}",
+    "CANCELS": "Cancels {date}",
+    "CANCELS_AT_PERIOD_END": "Cancels at the end of the billing period",
+    "CANCELED_ON": "Canceled {date}",
+    "MORE_ITEMS": "Additional subscription items are not shown.",
+    "PRICE_NOTE": "Prices are per unit, before discounts and taxes. They are not an estimate of the next invoice.",
+    "INVOICES": "Recent invoices",
+    "NO_SUBSCRIPTIONS": "No subscriptions found.",
+    "NO_INVOICES": "No invoices found."
+  },
+  "INTEGRATION_SETTINGS": {
+    "SHOPIFY": {
+      "HEADER": "Shopify",
+      "DELETE": {
+        "TITLE": "Tanggalin ang Shopify Integration",
+        "MESSAGE": "Sigurado ka bang gusto mong tanggalin ang Shopify integration?"
+      },
+      "STORE_URL": {
+        "TITLE": "Ikonekta ang Shopify Store",
+        "LABEL": "URL ng Tindahan",
+        "PLACEHOLDER": "your-store.myshopify.com",
+        "HELP": "Ilagay ang myshopify.com URL ng iyong Shopify store",
+        "INVALID_URL": "Please enter a valid Shopify store URL (e.g., your-store.myshopify.com)",
+        "CANCEL": "Kanselahin",
+        "SUBMIT": "Ikonekta ang Store"
+      },
+      "HELP_TEXT": {
+        "TITLE": "How to use the Shopify Integration?",
+        "BODY": "With this integration, your Shopify store ***{storeDomain}*** is connected to your Chatwoot workspace. Here's what you can do:\n\n**Track orders in conversations:** When you open a conversation, the Shopify sidebar will automatically display recent orders for the customer based on their email address. This gives your support team instant context without switching tabs.\n\n**Access order details:** View order status, fulfillment status, and total amount directly within the conversation panel."
+      },
+      "ERROR": "Nagkaroon ng error sa pagkonekta sa Shopify. Pakisubukang muli o kontakin ang suporta kung magpapatuloy ang problema.",
+      "PENDING_INSTALL": {
+        "SUCCESS": "Shopify store connected successfully.",
+        "ERROR": "Unable to complete the Shopify installation. Please try again."
+      },
+      "SELECT_ACCOUNT": {
+        "TITLE": "Choose a workspace",
+        "DESCRIPTION": "Select the workspace to connect to your Shopify store. To restore a previous connection, choose its original workspace.",
+        "UNAVAILABLE": "No eligible workspace or valid installation was found. Restart installation or sign in as a workspace administrator."
+      }
+    },
+    "HEADER": "Mga Integrasyon",
+    "DESCRIPTION": "Ang Chatwoot ay nakakonekta sa iba't ibang mga tool at serbisyo upang mapabuti ang kahusayan ng iyong koponan. Tuklasin ang listahan sa ibaba upang i-configure ang iyong mga paboritong app.",
+    "LEARN_MORE": "Alamin pa tungkol sa mga integrasyon",
+    "LOADING": "Kinuha ang mga integrasyon",
+    "SEARCH_PLACEHOLDER": "Search integrations...",
+    "NO_RESULTS": "No integrations found matching your search",
+    "CAPTAIN": {
+      "DISABLED": "Hindi naka-enable ang Captain sa iyong account.",
+      "CLICK_HERE_TO_CONFIGURE": "I-click dito upang i-configure",
+      "LOADING_CONSOLE": "Naglo-load ang Captain Console...",
+      "FAILED_TO_LOAD_CONSOLE": "Nabigong i-load ang Captain Console. Pakirefresh at subukang muli."
+    },
+    "WEBHOOK": {
+      "SUBSCRIBED_EVENTS": "Mga Nakalistang Kaganapan",
+      "LEARN_MORE": "Alamin pa tungkol sa webhooks",
+      "PAYWALL": {
+        "TITLE": "Webhooks are available on paid plans",
+        "AVAILABLE_ON": "Use webhooks to receive real-time events from your Chatwoot account.",
+        "UPGRADE_PROMPT": "Upgrade to the Startups, Business, or Enterprise plan to use webhooks.",
+        "UPGRADE_NOW": "Upgrade now",
+        "CANCEL_ANYTIME": "Change or cancel your plan anytime."
+      },
+      "SECRET": {
+        "LABEL": "Lihim",
+        "COPY": "Copy secret to clipboard",
+        "COPY_SUCCESS": "Secret copied to clipboard",
+        "TOGGLE": "Toggle secret visibility",
+        "CREATED_DESC": "Nagawa na ang iyong webhook. Gamitin ang secret sa ibaba upang beripikahin ang mga webhook signature. Pakikopya ito ngayon — maaari mo rin itong makita sa susunod sa form ng pag-edit ng webhook.",
+        "DONE": "Tapos na"
+      },
+      "COUNT": "{n} webhook | {n} webhooks",
+      "SEARCH_PLACEHOLDER": "Search webhooks...",
+      "NO_RESULTS": "No webhooks found matching your search",
+      "FORM": {
+        "CANCEL": "Kanselahin",
+        "DESC": "Nagbibigay ang mga webhook event ng real-time na impormasyon tungkol sa mga nangyayari sa iyong Chatwoot account. Pakilagay ang wastong URL upang i-configure ang callback.",
+        "SUBSCRIPTIONS": {
+          "LABEL": "Mga Kaganapan",
+          "EVENTS": {
+            "CONVERSATION_CREATED": "Nalikha ang Usapan",
+            "CONVERSATION_STATUS_CHANGED": "Nagbago ang Katayuan ng Usapan",
+            "CONVERSATION_UPDATED": "Na-update ang Usapan",
+            "MESSAGE_CREATED": "Nalikha ang mensahe",
+            "MESSAGE_UPDATED": "Na-update ang mensahe",
+            "WEBWIDGET_TRIGGERED": "Binuksan ng user ang live chat widget",
+            "CONTACT_CREATED": "Nalikha ang kontak",
+            "CONTACT_UPDATED": "Na-update ang contact",
+            "CONVERSATION_TYPING_ON": "Nagsusulat sa Pag-uusap On",
+            "CONVERSATION_TYPING_OFF": "Nagsusulat sa Pag-uusap Off",
+            "INBOX_UPDATED": "Inbox updated"
+          }
+        },
+        "NAME": {
+          "LABEL": "Webhook Name",
+          "PLACEHOLDER": "Enter the name of the webhook"
+        },
+        "END_POINT": {
+          "LABEL": "URL ng Webhook",
+          "PLACEHOLDER": "Halimbawa: {webhookExampleURL}",
+          "ERROR": "Mangyaring maglagay ng wastong URL"
+        },
+        "EDIT_SUBMIT": "I-update ang webhook",
+        "ADD_SUBMIT": "Gumawa ng webhook"
+      },
+      "TITLE": "Webhook",
+      "CONFIGURE": "I-configure",
+      "HEADER": "Mga setting ng webhook",
+      "HEADER_BTN_TXT": "Magdagdag ng bagong webhook",
+      "LOADING": "Kinuha ang mga naka-attach na webhook",
+      "SEARCH_404": "Walang mga item na tumutugma sa query na ito",
+      "SIDEBAR_TXT": "<p><b>Mga Webhook</b> </p> <p>Ang mga webhook ay mga HTTP callback na maaaring idefine para sa bawat account. Ito ay na-trigger ng mga pangyayari tulad ng paglikha ng mensahe sa Chatwoot. Maaari kang gumawa ng higit sa isang webhook para sa account na ito. <br /><br /> Para gumawa ng <b>webhook</b>, i-click ang <b>Magdagdag ng bagong webhook</b> na button. Maaari mo ring alisin ang anumang umiiral na webhook sa pamamagitan ng pag-click sa Delete na button.</p>",
+      "LIST": {
+        "404": "Walang mga webhook na naka-configure para sa account na ito.",
+        "TITLE": "Pamahalaan ang mga webhook",
+        "TABLE_HEADER": {
+          "WEBHOOK_ENDPOINT": "Webhook endpoint",
+          "ACTIONS": "Mga aksyon"
+        }
+      },
+      "EDIT": {
+        "BUTTON_TEXT": "I-edit",
+        "TITLE": "I-edit ang webhook",
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na na-update ang webhook configuration",
+          "ERROR_MESSAGE": "Hindi makakonekta sa Woot Server, subukan muli mamaya"
+        }
+      },
+      "ADD": {
+        "CANCEL": "Kanselahin",
+        "TITLE": "Magdagdag ng bagong webhook",
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na naidagdag ang configuration ng webhook",
+          "ERROR_MESSAGE": "Hindi makakonekta sa Woot Server, pakisubukan muli mamaya"
+        }
+      },
+      "DELETE": {
+        "BUTTON_TEXT": "Tanggalin",
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na natanggal ang webhook",
+          "ERROR_MESSAGE": "Hindi makakonekta sa Woot Server, subukan muli mamaya"
+        },
+        "CONFIRM": {
+          "TITLE": "Kumpirmahin ang Pag-delete",
+          "MESSAGE": "Are you sure to delete the webhook? ({webhookURL})",
+          "YES": "Oo, Tanggalin ",
+          "NO": "Hindi, Panatilihin"
+        }
+      }
+    },
+    "SLACK": {
+      "HEADER": "Slack",
+      "DELETE": "Tanggalin",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Tanggalin ang integrasyon",
+        "MESSAGE": "Sigurado ka bang gusto mong tanggalin ang integrasyon? Kapag ginawa mo ito, mawawala ang kakayahan mong tingnan ang mga pag-uusap sa iyong Slack account."
+      },
+      "HELP_TEXT": {
+        "TITLE": "Paano gamitin ang Slack Integration?",
+        "BODY": "Sa integrasyong ito, masi-sync ang lahat ng iyong papasok na usapan sa channel na ***{selectedChannelName}*** sa iyong Slack workspace. Maaari mong pamahalaan ang lahat ng usapan ng iyong mga customer mismo sa channel at hindi na makakaligtaan ang anumang mensahe.\n\nNarito ang mga pangunahing feature ng integrasyon:\n\n**Sumagot sa mga usapan mula sa loob ng Slack:** Para sumagot sa isang usapan sa Slack channel na ***{selectedChannelName}***, i-type lang ang iyong mensahe at ipadala ito bilang thread. Lilikha ito ng tugon pabalik sa customer sa pamamagitan ng Chatwoot. Ganun lang kadali!\n\n **Gumawa ng mga pribadong note:** Kung gusto mong gumawa ng mga pribadong note sa halip na mga reply, simulan ang iyong mensahe sa ***`note:`***. Tinitiyak nito na mananatiling pribado ang iyong mensahe at hindi ito makikita ng customer.\n\n**Iugnay ang profile ng agent:** Kung ang taong sumagot sa Slack ay may agent profile sa Chatwoot na may parehong email, awtomatikong iuugnay ang mga reply sa profile na iyon. Ibig sabihin, madali mong masusubaybayan kung sino ang nagsabi ng ano at kailan. Sa kabilang banda, kapag walang katugmang agent profile ang sumagot, lalabas sa customer na mula ito sa bot profile.",
+        "BODY_ALERT": "With this integration, all of your incoming conversations will be synced to the ***{selectedChannelName}*** channel in your Slack workspace, so your team can pick them up as soon as they come in.\n\nThis integration is set to **Alerts only**, which means the Slack thread is a safe space for internal discussion. Anything your team posts there stays in Slack and is never sent to the customer.\n\n**Respond to the customer from Chatwoot:** Open the conversation from the link shared in the thread and reply from the Chatwoot dashboard. Replies and private notes added in Chatwoot keep appearing in the Slack thread, so everyone stays in the loop.",
+        "SELECTED": "napili"
+      },
+      "MESSAGE_MODE": {
+        "TITLE": "Slack thread behaviour",
+        "DESCRIPTION": "Decide whether replies in the Slack thread reach the customer or stay internal.",
+        "OPTIONS": {
+          "TWO_WAY": {
+            "LABEL": "Two-way sync",
+            "DESCRIPTION": "Replies in the Slack thread are sent to the customer. Start a message with `note:` to keep it internal."
+          },
+          "ALERT": {
+            "LABEL": "Alerts only",
+            "DESCRIPTION": "Conversations are posted to Slack for internal discussion only. Nothing in the thread reaches the customer."
+          }
+        },
+        "UPDATE_SUCCESS": "The Slack thread behaviour is updated successfully"
+      },
+      "SELECT_CHANNEL": {
+        "OPTION_LABEL": "Pumili ng channel",
+        "UPDATE": "I-update",
+        "BUTTON_TEXT": "Ikonekta ang channel",
+        "DESCRIPTION": "Ang iyong Slack account ay naka-link na sa Chatwoot. Gayunpaman, kasalukuyang hindi aktibo ang integrasyon. Upang paganahin ang integrasyon at ikonekta ang isang channel sa Chatwoot, pakiklik ang button sa ibaba.\n\n**Tandaan:** Kung sinusubukan mong ikonekta ang isang pribadong channel, idagdag muna ang Chatwoot app sa Slack channel bago magpatuloy sa hakbang na ito.",
+        "ATTENTION_REQUIRED": "Kinakailangan ang pansin",
+        "EXPIRED": "Nag-expire na ang iyong Slack integration. Upang magpatuloy sa pagtanggap ng mga mensahe sa Slack, pakitanggal ang integrasyon at ikonekta muli ang iyong Slack account."
+      },
+      "UPDATE_ERROR": "Nagkaroon ng error sa pag-update ng integration, pakisubukang muli",
+      "UPDATE_SUCCESS": "Matagumpay na nakakonekta ang channel",
+      "FAILED_TO_FETCH_CHANNELS": "Nagkaroon ng error sa pagkuha ng mga channel mula sa Slack, pakisubukang muli"
+    },
+    "DYTE": {
+      "CLICK_HERE_TO_JOIN": "Pindutin dito upang sumali",
+      "LEAVE_THE_ROOM": "Umalis sa silid",
+      "START_VIDEO_CALL_HELP_TEXT": "Magsimula ng bagong video call kasama ang customer",
+      "JOIN_ERROR": "Nagkaroon ng error sa pagsali sa tawag, pakisubukang muli",
+      "CREATE_ERROR": "Nagkaroon ng error sa paglikha ng link ng meeting, pakisubukang muli"
+    },
+    "OPEN_AI": {
+      "AI_ASSIST": "Tulong ng AI",
+      "WITH_AI": " {option} gamit ang AI ",
+      "OPTIONS": {
+        "REPLY_SUGGESTION": "Mungkahi ng sagot",
+        "SUMMARIZE": "Buodin",
+        "REPHRASE": "Pagandahin ang pagsulat",
+        "FIX_SPELLING_GRAMMAR": "Ayusin ang Baybay at Gramatika",
+        "SHORTEN": "Paikliin",
+        "EXPAND": "Palawakin",
+        "MAKE_FRIENDLY": "Baguhin ang tono ng mensahe upang maging palakaibigan",
+        "MAKE_FORMAL": "Gamitin ang pormal na tono",
+        "SIMPLIFY": "Pagsimplehin",
+        "CONFIDENT": "Use confident tone",
+        "PROFESSIONAL": "Gamitin ang propesyonal na tono",
+        "CASUAL": "Gamitin ang kaswal na tono",
+        "STRAIGHTFORWARD": "Gamitin ang tuwirang tono"
+      },
+      "REPLY_OPTIONS": {
+        "IMPROVE_REPLY": "Pagandahin ang sagot",
+        "IMPROVE_REPLY_SELECTION": "Pagandahin ang napili",
+        "CHANGE_TONE": {
+          "TITLE": "Palitan ang tono",
+          "OPTIONS": {
+            "PROFESSIONAL": "Propesyonal",
+            "CASUAL": "Kaswal",
+            "STRAIGHTFORWARD": "Tuwirang",
+            "CONFIDENT": "Confident",
+            "FRIENDLY": "Friendly"
+          }
+        },
+        "GRAMMAR": "Fix grammar & spelling",
+        "SUGGESTION": "Suggest a reply",
+        "SUMMARIZE": "Summarize the conversation",
+        "ASK_COPILOT": "Ask Copilot"
+      },
+      "ASSISTANCE_MODAL": {
+        "DRAFT_TITLE": "Gumawa ng draft ng nilalaman",
+        "GENERATED_TITLE": "Nilikha na nilalaman",
+        "AI_WRITING": "Nagsusulat ang AI",
+        "BUTTONS": {
+          "APPLY": "Gamitin ang mungkahing ito",
+          "CANCEL": "Kanselahin"
+        }
+      },
+      "CTA_MODAL": {
+        "TITLE": "Isama sa OpenAI",
+        "DESC": "Magdala ng mga advanced na tampok ng AI sa iyong dashboard gamit ang mga GPT model ng OpenAI. Upang magsimula, ilagay ang API key mula sa iyong OpenAI account.",
+        "KEY_PLACEHOLDER": "Ilagay ang iyong OpenAI API key",
+        "BUTTONS": {
+          "NEED_HELP": "Kailangan ng tulong?",
+          "DISMISS": "Isara",
+          "FINISH": "Tapusin ang Setup"
+        },
+        "DISMISS_MESSAGE": "Maaari mong i-setup ang OpenAI integration anumang oras na gusto mo.",
+        "SUCCESS_MESSAGE": "Matagumpay na na-setup ang OpenAI integration"
+      },
+      "TITLE": "Pagbutihin Gamit ang AI",
+      "SUMMARY_TITLE": "Buod gamit ang AI",
+      "REPLY_TITLE": "Mungkahi ng sagot gamit ang AI",
+      "SUBTITLE": "Gagamit ang AI ng isang pinahusay na sagot batay sa iyong kasalukuyang draft.",
+      "TONE": {
+        "TITLE": "Tono",
+        "OPTIONS": {
+          "PROFESSIONAL": "Propesyonal",
+          "FRIENDLY": "Palakaibigan"
+        }
+      },
+      "BUTTONS": {
+        "GENERATE": "Gumawa",
+        "GENERATING": "Gumagawa...",
+        "CANCEL": "Kanselahin"
+      },
+      "GENERATE_ERROR": "Nagkaroon ng error sa pagproseso ng nilalaman, pakisuri ang iyong OpenAI API key at subukang muli"
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "Tanggalin",
+      "API": {
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang integrasyon"
+      }
+    },
+    "CONNECT": {
+      "BUTTON_TEXT": "Ikonekta"
+    },
+    "DASHBOARD_APPS": {
+      "TITLE": "Mga App sa Dashboard",
+      "HEADER_BTN_TXT": "Magdagdag ng bagong dashboard app",
+      "SIDEBAR_TXT": "<p><b>Mga App sa Dashboard</b></p><p>Pinapayagan ng Mga App sa Dashboard ang mga organisasyon na isama ang isang aplikasyon sa loob ng Chatwoot dashboard upang magbigay ng konteksto para sa mga ahente ng suporta sa customer. Pinapayagan ka ng tampok na ito na gumawa ng isang aplikasyon nang nakapag-iisa at isama ito sa dashboard upang magbigay ng impormasyon tungkol sa gumagamit, kanilang mga order, o kanilang nakaraang kasaysayan ng pagbabayad.</p><p>Kapag isinama mo ang iyong aplikasyon gamit ang dashboard sa Chatwoot, makukuha ng iyong aplikasyon ang konteksto ng pag-uusap at kontak bilang isang window event. Magpatupad ng tagapakinig para sa message event sa iyong pahina upang matanggap ang konteksto.</p><p>Upang magdagdag ng bagong app sa dashboard, i-click ang button na 'Magdagdag ng bagong app sa dashboard'.</p>",
+      "DESCRIPTION": "Pinapayagan ng Mga App sa Dashboard ang mga organisasyon na isama ang isang aplikasyon sa loob ng dashboard upang magbigay ng konteksto para sa mga ahente ng suporta sa customer. Pinapayagan ka ng tampok na ito na gumawa ng isang aplikasyon nang nakapag-iisa at isama ito upang magbigay ng impormasyon tungkol sa gumagamit, kanilang mga order, o kanilang nakaraang kasaysayan ng pagbabayad.",
+      "LEARN_MORE": "Alamin pa tungkol sa Dashboard Apps",
+      "COUNT": "{n} dashboard app | {n} dashboard apps",
+      "SEARCH_PLACEHOLDER": "Search dashboard apps...",
+      "NO_RESULTS": "No dashboard apps found matching your search",
+      "LIST": {
+        "404": "Wala pang naka-configure na mga dashboard app sa account na ito",
+        "LOADING": "Kinuha ang mga dashboard app...",
+        "TABLE_HEADER": {
+          "NAME": "Pangalan",
+          "ENDPOINT": "Endpoint",
+          "ACTIONS": "Mga Aksyon"
+        },
+        "EDIT_TOOLTIP": "I-edit ang app",
+        "DELETE_TOOLTIP": "Tanggalin ang app"
+      },
+      "FORM": {
+        "TITLE_LABEL": "Pangalan",
+        "TITLE_PLACEHOLDER": "Ilagay ang pangalan para sa iyong dashboard app",
+        "TITLE_ERROR": "Kinakailangan ang pangalan para sa dashboard app",
+        "URL_LABEL": "Endpoint",
+        "URL_PLACEHOLDER": "Ilagay ang endpoint URL kung saan naka-host ang iyong app",
+        "URL_ERROR": "Kinakailangan ang isang wastong URL"
+      },
+      "CREATE": {
+        "HEADER": "Magdagdag ng bagong dashboard app",
+        "FORM_SUBMIT": "Isumite",
+        "FORM_CANCEL": "Kanselahin",
+        "API_SUCCESS": "Matagumpay na na-configure ang dashboard app",
+        "API_ERROR": "Hindi namin malikha ang app. Pakisubukang muli mamaya"
+      },
+      "UPDATE": {
+        "HEADER": "I-edit ang dashboard app",
+        "FORM_SUBMIT": "I-update",
+        "FORM_CANCEL": "Kanselahin",
+        "API_SUCCESS": "Matagumpay na na-update ang dashboard app",
+        "API_ERROR": "Hindi namin ma-update ang app. Pakisubukang muli mamaya"
+      },
+      "DELETE": {
+        "CONFIRM_YES": "Oo, tanggalin ito",
+        "CONFIRM_NO": "Hindi, panatilihin ito",
+        "TITLE": "Kumpirmahin ang pagtanggal",
+        "MESSAGE": "Sigurado ka bang tatanggalin ang app - {appName}?",
+        "API_SUCCESS": "Matagumpay na natanggal ang dashboard app",
+        "API_ERROR": "Hindi namin matanggal ang app. Pakisubukang muli mamaya"
+      }
+    },
+    "LINEAR": {
+      "HEADER": "Linear",
+      "ADD_OR_LINK_BUTTON": "Gumawa/I-link ang Linear Issue",
+      "LOADING": "Kinuha ang mga linear issue...",
+      "LOADING_ERROR": "Nagkaroon ng error sa pagkuha ng mga linear issue, pakisubukang muli",
+      "CREATE": "Gumawa",
+      "LINK": {
+        "SEARCH": "Maghanap ng mga isyu",
+        "SELECT": "Piliin ang isyu",
+        "TITLE": "I-link",
+        "EMPTY_LIST": "Walang nahanap na linear issue",
+        "LOADING": "Naglo-load",
+        "ERROR": "Nagkaroon ng error sa pagkuha ng mga linear issue, pakisubukang muli",
+        "LINK_SUCCESS": "Matagumpay na na-link ang isyu",
+        "LINK_ERROR": "Nagkaroon ng error sa pag-link ng isyu, pakisubukang muli",
+        "LINK_TITLE": "Usapan (#{conversationId}) kasama si {name}"
+      },
+      "ADD_OR_LINK": {
+        "TITLE": "Gumawa/mag-link ng linear na isyu",
+        "DESCRIPTION": "Gumawa ng mga Linear issue mula sa mga pag-uusap, o i-link ang mga umiiral na para sa tuloy-tuloy na pagsubaybay.",
+        "FORM": {
+          "TITLE": {
+            "LABEL": "Pamagat",
+            "PLACEHOLDER": "Ilagay ang pamagat",
+            "REQUIRED_ERROR": "Kinakailangan ang pamagat"
+          },
+          "DESCRIPTION": {
+            "LABEL": "Paglalarawan",
+            "PLACEHOLDER": "Ilagay ang paglalarawan"
+          },
+          "TEAM": {
+            "LABEL": "Koponan",
+            "PLACEHOLDER": "Pumili ng koponan",
+            "SEARCH": "Maghanap ng koponan",
+            "REQUIRED_ERROR": "Kinakailangan ang koponan"
+          },
+          "ASSIGNEE": {
+            "LABEL": "Inatasan",
+            "PLACEHOLDER": "Pumili ng assignee",
+            "SEARCH": "Maghanap ng assignee"
+          },
+          "PRIORITY": {
+            "LABEL": "Prayoridad",
+            "PLACEHOLDER": "Pumili ng prayoridad",
+            "SEARCH": "Maghanap ng prayoridad"
+          },
+          "LABEL": {
+            "LABEL": "Label",
+            "PLACEHOLDER": "Pumili ng label",
+            "SEARCH": "Maghanap ng label"
+          },
+          "STATUS": {
+            "LABEL": "Katayuan",
+            "PLACEHOLDER": "Pumili ng status",
+            "SEARCH": "Maghanap ng status"
+          },
+          "PROJECT": {
+            "LABEL": "Proyekto",
+            "PLACEHOLDER": "Pumili ng proyekto",
+            "SEARCH": "Maghanap ng proyekto"
+          }
+        },
+        "CREATE": "Gumawa",
+        "CANCEL": "Kanselahin",
+        "CREATE_SUCCESS": "Matagumpay na nagawa ang isyu",
+        "CREATE_ERROR": "Nagkaroon ng error sa paglikha ng isyu, pakisubukang muli",
+        "LOADING_TEAM_ERROR": "Nagkaroon ng error sa pagkuha ng mga koponan, pakisubukang muli",
+        "LOADING_TEAM_ENTITIES_ERROR": "Nagkaroon ng error sa pagkuha ng mga entidad ng koponan, pakisubukang muli"
+      },
+      "ISSUE": {
+        "STATUS": "Katayuan",
+        "PRIORITY": "Prayoridad",
+        "ASSIGNEE": "Inatasan",
+        "LABELS": "Mga label",
+        "CREATED_AT": "Nilikha noong {createdAt}"
+      },
+      "UNLINK": {
+        "TITLE": "Alisin ang link",
+        "SUCCESS": "Matagumpay na na-unlink ang isyu",
+        "ERROR": "Nagkaroon ng error sa pag-unlink ng isyu, pakisubukang muli"
+      },
+      "NO_LINKED_ISSUES": "Walang nahanap na naka-link na mga isyu",
+      "DELETE": {
+        "TITLE": "Sigurado ka bang gusto mong tanggalin ang integrasyon?",
+        "MESSAGE": "Sigurado ka bang gusto mong tanggalin ang integrasyon?",
+        "CONFIRM": "Oo, tanggalin",
+        "CANCEL": "Kanselahin"
+      },
+      "CTA": {
+        "TITLE": "Ikonekta sa Linear",
+        "AGENT_DESCRIPTION": "Hindi nakakonekta ang Linear workspace. Hilingin sa iyong administrator na ikonekta ang workspace upang magamit ang integration na ito.",
+        "DESCRIPTION": "Hindi nakakonekta ang Linear workspace. I-click ang button sa ibaba upang ikonekta ang iyong workspace para magamit ang integrasyong ito.",
+        "BUTTON_TEXT": "Ikonekta ang Linear workspace"
+      }
+    },
+    "GOOGLE_TRANSLATE": {
+      "HEADER": "Google Translate",
+      "DELETE_MESSAGE": "Agents won't be able to translate messages with Google Translate anymore. If Google Translate is your translation service, auto-translate stops until you pick another one.",
+      "SETUP": {
+        "TITLE": "Set up Google Translate",
+        "DESCRIPTION": "You'll need a Google Cloud project. It takes about five minutes.",
+        "STEPS": {
+          "ENABLE_API": {
+            "TITLE": "Turn on the Cloud Translation API",
+            "DESCRIPTION": "Pick a project in the Google Cloud console and enable the Cloud Translation API. Note the project ID.",
+            "LINK": "Open Cloud Translation API"
+          },
+          "CREATE_KEY": {
+            "TITLE": "Create a service account key",
+            "DESCRIPTION": "Create a service account with the Cloud Translation API User role. Then open it, go to Keys, and add a JSON key.",
+            "LINK": "Open service accounts"
+          },
+          "CONNECT": {
+            "TITLE": "Connect it here",
+            "DESCRIPTION": "Click Connect, enter the project ID and paste the key file. We check it with Google before saving."
+          }
+        }
+      },
+      "DETAILS": {
+        "PROJECT": "Google Cloud project",
+        "SERVICE": "Translation service",
+        "SERVICE_GOOGLE": "Google Translate handles all translation in your conversations. When auto-translate is on, it translates incoming messages into each agent's language and sends replies in the customer's language. Agents also use it when they translate a message from its menu.",
+        "SERVICE_OTHER": "Captain is selected as your translation service, so Google Translate isn't used right now. Auto-translate and the Translate action on messages both go through Captain. Switch the service to Google Translate to use this integration instead.",
+        "CHANGE": "Palitan"
+      }
+    },
+    "NOTION": {
+      "HEADER": "Notion",
+      "DELETE": {
+        "TITLE": "Sigurado ka bang gusto mong tanggalin ang Notion integration?",
+        "MESSAGE": "Ang pagtanggal sa integrasyong ito ay mag-aalis ng kakayahan mong gamitin ang iyong Notion account at hihinto ang lahat ng kaugnay na functionality.",
+        "CONFIRM": "Oo, tanggalin",
+        "CANCEL": "Kanselahin"
+      }
+    }
+  },
+  "CAPTAIN": {
+    "NAME": "Captain",
+    "HEADER_KNOW_MORE": "Alamin pa",
+    "OVERVIEW": {
+      "HEADER": "Pangkalahatan",
+      "WELCOME": {
+        "LABEL": "Captain summary",
+        "LOADING": "Generating summary…"
+      },
+      "INBOX_BANNER": {
+        "TEXT": "This assistant isn't connected to any inbox yet, so it won't respond to conversations.",
+        "ACTION": "Connect inbox",
+        "DISMISS": "Dismiss"
+      },
+      "COVERAGE_BANNER": {
+        "TEXT": "{count} FAQ suggestions are ready for review, keeping coverage at {coverage}%. Approve them so your assistant can resolve more on its own.",
+        "ACTION": "Review suggestions",
+        "DISMISS": "Dismiss"
+      },
+      "RANGES": {
+        "INSUFFICIENT_HISTORY": "Not enough reporting history yet",
+        "THIS_WEEK": "This week",
+        "LAST_WEEK": "Last week",
+        "LAST_DAYS": "Last {count} days",
+        "THIS_MONTH": "This month",
+        "LAST_MONTH": "Last month"
+      },
+      "METRICS": {
+        "HANDLED": {
+          "LABEL": "Conversations handled",
+          "HINT": "Conversations where Captain replied to the customer or handed the conversation to your team."
+        },
+        "AUTO_RESOLUTION": {
+          "LABEL": "Auto-resolution rate",
+          "HINT": "The share of handled conversations Captain resolved without help from your team. Higher means Captain resolved more on its own."
+        },
+        "HANDOFF": {
+          "LABEL": "Handoff rate",
+          "HINT": "The share of handled conversations Captain passed to your team. Lower means fewer conversations needed an agent."
+        },
+        "HOURS_SAVED": {
+          "LABEL": "Time saved",
+          "HINT": "An estimate of how much agent reply time Captain saved.",
+          "NOTE": "Based on two minutes saved for each public Captain reply."
+        },
+        "REOPEN": {
+          "LABEL": "Reopen rate",
+          "HINT": "The share of Captain-resolved conversations that customers returned to later.",
+          "NOTE": "Lower means more resolutions stayed resolved."
+        },
+        "DEPTH": {
+          "LABEL": "Messages / conversation",
+          "HINT": "The average number of replies Captain sent in each conversation it handled.",
+          "NOTE": "A lower number can mean quicker answers, but complex questions may need more replies."
+        }
+      },
+      "DRILLDOWN": {
+        "EMPTY": "No records found for this metric.",
+        "ERROR": "Could not load records. Please try again.",
+        "LOAD_MORE": "Load more",
+        "RESULT_COUNT_CONVERSATION": "{count} conversation | {count} conversations"
+      },
+      "KNOWLEDGE": {
+        "TITLE": "Knowledge coverage",
+        "COVERAGE": "{pct}% approved",
+        "APPROVED": "Approved FAQs",
+        "SUGGESTIONS": "FAQ suggestions",
+        "DOCUMENTS": "Mga Dokumento"
+      },
+      "LINKS": {
+        "DOCS": {
+          "TITLE": "Captain docs",
+          "DESCRIPTION": "Guides and how-tos for Captain"
+        },
+        "PLAYGROUND": {
+          "TITLE": "Palaruan",
+          "DESCRIPTION": "Test this assistant's replies"
+        },
+        "BILLING": {
+          "TITLE": "Pagsingil",
+          "DESCRIPTION": "Manage credits and plan"
+        }
+      },
+      "V2": {
+        "DRILLDOWN": {
+          "HANDLED": "Episodes where Captain participated during the selected period.",
+          "RESOLVED": "Episodes resolved by Captain without a handoff or human reply before resolution.",
+          "HANDED_OFF": "Episodes handed off after Captain participated.",
+          "REOPENED": "Captain-resolved episodes that subsequently reopened.",
+          "DURABLE": "Captain-resolved episodes that remained closed for at least seven days.",
+          "CLOSED_WITH_TEAM": "Episodes where Captain participated but neither resolved autonomously nor handed off.",
+          "REOPENED_WITHIN_7_DAYS": "Captain-resolved episodes that reopened within seven days.",
+          "STAYED_CLOSED": "Captain-resolved episodes with no reopen recorded within seven days. Recent resolutions are included.",
+          "HANDOFF_REASON": "Episodes handed off for this reason: {reason}.",
+          "COUNT": "No episodes | 1 episode | {count} episodes",
+          "EPISODES_HINT": "A conversation can appear more than once if Captain handled it in separate episodes. Episodes are grouped by when they started.",
+          "STARTED_AT": "Episode started {time}",
+          "RETRY": "Try again"
+        },
+        "EMPTY": "No data available for this period.",
+        "SUMMARY": {
+          "GREETING": "Hello, {name}!",
+          "DEFAULT_NAME": "there",
+          "EMPTY": "Captain's performance summary will appear here when enough activity is available.",
+          "PREVIOUS": "Previous summary point",
+          "NEXT": "Next summary point"
+        },
+        "UNITS": {
+          "DAYS": "{value}d",
+          "HOURS": "{value}h",
+          "MINUTES": "{value} min"
+        },
+        "METRICS": {
+          "TIME_SAVED": {
+            "LABEL": "Saved in agent effort and time"
+          },
+          "DURABLE": {
+            "LABEL": "Captain resolutions remained closed",
+            "NOT_APPLICABLE_HINT": "No resolutions in this period have seven days of follow-up yet. Durability is unavailable.",
+            "HINT": "The share of Captain-resolved conversations that were still closed seven days later.",
+            "NOTE": "Only resolutions old enough to observe for seven days are included."
+          },
+          "MEDIAN_RESOLUTION": {
+            "LABEL": "Median resolution time",
+            "HINT": "The typical time from when a conversation reached Captain until it was resolved.",
+            "NOTE": "Lower means customers generally got resolved sooner."
+          },
+          "DEPTH": {
+            "LABEL": "Messages per conversation"
+          },
+          "OF_TOTAL": "of {total}"
+        },
+        "RESOLUTION_FLOW": {
+          "ARIA_LABEL": "Flow of handled conversations through Captain and team outcomes",
+          "NODES": {
+            "HANDLED": "Handled",
+            "RESOLVED_BY_CAPTAIN": "Resolved by Captain",
+            "HANDED_OFF": "Handed off",
+            "CLOSED_WITH_TEAM": "Closed with team",
+            "REOPENED": "Reopened in 7d",
+            "STAYED_CLOSED": "Stayed closed",
+            "OTHER_REASONS": "Other reasons"
+          }
+        },
+        "HANDOFF_REASONS": {
+          "TITLE": "Handoff reasons",
+          "CUSTOMER_REQUEST": "Customer requested",
+          "MISSING_KNOWLEDGE": "Missing knowledge",
+          "UNSUPPORTED_REQUEST": "Unsupported request",
+          "POLICY_RESTRICTION": "Policy restriction",
+          "TOOL_FAILURE": "Tool failure",
+          "PENDING_CLARIFICATION": "Pending customer clarification",
+          "PERCENTAGE": "({value}%)",
+          "USAGE_LIMIT": "Usage limit",
+          "UNCLASSIFIED": "Unclassified"
+        },
+        "RESOLUTION_TREND": {
+          "TITLE": "Resolution trend",
+          "COMPARISON_LABEL": "Weekday-aligned comparison",
+          "COMPARISON_HINT": "Compare resolution rates on matching weekdays, such as Monday with Monday.",
+          "COMPARISON_NOTE": "Today is compared up to the same time of day.",
+          "CONVERSATION_COUNT": "Conversation count",
+          "RESOLUTION_RATE": "Resolution rate",
+          "CURRENT_PERIOD": "Current period",
+          "PREVIOUS_PERIOD": "Previous period",
+          "HANDLED": "Handled",
+          "RESOLVED": "Resolved by Captain",
+          "ARIA_LABEL": "Handled and Captain-resolved conversations by reporting period",
+          "RATE_ARIA_LABEL": "Current and previous Captain resolution rates"
+        },
+        "CSAT": {
+          "TITLE": "Captain CSAT",
+          "AUTONOMOUS": "Captain-resolved conversations",
+          "AUTONOMOUS_HINT": "The average customer rating for conversations Captain resolved without help from your team.",
+          "ASSISTED": "Captain-assisted conversations",
+          "ASSISTED_HINT": "The average customer rating when Captain helped before your team resolved the conversation.",
+          "VS_HUMANS": "{value} vs humans"
+        },
+        "USAGE": {
+          "TITLE": "Usage",
+          "CREDITS": "Credits",
+          "DOCUMENTS": "Mga Dokumento",
+          "USED": "({percentage}% used)",
+          "VALUE": "{used}/{total}",
+          "REFRESH": "Refresh usage",
+          "BUY_MORE": "Bumili ng karagdagang kredito"
+        },
+        "KNOWLEDGE": {
+          "SUGGESTED": "Suggested FAQs",
+          "REVIEW": "Review FAQs"
+        }
+      }
+    },
+    "ASSISTANT_SWITCHER": {
+      "ASSISTANTS": "Mga Katulong",
+      "SWITCH_ASSISTANT": "Lumipat sa pagitan ng mga assistant",
+      "NEW_ASSISTANT": "Gumawa ng Assistant",
+      "EMPTY_LIST": "Walang nahanap na mga assistant, mangyaring gumawa ng isa upang makapagsimula."
+    },
+    "COPILOT": {
+      "TITLE": "Copilot",
+      "TRY_THESE_PROMPTS": "Subukan ang mga prompt na ito",
+      "PANEL_TITLE": "Magsimula gamit ang Copilot",
+      "KICK_OFF_MESSAGE": "Kailangan ng mabilis na buod, nais tingnan ang mga nakaraang pag-uusap, o gumawa ng mas magandang sagot? Narito ang Copilot para pabilisin ang mga bagay.",
+      "SEND_MESSAGE": "Magpadala ng mensahe...",
+      "EMPTY_MESSAGE": "Nagkaroon ng error sa pagbuo ng sagot. Pakisubukang muli.",
+      "LOADER": "Nag-iisip si Captain",
+      "YOU": "Ikaw",
+      "USE": "Gamitin ito",
+      "RESET": "I-reset",
+      "NEW_CHAT": "New chat",
+      "HISTORY": "Past chats",
+      "NO_HISTORY": "Your past Copilot chats will appear here.",
+      "LOAD_MORE": "Load more chats",
+      "LOADING_CHAT": "Loading chat...",
+      "LOADING_HISTORY": "Loading past chats...",
+      "SHOW_STEPS": "Ipakita ang mga hakbang",
+      "SELECT_ASSISTANT": "Pumili ng Assistant",
+      "PROMPTS": {
+        "SUMMARIZE": {
+          "LABEL": "Ibuod ang pag-uusap na ito",
+          "CONTENT": "Ibuod ang mga pangunahing punto na tinalakay sa pagitan ng customer at ng support agent, kabilang ang mga alalahanin ng customer, mga tanong, at ang mga solusyon o tugon na ibinigay ng support agent"
+        },
+        "SUGGEST": {
+          "LABEL": "Magmungkahi ng sagot",
+          "CONTENT": "Suriin ang tanong ng customer, at gumawa ng draft ng sagot na epektibong tinutugunan ang kanilang mga alalahanin o tanong. Siguraduhing malinaw, maikli, at nagbibigay ng kapaki-pakinabang na impormasyon ang sagot."
+        },
+        "RATE": {
+          "LABEL": "I-rate ang pag-uusap",
+          "CONTENT": "Suriin ang pag-uusap upang makita kung gaano ito kahusay na natutugunan ang pangangailangan ng customer. Magbigay ng rating mula 1 hanggang 5 batay sa tono, kalinawan, at bisa."
+        },
+        "HIGH_PRIORITY": {
+          "LABEL": "Mga usapang may mataas na prayoridad",
+          "CONTENT": "Bigyan ako ng buod ng lahat ng mataas na prayoridad na bukas na pag-uusap. Isama ang conversation ID, pangalan ng customer (kung mayroon), nilalaman ng huling mensahe, at naka-assign na ahente. I-grupo ayon sa status kung naaangkop."
+        },
+        "LIST_CONTACTS": {
+          "LABEL": "Ilista ang mga kontak",
+          "CONTENT": "Ipakita sa akin ang listahan ng nangungunang 10 mga contact. Isama ang pangalan, email o numero ng telepono (kung mayroon), huling oras na nakita, mga tag (kung mayroon)."
+        }
+      }
+    },
+    "PLAYGROUND": {
+      "USER": "Ikaw",
+      "ASSISTANT": "Katulong",
+      "MESSAGE_PLACEHOLDER": "I-type ang iyong mensahe...",
+      "SEND_MESSAGE": "Ipadala ang mensahe",
+      "HEADER": "Palaruan",
+      "DESCRIPTION": "Gamitin ang playground na ito upang magpadala ng mga mensahe sa iyong assistant at suriin kung ito ay tumutugon nang tumpak, mabilis, at sa inaasahang tono.",
+      "CREDIT_NOTE": "Ang mga mensaheng ipinadala dito ay bibilangin para sa iyong Captain credits.",
+      "CLEAR_CONVERSATION": "Clear conversation",
+      "RESPONSE_ERROR": "Captain could not complete this test run. Review the setup and try again.",
+      "SETUP": {
+        "TITLE": "Test setup",
+        "DESCRIPTION": "Changes here apply only to this playground session unless you explicitly save an item.",
+        "TOGGLE": "Toggle test setup",
+        "CLOSE": "Close test setup",
+        "RESET": "Reset test setup",
+        "TEMPORARY": "Temporary",
+        "SESSION_ONLY": "Session only",
+        "INCLUDE_IN_TEST": "Include in this test",
+        "ADD_TO_TEST": "Add to test (↵)",
+        "LOAD_ERROR": "The saved assistant setup could not be loaded.",
+        "INVALID_CONFIGURATION": "Complete or remove the included temporary scenarios before sending a message.",
+        "SAVE_SCENARIO_SUCCESS": "The scenario was saved and remains included in this test.",
+        "SAVE_SCENARIO_ERROR": "The scenario could not be saved.",
+        "SAVE_RULE_SUCCESS": "The rule was saved and remains included in this test.",
+        "SAVE_RULE_ERROR": "The rule could not be saved.",
+        "RULE_ALREADY_SAVED": "That exact rule is already saved, so no duplicate was created.",
+        "SCENARIOS": {
+          "TAB_TITLE": "Scenarios",
+          "CREATE_TITLE": "Add a temporary scenario",
+          "CREATE_HINT": "Try a new behavior without changing the assistant configuration.",
+          "SAVED_SUMMARY": "Existing scenarios ({count})",
+          "ADD_PERMANENTLY": "Add scenario permanently",
+          "DISABLED": "Hindi Pinagana",
+          "EMPTY": "This assistant has no saved scenarios.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary scenario title...",
+          "COLLAPSE": "Collapse temporary scenario",
+          "EXPAND": "Expand temporary scenario",
+          "REMOVE": "Remove temporary scenario"
+        },
+        "GUIDELINES": {
+          "TAB_TITLE": "Guidelines",
+          "CREATE_TITLE": "Add a temporary guideline",
+          "CREATE_HINT": "Test a response preference before adding it to the assistant.",
+          "SAVED_SUMMARY": "Existing guidelines ({count})",
+          "ADD_PERMANENTLY": "Add guideline permanently",
+          "EMPTY": "This assistant has no saved response guidelines.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary guideline...",
+          "PLACEHOLDER": "Magdagdag ng patnubay sa tugon",
+          "REMOVE": "Remove temporary response guideline"
+        },
+        "GUARDRAILS": {
+          "TAB_TITLE": "Mga Pananggalang",
+          "CREATE_TITLE": "Add a temporary guardrail",
+          "CREATE_HINT": "Test a safety boundary before adding it to the assistant.",
+          "SAVED_SUMMARY": "Existing guardrails ({count})",
+          "ADD_PERMANENTLY": "Add guardrail permanently",
+          "EMPTY": "This assistant has no saved guardrails.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary guardrail...",
+          "PLACEHOLDER": "Magdagdag ng pananggalang",
+          "REMOVE": "Remove temporary guardrail"
+        },
+        "KNOWLEDGE": {
+          "TAB_TITLE": "Knowledge",
+          "AVAILABLE_TITLE": "Knowledge available to Captain",
+          "AVAILABLE_DESCRIPTION": "Saved sources are summarized here and managed outside the playground.",
+          "DOCUMENTS": "Mga Dokumento",
+          "FAQS": "Mga Madalas Itanong",
+          "TEMPORARY_TITLE": "Temporary knowledge",
+          "ADD_PERMANENTLY": "Add document permanently",
+          "LABEL": "Reference text",
+          "PLACEHOLDER": "Paste or write new knowledge for this test",
+          "HINT": "This text is attached only to playground requests unless you add it as a document."
+        },
+        "SAVE_KNOWLEDGE_SUCCESS": "Knowledge added as a document.",
+        "SAVE_KNOWLEDGE_ERROR": "Unable to add knowledge as a document."
+      },
+      "RUN_DETAILS": {
+        "SUMMARY": "Run details · {duration}ms",
+        "HANDLER_VALUE": "Handled by: {handler}",
+        "SCENARIOS": "No scenarios | One scenario | {count} scenarios",
+        "RULES": "{count} rules",
+        "KNOWLEDGE_ATTACHED": "Temporary knowledge was attached to this run.",
+        "NO_EVENTS": "No tool calls or scenario handoffs were recorded.",
+        "HANDOFF": "{from} → {to}",
+        "STATUS": {
+          "RUNNING": "Running",
+          "COMPLETED": "Completed",
+          "FAILED": "Nabigo"
+        }
+      }
+    },
+    "PAYWALL": {
+      "TITLE": "Mag-upgrade para magamit ang Captain AI",
+      "AVAILABLE_ON": "Hindi available ang Captain sa libreng plano.",
+      "UPGRADE_PROMPT": "I-upgrade ang iyong plano para ma-access ang aming mga assistant, copilot at iba pa.",
+      "UPGRADE_NOW": "Mag-upgrade ngayon",
+      "CANCEL_ANYTIME": "Maaari mong baguhin o kanselahin ang iyong plano anumang oras"
+    },
+    "ENTERPRISE_PAYWALL": {
+      "AVAILABLE_ON": "Ang Captain AI ay available lamang sa mga Enterprise na plano.",
+      "UPGRADE_PROMPT": "I-upgrade ang iyong plano para ma-access ang aming mga assistant, copilot at iba pa.",
+      "ASK_ADMIN": "Mangyaring makipag-ugnayan sa iyong administrator para sa pag-upgrade."
+    },
+    "BANNER": {
+      "RESPONSES": "Ginamit mo na ang mahigit 80% ng iyong limitasyon sa mga tugon. Upang magpatuloy sa paggamit ng Captain AI, pakigawa ng pag-upgrade.",
+      "DOCUMENTS": "Naabot na ang limit ng dokumento. Mag-upgrade upang magpatuloy sa paggamit ng Captain AI."
+    },
+    "FORM": {
+      "CANCEL": "Kanselahin",
+      "CREATE": "Gumawa",
+      "EDIT": "I-update"
+    },
+    "ASSISTANTS": {
+      "HEADER": "Mga Katulong",
+      "NO_ASSISTANTS_AVAILABLE": "Walang magagamit na mga assistant sa iyong account.",
+      "ADD_NEW": "Gumawa ng bagong katulong",
+      "DELETE": {
+        "TITLE": "Sigurado ka bang tatanggalin ang katulong?",
+        "DESCRIPTION": "This action is permanent. Deleting this assistant will remove it from all connected inboxes and permanently erase its custom tools and all generated knowledge.",
+        "CONFIRM": "Oo, tanggalin",
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang katulong",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagtanggal ng assistant, pakisubukang muli."
+      },
+      "FORM_DESCRIPTION": "Punan ang mga detalye sa ibaba upang pangalanan ang iyong assistant, ilarawan ang layunin nito, at tukuyin ang produktong susuportahan nito.",
+      "CREATE": {
+        "TITLE": "Gumawa ng katulong",
+        "SUCCESS_MESSAGE": "Matagumpay na nagawa ang katulong",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa paglikha ng assistant, pakisubukang muli."
+      },
+      "FORM": {
+        "UPDATE": "I-update",
+        "SECTIONS": {
+          "BASIC_INFO": "Pangunahing Impormasyon",
+          "SYSTEM_MESSAGES": "Mga Mensahe ng Sistema",
+          "INSTRUCTIONS": "Mga Tagubilin",
+          "FEATURES": "Mga Tampok",
+          "TOOLS": "Mga Kasangkapan "
+        },
+        "NAME": {
+          "LABEL": "Pangalan",
+          "PLACEHOLDER": "Ilagay ang pangalan ng assistant",
+          "ERROR": "Kinakailangan ang pangalan"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Paglalarawan",
+          "PLACEHOLDER": "Ilagay ang paglalarawan ng assistant",
+          "ERROR": "Kinakailangan ang paglalarawan"
+        },
+        "PRODUCT_NAME": {
+          "LABEL": "Pangalan ng Produkto",
+          "PLACEHOLDER": "Ilagay ang pangalan ng produkto",
+          "ERROR": "Kinakailangan ang pangalan ng produkto"
+        },
+        "WELCOME_MESSAGE": {
+          "LABEL": "Mensahe ng Maligayang Pagdating",
+          "PLACEHOLDER": "Ilagay ang mensahe ng maligayang pagdating"
+        },
+        "HANDOFF_MESSAGE": {
+          "LABEL": "Handoff message",
+          "PLACEHOLDER": "Ilagay ang mensahe ng paghahatid"
+        },
+        "RESOLUTION_MESSAGE": {
+          "LABEL": "Mensahe ng Resolusyon",
+          "PLACEHOLDER": "Ilagay ang mensahe ng resolusyon"
+        },
+        "INACTIVITY_RESOLUTION": {
+          "TITLE": "When customers stop replying",
+          "DESCRIPTION": "Choose how Captain handles the conversation.",
+          "MODE_LABEL": "Action when the customer stops replying",
+          "REVIEW_AFTER": "Review after",
+          "RESOLVE_AFTER": "Resolve after",
+          "ALWAYS_WARNING": "Captain will resolve every conversation after the selected time without reviewing it. Some conversations that still need help may be closed.",
+          "PENDING_INFO": "The conversation remains pending until the customer replies.",
+          "RESOLUTION_MESSAGE": {
+            "TITLE": "Send a message when resolving",
+            "DESCRIPTION": "Captain sends this closing message before it resolves the conversation."
+          },
+          "MODES": {
+            "DISABLED": {
+              "LABEL": "Wait for the customer",
+              "DESCRIPTION": "Captain does not resolve the conversation. Captain can still hand it off if the customer asks."
+            },
+            "LEGACY": {
+              "LABEL": "Always resolve",
+              "DESCRIPTION": "Captain resolves every conversation after the selected time."
+            },
+            "EVALUATED": {
+              "LABEL": "Let Captain review it (recommended)",
+              "DESCRIPTION": "Captain decides whether to resolve the conversation or hand it off."
+            }
+          },
+          "DURATION_HOURS_ARIA_LABEL": "Hours before action",
+          "DURATION_MINUTES_ARIA_LABEL": "Minutes before action",
+          "DURATION_HOURS_SHORT": "{count} h",
+          "DURATION_MINUTES_SHORT": "{count} min"
+        },
+        "INSTRUCTIONS": {
+          "LABEL": "Mga Tagubilin",
+          "PLACEHOLDER": "Ilagay ang mga tagubilin para sa assistant"
+        },
+        "FEATURES": {
+          "TITLE": "Mga Tampok",
+          "ALLOW_CONVERSATION_FAQS": "Gumawa ng FAQs mula sa mga nalutas na pag-uusap",
+          "ALLOW_MEMORIES": "Kuhain ang mahahalagang detalye bilang mga alaala mula sa mga interaksyon ng customer.",
+          "ALLOW_CITATIONS": "Isama ang mga sanggunian ng pinagmulan sa mga sagot",
+          "ALLOW_CONTACT_ATTRIBUTES": "Allow access to contact information"
+        },
+        "AUDIENCE": {
+          "EVERYONE": {
+            "LABEL": "Everyone",
+            "DESC": "Captain responds to every conversation in connected inboxes."
+          },
+          "SPECIFIC": {
+            "LABEL": "Specific audience",
+            "DESC": "Captain responds only to customers who match the conditions below."
+          },
+          "ADD_CONDITION": "Add condition",
+          "ADD_GROUP": "Add condition group",
+          "EMPTY_TITLE": "No conditions yet",
+          "EMPTY_BODY": "Add a condition to target specific customers, or a condition group to combine conditions with different and/or logic.",
+          "EMPTY_ERROR": "Add at least one condition for a specific audience.",
+          "MATCH_PREFIX": "Match",
+          "MATCH_SUFFIX": "of the following",
+          "MATCH_ALL": "lahat",
+          "MATCH_ANY": "any",
+          "GROUP_CONTACT": "Contact attributes",
+          "GROUP_CONVERSATION": "Conversation",
+          "GROUP_CUSTOM": "Custom attributes",
+          "BROWSER_LANGUAGE": "Browser language",
+          "CONVERSATION_LANGUAGE": "First message language",
+          "LOGGED_IN": "Logged-in user",
+          "LOGGED_IN_TRUE": "Oo",
+          "LOGGED_IN_FALSE": "Hindi"
+        },
+        "SCHEDULE": {
+          "ALWAYS": {
+            "LABEL": "Anytime",
+            "DESC": "Captain responds to every conversation, regardless of time."
+          },
+          "BUSINESS_HOURS": {
+            "LABEL": "During business hours",
+            "DESC": "Captain responds only within each inbox's business hours."
+          },
+          "OUTSIDE_BUSINESS_HOURS": {
+            "LABEL": "Outside business hours",
+            "DESC": "Captain responds only when each inbox is closed."
+          },
+          "HINT": "Inboxes without business hours configured are always covered."
+        }
+      },
+      "EDIT": {
+        "TITLE": "I-update ang assistant",
+        "SUCCESS_MESSAGE": "Matagumpay na na-update ang assistant",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pag-update ng assistant, pakisubukang muli.",
+        "NOT_FOUND": "Hindi mahanap ang assistant. Pakisubukang muli."
+      },
+      "SETTINGS": {
+        "HEADER": "Mga Setting",
+        "BASIC_SETTINGS": {
+          "TITLE": "Pangunahing mga setting",
+          "DESCRIPTION": "I-customize kung ano ang sinasabi ng assistant kapag nagtatapos ng pag-uusap o naglilipat sa isang tao."
+        },
+        "SYSTEM_SETTINGS": {
+          "TITLE": "Mga setting ng sistema",
+          "DESCRIPTION": "I-customize kung ano ang sinasabi ng assistant kapag nagtatapos ng pag-uusap o naglilipat sa isang tao.",
+          "DESCRIPTION_V2": "Manage what Captain does when customers stop replying and set the handoff message."
+        },
+        "AUDIENCE": {
+          "TITLE": "Audience",
+          "DESCRIPTION": "Choose whether this assistant responds to everyone or only to a specific audience."
+        },
+        "SCHEDULE": {
+          "TITLE": "Schedule",
+          "DESCRIPTION": "Choose when Captain replies. Outside this window, conversations are handed to your team."
+        },
+        "CONTROL_ITEMS": {
+          "TITLE": "Ang Masayang Bagay",
+          "DESCRIPTION": "Magdagdag ng higit pang kontrol sa assistant. (medyo mas visual na parang kwento: Query guardrail → mga senaryo → output) Hinikayat ang user na gamitin talaga ito.",
+          "OPTIONS": {
+            "GUARDRAILS": {
+              "TITLE": "Mga Pananggalang",
+              "DESCRIPTION": "Pinananatiling nasa tamang landas—tanging mga uri ng tanong na gusto mong sagutin ng assistant mo, walang labas sa limitasyon o off-topic."
+            },
+            "RESPONSE_GUIDELINES": {
+              "TITLE": "Mga patnubay sa tugon",
+              "DESCRIPTION": "Ang tono at estruktura ng mga sagot ng iyong katulong—malinaw at magiliw? Maikli at matalim? Detalyado at pormal?"
+            }
+          }
+        },
+        "DELETE": {
+          "TITLE": "Tanggalin ang Katulong",
+          "DESCRIPTION": "This action is permanent. Deleting this assistant will remove it from all connected inboxes and permanently erase its custom tools and all generated knowledge.",
+          "BUTTON_TEXT": "Tanggalin si {assistantName}"
+        }
+      },
+      "OPTIONS": {
+        "EDIT_ASSISTANT": "I-edit ang Assistant",
+        "DELETE_ASSISTANT": "Tanggalin ang Katulong",
+        "VIEW_CONNECTED_INBOXES": "Tingnan ang mga nakakonektang inbox"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Walang mga assistant na magagamit",
+        "SUBTITLE": "Gumawa ng assistant upang magbigay ng mabilis at tumpak na mga tugon sa iyong mga user. Maaari itong matuto mula sa iyong mga help article at mga nakaraang pag-uusap.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain Assistant",
+          "NOTE": "Direktang nakikipag-ugnayan ang Captain Assistant sa mga customer, natututo mula sa iyong mga dokumento ng tulong at mga nakaraang usapan, at nagbibigay ng agarang, tumpak na mga sagot. Hinahawakan nito ang mga unang tanong, nagbibigay ng mabilis na solusyon bago ilipat sa isang ahente kung kinakailangan."
+        }
+      },
+      "GUARDRAILS": {
+        "TITLE": "Mga Pananggalang",
+        "DESCRIPTION": "Pinananatiling nasa tamang landas—tanging mga uri ng tanong na gusto mong sagutin ng assistant mo, walang labas sa limitasyon o off-topic.",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Piliin lahat ({count})",
+          "UNSELECT_ALL": "Alisin ang pagpili sa lahat ({count})",
+          "BULK_DELETE_BUTTON": "Tanggalin"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Mga halimbawa ng pananggalang",
+            "ADD": "Idagdag lahat",
+            "ADD_SINGLE": "Idagdag ito",
+            "SAVE": "Magdagdag at i-save (↵)",
+            "PLACEHOLDER": "Mag-type ng panibagong guardrail..."
+          },
+          "NEW": {
+            "TITLE": "Magdagdag ng pananggalang",
+            "CREATE": "Gumawa",
+            "CANCEL": "Kanselahin",
+            "PLACEHOLDER": "Mag-type ng panibagong guardrail...",
+            "TEST_ALL": "Subukan lahat"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Maghanap..."
+        },
+        "EMPTY_MESSAGE": "Walang natagpuang mga pananggalang. Gumawa o magdagdag ng mga halimbawa upang magsimula.",
+        "SEARCH_EMPTY_MESSAGE": "No guardrails found for this search.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Matagumpay na naidagdag ang mga guardrail",
+            "ERROR": "Nagkaroon ng error sa pagdagdag ng mga guardrail, pakisubukang muli."
+          },
+          "UPDATE": {
+            "SUCCESS": "Matagumpay na na-update ang guardrails",
+            "ERROR": "Nagkaroon ng error sa pag-update ng mga guardrail, pakisubukang muli."
+          },
+          "DELETE": {
+            "SUCCESS": "Matagumpay na natanggal ang mga pananggalang",
+            "ERROR": "Nagkaroon ng error sa pagtanggal ng guardrails, pakisubukang muli."
+          }
+        }
+      },
+      "RESPONSE_GUIDELINES": {
+        "TITLE": "Mga Patnubay sa Tugon",
+        "DESCRIPTION": "Ang tono at estruktura ng mga sagot ng iyong katulong—malinaw at magiliw? Maikli at matalim? Detalyado at pormal?",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Piliin lahat ({count})",
+          "UNSELECT_ALL": "Alisin ang pagpili sa lahat ({count})",
+          "BULK_DELETE_BUTTON": "Tanggalin"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Mga halimbawa ng patnubay sa tugon",
+            "ADD": "Idagdag lahat",
+            "ADD_SINGLE": "Idagdag ito",
+            "SAVE": "Idagdag at i-save (↵)",
+            "PLACEHOLDER": "Mag-type ng isa pang patnubay sa tugon..."
+          },
+          "NEW": {
+            "TITLE": "Magdagdag ng patnubay sa tugon",
+            "CREATE": "Gumawa",
+            "CANCEL": "Kanselahin",
+            "PLACEHOLDER": "Mag-type ng isa pang patnubay sa tugon...",
+            "TEST_ALL": "Subukan lahat"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Maghanap..."
+        },
+        "EMPTY_MESSAGE": "Walang natagpuang patnubay sa tugon. Gumawa o magdagdag ng mga halimbawa upang magsimula.",
+        "SEARCH_EMPTY_MESSAGE": "Walang natagpuang patnubay sa tugon para sa paghahanap na ito.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Matagumpay na naidagdag ang mga Patnubay sa Tugon",
+            "ERROR": "Nagkaroon ng error sa pagdagdag ng mga patnubay sa tugon, pakisubukang muli."
+          },
+          "UPDATE": {
+            "SUCCESS": "Response Guidelines updated successfully",
+            "ERROR": "There was an error updating response guidelines, please try again."
+          },
+          "DELETE": {
+            "SUCCESS": "Matagumpay na natanggal ang mga Patnubay sa Tugon",
+            "ERROR": "There was an error deleting response guidelines, please try again."
+          }
+        }
+      },
+      "SCENARIOS": {
+        "TITLE": "Scenarios",
+        "DESCRIPTION": "Bigyan ang assistant ng konteksto—tulad ng “ano ang gagawin kapag na-stuck ang user,” o “paano kumilos sa panahon ng kahilingan sa refund.”",
+        "BULK_ACTION": {
+          "SELECTED": "{count} item selected | {count} items selected",
+          "SELECT_ALL": "Piliin lahat ({count})",
+          "UNSELECT_ALL": "Alisin ang lahat ng pagpili ({count})",
+          "BULK_DELETE_BUTTON": "Tanggalin"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "Example scenarios",
+            "ADD": "Idagdag lahat",
+            "ADD_SINGLE": "Idagdag ito",
+            "TOOLS_USED": "Tools used :"
+          },
+          "NEW": {
+            "CREATE": "Add a scenario",
+            "TITLE": "Create a scenario",
+            "FORM": {
+              "TITLE": {
+                "LABEL": "Pamagat",
+                "PLACEHOLDER": "Enter a name for the scenario",
+                "ERROR": "Scenario name is required"
+              },
+              "DESCRIPTION": {
+                "LABEL": "Paglalarawan",
+                "PLACEHOLDER": "Describe how and where this scenario will be used",
+                "ERROR": "Scenario description is required"
+              },
+              "INSTRUCTION": {
+                "LABEL": "Paano haharapin",
+                "PLACEHOLDER": "Describe how and where this scenario will be handled",
+                "ERROR": "Scenario content is required"
+              },
+              "CREATE": "Gumawa",
+              "CANCEL": "Kanselahin"
+            }
+          }
+        },
+        "UPDATE": {
+          "CANCEL": "Kanselahin",
+          "UPDATE": "Update changes"
+        },
+        "STATUS": {
+          "ENABLED": "Pinagana",
+          "DISABLED": "Hindi Pinagana",
+          "TOGGLE": "Toggle {title}"
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "Maghanap..."
+        },
+        "EMPTY_MESSAGE": "Walang nahanap na mga senaryo. Gumawa o magdagdag ng mga halimbawa upang magsimula.",
+        "SEARCH_EMPTY_MESSAGE": "Walang nahanap na senaryo para sa paghahanap na ito.",
+        "API": {
+          "ADD": {
+            "SUCCESS": "Scenarios added successfully",
+            "ERROR": "There was an error adding scenarios, please try again."
+          },
+          "UPDATE": {
+            "SUCCESS": "Scenarios updated successfully",
+            "ERROR": "There was an error updating scenarios, please try again."
+          },
+          "TOGGLE": {
+            "ENABLED": "Scenario enabled successfully",
+            "DISABLED": "Scenario disabled successfully",
+            "ERROR": "There was an error updating the scenario status, please try again."
+          },
+          "DELETE": {
+            "SUCCESS": "Scenarios deleted successfully",
+            "ERROR": "There was an error deleting scenarios, please try again."
+          }
+        }
+      }
+    },
+    "DOCUMENTS": {
+      "HEADER": "Mga Dokumento",
+      "ADD_NEW": "Gumawa ng bagong dokumento",
+      "FAQ_COUNT": "{n} FAQ | {n} FAQs",
+      "USED_IN_CONVERSATIONS": "Used in {n} conversation | Used in {n} conversations",
+      "NO_USED_CONVERSATIONS": "No conversations found for this document.",
+      "SELECTED": "{count} napili",
+      "SELECT_ALL": "Piliin lahat ({count})",
+      "UNSELECT_ALL": "Alisin ang pagpili sa lahat ({count})",
+      "BULK_DELETE_BUTTON": "Delete",
+      "BULK_SYNC_BUTTON": "Refresh",
+      "BULK_DELETE": {
+        "TITLE": "Delete documents?",
+        "DESCRIPTION": "Are you sure you want to delete the selected documents? This action cannot be undone.",
+        "CONFIRM": "Oo, tanggalin lahat",
+        "SUCCESS_MESSAGE": "Documents deleted successfully",
+        "ERROR_MESSAGE": "There was an error deleting the documents, please try again."
+      },
+      "BULK_SYNC": {
+        "SUCCESS_MESSAGE_ONE": "Refresh queued for 1 document",
+        "SUCCESS_MESSAGE": "Refresh queued for {count} documents",
+        "ZERO_MESSAGE": "No documents marked for refresh.",
+        "ERROR_MESSAGE": "There was an error queuing the refresh, please try again."
+      },
+      "SYNC": {
+        "QUEUED_MESSAGE": "Refresh queued. We'll update the document shortly.",
+        "ERROR_MESSAGE": "Could not queue refresh, please try again."
+      },
+      "FILTERS": {
+        "SOURCE": {
+          "ALL": "All sources",
+          "WEB": "Web pages",
+          "PDF": "PDFs"
+        },
+        "STATUS": {
+          "ANY": "Any status",
+          "UPDATED": "Updated",
+          "NEEDS_UPDATE": "Needs update",
+          "UPDATING": "Updating",
+          "FAILED": "Nabigo"
+        },
+        "SORT": {
+          "RECENTLY_UPDATED": "Recently updated",
+          "RECENTLY_CREATED": "Recently created",
+          "MOST_USED": "Most used in conversations"
+        },
+        "SEARCH_PLACEHOLDER": "Search..."
+      },
+      "SYNC_STATUS": {
+        "SYNCED": "last updated {time}",
+        "SYNCING": "updating...",
+        "STALE_SYNC": "update stalled",
+        "FAILED": "Failed to sync",
+        "NEVER_SYNCED": "not updated yet"
+      },
+      "SYNC_ERRORS": {
+        "NOT_FOUND": "Hindi makita ang pahina",
+        "ACCESS_DENIED": "Access denied",
+        "TIMEOUT": "Page took too long to respond",
+        "CONTENT_EMPTY": "Page returned empty content",
+        "FETCH_FAILED": "Could not fetch page",
+        "SYNC_ERROR": "Unexpected error",
+        "DEFAULT": "Sync error"
+      },
+      "RELATED_RESPONSES": {
+        "TITLE": "Mga Kaugnay na FAQ",
+        "EMPTY": "No FAQs have been generated from this document yet."
+      },
+      "DETAILS": {
+        "DESCRIPTION": "Review the crawled content and the FAQs generated from this source.",
+        "SOURCE": "Source",
+        "GENERATED_FAQS": "Generated FAQs",
+        "USED_IN_CONVERSATIONS": "Used in conversations",
+        "LAST_UPDATED": "Last updated",
+        "NOT_AVAILABLE": "Not available",
+        "CONTENT_TAB": "Crawled content",
+        "PDF_TAB": "PDF details",
+        "CONTENT_TITLE": "Crawled content",
+        "PDF_TITLE": "PDF file",
+        "PDF_DESCRIPTION": "Review the original PDF source.",
+        "CHARACTER_COUNT": "{count} characters extracted",
+        "COPY_CONTENT": "Kopyahin",
+        "COPY_SUCCESS": "Crawled content copied to clipboard",
+        "COPY_ERROR": "Could not copy crawled content",
+        "VIEW_RAW": "View raw",
+        "VIEW_PREVIEW": "View preview",
+        "UNREADABLE_CONTENT": "Readable content could not be extracted from this document. You can view the raw extracted content.",
+        "EMPTY_CONTENT": "No crawled content is available for this document yet."
+      },
+      "FORM_DESCRIPTION": "Ilagay ang URL ng dokumento upang idagdag ito bilang pinagkukunan ng kaalaman at piliin ang assistant na iuugnay dito.",
+      "CREATE": {
+        "TITLE": "Magdagdag ng dokumento",
+        "SUCCESS_MESSAGE": "Matagumpay na nagawa ang dokumento",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa paglikha ng dokumento, pakisubukang muli."
+      },
+      "FORM": {
+        "TYPE": {
+          "LABEL": "Uri ng Dokumento",
+          "URL": "URL",
+          "PDF": "PDF File"
+        },
+        "URL": {
+          "LABEL": "URL",
+          "PLACEHOLDER": "Ilagay ang URL ng dokumento",
+          "ERROR": "Mangyaring magbigay ng wastong URL para sa dokumento"
+        },
+        "PDF_FILE": {
+          "LABEL": "PDF File",
+          "CHOOSE_FILE": "Choose PDF file",
+          "ERROR": "Please select a PDF file",
+          "HELP_TEXT": "Pinakamalaking sukat ng file: 10MB",
+          "INVALID_TYPE": "Please select a valid PDF file",
+          "TOO_LARGE": "Lumampas ang sukat ng file sa limitasyong 10MB"
+        },
+        "NAME": {
+          "LABEL": "Document Name (Optional)",
+          "PLACEHOLDER": "Ilagay ang pangalan para sa dokumento"
+        }
+      },
+      "DELETE": {
+        "TITLE": "Sigurado ka bang tatanggalin ang dokumento?",
+        "DESCRIPTION": "Pangmatagalang aksyon ito. Ang pagtanggal sa dokumentong ito ay permanenteng aalisin ang lahat ng nabuong kaalaman.",
+        "CONFIRM": "Oo, tanggalin",
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang dokumento",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagtanggal ng dokumento, pakisubukang muli."
+      },
+      "OPTIONS": {
+        "VIEW_DETAILS": "Tingnan ang mga detalye",
+        "SYNC_NOW": "Refresh now",
+        "RETRY_SYNC": "Retry refresh",
+        "DELETE_DOCUMENT": "Tanggalin ang Dokumento"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Walang magagamit na mga dokumento",
+        "SUBTITLE": "Ginagamit ng iyong assistant ang mga dokumento para gumawa ng FAQs. Maaari kang mag-import ng mga dokumento upang magbigay ng konteksto para sa iyong assistant.",
+        "FILTERED_TITLE": "No matching documents",
+        "FILTERED_SUBTITLE": "Try changing the source, status, or search term.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain Document",
+          "NOTE": "Ang isang dokumento sa Captain ay nagsisilbing pinagkukunan ng kaalaman para sa assistant. Sa pamamagitan ng pagkonekta ng iyong help center o mga gabay, maaaring suriin ni Captain ang nilalaman at magbigay ng tumpak na mga sagot para sa mga tanong ng customer."
+        }
+      }
+    },
+    "CUSTOM_TOOLS": {
+      "HEADER": "Mga Kasangkapan",
+      "ADD_NEW": "Gumawa ng bagong kasangkapan",
+      "CATALOG": {
+        "BUTTON": "Tools Catalog",
+        "HEADER": "Tools Catalog",
+        "DESCRIPTION": "Browse toolsets from the Captain tools catalog and install them on this assistant.",
+        "ALL": "All",
+        "EMPTY": "No toolsets in this category yet.",
+        "LOAD_ERROR": "Could not load the tools catalog. Check the catalog URL in the Captain settings.",
+        "TOOL_COUNT": "{n} tool | {n} tools",
+        "VERSION": "v{version}",
+        "UPDATED": "Updated {time}",
+        "REPOSITORY": "Repository",
+        "MANIFEST": "Manifest",
+        "CONFIGURATION": "Konpigurasyon",
+        "REQUIRED": "Kinakailangan",
+        "DETAILS_ERROR": "Could not load the toolset details.",
+        "INSTALLED": "Installed",
+        "UPDATE_AVAILABLE": "Update available"
+      },
+      "INSTALL_LINK": {
+        "TITLE": "Choose an assistant",
+        "DESCRIPTION": "Pick the assistant to install this toolset on.",
+        "PLACEHOLDER": "Select an assistant",
+        "LOAD_ERROR": "Could not load your assistants. Reload the page to try again."
+      },
+      "INSTALL_MANIFEST": {
+        "TITLE": "Install a toolset",
+        "DESCRIPTION": "Install a toolset from the Captain tools catalog.",
+        "VERSION_LABEL": "v{version} · {revision}",
+        "UPDATE_NOTE": "A different version is installed. Updating replaces its tools and keeps whether each one is enabled. Enter the secrets again.",
+        "TOOLS_LABEL": "Mga Kasangkapan",
+        "CONFIGURATION_LABEL": "Konpigurasyon",
+        "CONTINUE": "Magpatuloy",
+        "INSTALL": "Install",
+        "UPDATE": "I-update",
+        "REINSTALL": "Reinstall",
+        "REINSTALL_NOTE": "Some tools from this toolset were deleted. Reinstalling adds them back and keeps whether each one is enabled. Enter the secrets again.",
+        "ALREADY_INSTALLED": "Already installed",
+        "SUCCESS_MESSAGE": "Toolset installed",
+        "ERROR_MESSAGE": "Could not install the toolset",
+        "PREVIEW_ERROR": "Could not load the toolset"
+      },
+      "ASSISTANT_TOOLS_BANNER": {
+        "MESSAGE": "Custom tools are now managed per assistant. Switch assistants to customize their tools.",
+        "LEARN_MORE": "Learn more",
+        "DISMISS": "Dismiss announcement",
+        "MODAL_TITLE": "Your assistants now have their own tools",
+        "MODAL_DESCRIPTION": "Each assistant now has a separate list of custom tools. We copied your existing tools to every assistant, so nothing is missing.",
+        "MODAL_INSTRUCTIONS": "When you add, edit, turn off, or delete a tool, the change applies only to the assistant you're currently viewing. Switch assistants at the top of the page to review or customize their tools.",
+        "ACKNOWLEDGE": "Got it"
+      },
+      "SOFT_LIMIT_WARNING": "Having more than 10 tools may reduce the assistant's reliability in selecting the right tool. Consider removing unused tools for better results.",
+      "EMPTY_STATE": {
+        "TITLE": "Walang magagamit na pasadyang mga kasangkapan",
+        "SUBTITLE": "Gumawa ng mga pasadyang kasangkapan upang ikonekta ang iyong katulong sa mga panlabas na API at serbisyo, na nagbibigay-daan dito na kumuha ng data at magsagawa ng mga aksyon para sa iyo.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Mga Pasadyang Kasangkapan",
+          "NOTE": "Pinapayagan ng mga pasadyang kasangkapan ang iyong katulong na makipag-ugnayan sa mga panlabas na API at serbisyo. Gumawa ng mga kasangkapan upang kumuha ng data, magsagawa ng mga aksyon, o maisama sa iyong mga umiiral na sistema upang mapahusay ang kakayahan ng iyong katulong."
+        }
+      },
+      "FORM_DESCRIPTION": "I-configure ang iyong pasadyang kasangkapan upang kumonekta sa mga panlabas na API",
+      "OPTIONS": {
+        "EDIT_TOOL": "Edit tool",
+        "VIEW_TOOL": "View tool",
+        "DELETE_TOOL": "Tanggalin ang kasangkapan"
+      },
+      "STATUS": {
+        "ENABLED": "Pinagana",
+        "DISABLED": "Hindi Pinagana",
+        "TOGGLE": "Toggle {title}"
+      },
+      "TOGGLE": {
+        "ENABLED": "Tool enabled successfully",
+        "DISABLED": "Tool disabled successfully",
+        "ERROR": "Failed to update tool status"
+      },
+      "DISABLE_CONFIRMATION": {
+        "TITLE": "Disable {title}?",
+        "DESCRIPTION_ONE": "This tool is used by {count} enabled scenario. Disabling it may cause that scenario to stop working as expected.",
+        "DESCRIPTION_OTHER": "This tool is used by {count} enabled scenarios. Disabling it may cause those scenarios to stop working as expected.",
+        "CONFIRM": "Disable tool"
+      },
+      "CREATE": {
+        "TITLE": "Gumawa ng pasadyang kasangkapan",
+        "SUCCESS_MESSAGE": "Matagumpay na nagawa ang pasadyang kasangkapan",
+        "ERROR_MESSAGE": "Nabigong gumawa ng pasadyang kasangkapan"
+      },
+      "VIEW": {
+        "TITLE": "Custom Tool Details",
+        "REQUEST": "Request and response",
+        "INSTALLED_NOTE": "This tool is read-only because it was installed from the Tools Catalog."
+      },
+      "EDIT": {
+        "TITLE": "Edit Custom Tool",
+        "SUCCESS_MESSAGE": "Matagumpay na na-update ang pasadyang kasangkapan",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pag-update ng pasadyang kasangkapan"
+      },
+      "DELETE": {
+        "TITLE": "Tanggalin ang pasadyang kasangkapan",
+        "DESCRIPTION": "Sigurado ka bang gusto mong tanggalin ang pasadyang kasangkapan na ito? Hindi na ito maaaring bawiin.",
+        "CONFIRM": "Oo, tanggalin",
+        "SUCCESS_MESSAGE": "Custom tool deleted successfully",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagtanggal ng pasadyang kasangkapan"
+      },
+      "PAYWALL": {
+        "TITLE": "Upgrade to use tools with Captain",
+        "AVAILABLE_ON": "Captain Tools are only available in Business and Enterprise plans. Please upgrade to Business plan to use the feature.",
+        "UPGRADE_PROMPT": "",
+        "UPGRADE_NOW": "Open billing",
+        "CANCEL_ANYTIME": ""
+      },
+      "ENTERPRISE_PAYWALL": {
+        "AVAILABLE_ON": "Captain Tools are only available in the paid plans.",
+        "UPGRADE_PROMPT": "Please upgrade to a paid plan to use this feature.",
+        "ASK_ADMIN": "Please reach out to your administrator for the upgrade."
+      },
+      "TEST": {
+        "BUTTON": "Test connection",
+        "SUCCESS": "Endpoint returned HTTP {status}",
+        "ERROR": "Connection failed",
+        "DISABLED_HINT": "Testing is only available for endpoints without templates or request bodies."
+      },
+      "FORM": {
+        "TITLE": {
+          "LABEL": "Tool Name",
+          "PLACEHOLDER": "Order Lookup",
+          "ERROR": "Tool name is required",
+          "MAX_LENGTH_ERROR": "Tool name must be {max} characters or fewer"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Paglalarawan",
+          "PLACEHOLDER": "Looks up order details by order ID"
+        },
+        "HTTP_METHOD": {
+          "LABEL": "Paraan"
+        },
+        "ENDPOINT_URL": {
+          "LABEL": "Endpoint URL",
+          "PLACEHOLDER": "https://api.example.com/orders/{'{{'} order_id {'}}'}",
+          "ERROR": "Kinakailangan ang wastong URL"
+        },
+        "AUTH_TYPE": {
+          "LABEL": "Uri ng Pagpapatunay"
+        },
+        "EMAIL_VERIFICATION": {
+          "LABEL": "Require email verification",
+          "DESCRIPTION": "Captain can use this tool only after the customer verifies their email with a one-time code.",
+          "IMPLIED": "A parameter takes the customer's verified email, so email verification is always required."
+        },
+        "AUTH_TYPES": {
+          "NONE": "Wala",
+          "BEARER": "Bearer Token",
+          "BASIC": "Basic Auth",
+          "API_KEY": "API Key"
+        },
+        "AUTH_CONFIG": {
+          "BEARER_TOKEN": "Bearer Token",
+          "BEARER_TOKEN_PLACEHOLDER": "Enter your bearer token",
+          "USERNAME": "Username",
+          "USERNAME_PLACEHOLDER": "Enter username",
+          "PASSWORD": "Password",
+          "PASSWORD_PLACEHOLDER": "Ilagay ang password",
+          "API_KEY": "Header Name",
+          "API_KEY_PLACEHOLDER": "X-API-Key",
+          "API_VALUE": "Header Value",
+          "API_VALUE_PLACEHOLDER": "Enter API key value"
+        },
+        "SECTIONS": {
+          "TEMPLATES": "Templates",
+          "TEMPLATES_HELP_TEXT": "Supports Liquid syntax, like {'{{'} order_id {'}}'} or {'{{'} response.status {'}}'}."
+        },
+        "HEADERS": {
+          "LABEL": "Headers",
+          "HELP_TEXT": "Static headers sent with every request. Values are sent exactly as entered; use Authentication for credentials.",
+          "NAME_PLACEHOLDER": "Header name (e.g., cal-api-version)",
+          "VALUE_PLACEHOLDER": "Header value",
+          "NAME_REQUIRED": "Header name is required",
+          "NAME_DUPLICATE": "Header names must be unique",
+          "ADD": "Add Header"
+        },
+        "PARAMETERS": {
+          "LABEL": "Parameters",
+          "HELP_TEXT": "Define the parameters that will be extracted from user queries"
+        },
+        "ADD_PARAMETER": "Add Parameter",
+        "PARAM_NAME": {
+          "PLACEHOLDER": "Parameter name (e.g., order_id)"
+        },
+        "PARAM_TYPE": {
+          "PLACEHOLDER": "Uri"
+        },
+        "PARAM_TYPES": {
+          "STRING": "String",
+          "NUMBER": "Numero",
+          "BOOLEAN": "Boolean",
+          "ARRAY": "Array",
+          "OBJECT": "Object"
+        },
+        "PARAM_DESCRIPTION": {
+          "PLACEHOLDER": "Description of the parameter"
+        },
+        "PARAM_REQUIRED": {
+          "LABEL": "Kinakailangan"
+        },
+        "RISK": {
+          "MEDIUM": "This tool may return customer data. Consider requiring email verification.",
+          "HIGH": "This tool looks like it reads or changes customer data. Require email verification so only a verified customer can use it.",
+          "TITLE": "Save without email verification?",
+          "GO_BACK": "Bumalik",
+          "SAVE_ANYWAY": "Save anyway",
+          "EMAIL_PARAM": "This email is not verified. A customer could type someone else's.",
+          "USE_VERIFIED_EMAIL": "Use verified email"
+        },
+        "VERIFIED_VALUES": {
+          "ADD": "Add verified email",
+          "EMAIL": "Contact email",
+          "EMAIL_DESCRIPTION": "The contact's verified email address",
+          "HELP": "Filled by Chatwoot from the email the contact confirmed with a one-time code. Captain cannot see or change it in customer conversations."
+        },
+        "REQUEST_TEMPLATE": {
+          "LABEL": "Balangkas ng katawan ng kahilingan (Opsyonal)",
+          "PLACEHOLDER": "{'{'}\n  \"order_id\": \"{'{{'} order_id {'}}'}\"\n{'}'}"
+        },
+        "RESPONSE_TEMPLATE": {
+          "LABEL": "Balangkas ng tugon (Opsyonal)",
+          "PLACEHOLDER": "Order {'{{'} order_id {'}}'} status: {'{{'} status {'}}'}"
+        },
+        "ERRORS": {
+          "PARAM_NAME_REQUIRED": "Parameter name is required"
+        }
+      }
+    },
+    "RESPONSES": {
+      "HEADER": "Mga FAQ",
+      "ADD_NEW": "Gumawa ng bagong FAQ",
+      "NO_USED_CONVERSATIONS": "No conversations found for this FAQ.",
+      "DOCUMENTABLE": {
+        "CONVERSATION": "Usapan #{id}"
+      },
+      "SELECTED": "{count} napili",
+      "SELECT_ALL": "Piliin lahat ({count})",
+      "UNSELECT_ALL": "Alisin ang pagpili sa lahat ({count})",
+      "SEARCH_PLACEHOLDER": "Search FAQs...",
+      "ERRORS": {
+        "LOAD": "There was an error loading FAQs. Please try again."
+      },
+      "BULK_DELETE_BUTTON": "Tanggalin",
+      "BULK_DELETE": {
+        "TITLE": "Tanggalin ang mga FAQ?",
+        "DESCRIPTION": "Sigurado ka bang gusto mong tanggalin ang mga napiling FAQ? Hindi na ito maaaring bawiin.",
+        "CONFIRM": "Oo, tanggalin lahat",
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang mga FAQ",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagtanggal ng mga FAQ, pakisubukang muli."
+      },
+      "DELETE": {
+        "TITLE": "Sigurado ka bang tatanggalin ang FAQ?",
+        "DESCRIPTION": "",
+        "CONFIRM": "Oo, tanggalin",
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang FAQ",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagtanggal ng FAQ, pakisubukang muli."
+      },
+      "SUGGESTIONS_BANNER": {
+        "TITLE": "Captain grouped recurring customer questions into FAQ suggestions.",
+        "ACTION": "Review suggestions"
+      },
+      "FORM_DESCRIPTION": "Magdagdag ng tanong at ang kaukulang sagot sa knowledge base at piliin ang assistant na iuugnay dito.",
+      "CREATE": {
+        "TITLE": "Magdagdag ng FAQ",
+        "SUCCESS_MESSAGE": "Matagumpay na naidagdag ang sagot.",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagdagdag ng sagot. Pakisubukang muli."
+      },
+      "FORM": {
+        "QUESTION": {
+          "LABEL": "Tanong",
+          "PLACEHOLDER": "Ilagay ang tanong dito",
+          "ERROR": "Mangyaring magbigay ng wastong tanong."
+        },
+        "ANSWER": {
+          "LABEL": "Sagot",
+          "PLACEHOLDER": "Ilagay ang sagot dito",
+          "ERROR": "Mangyaring magbigay ng wastong sagot."
+        }
+      },
+      "EDIT": {
+        "TITLE": "I-update ang FAQ",
+        "SUCCESS_MESSAGE": "Matagumpay na na-update ang FAQ",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pag-update ng FAQ, pakisubukang muli",
+        "APPROVE_SUCCESS_MESSAGE": "Naaprubahan ang FAQ"
+      },
+      "OPTIONS": {
+        "APPROVE": "Aprubahan",
+        "EDIT_RESPONSE": "Edit",
+        "DELETE_RESPONSE": "Tanggalin"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Walang Natagpuang FAQ",
+        "SUBTITLE": "Tinutulungan ng FAQs ang iyong assistant na magbigay ng mabilis at tumpak na sagot sa mga tanong mula sa iyong mga customer. Maaari itong malikha nang awtomatiko mula sa iyong nilalaman o maidagdag nang manu-mano.",
+        "CLEAR_SEARCH": "Clear active filters",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain FAQ",
+          "NOTE": "Natutukoy ng Captain FAQs ang mga karaniwang tanong ng customer—kung wala man sa iyong knowledge base o madalas itanong—at lumilikha ng mga kaugnay na FAQs upang mapabuti ang suporta. Maaari mong suriin ang bawat mungkahi at magpasya kung aaprubahan o tatanggihan ito."
+        }
+      }
+    },
+    "FAQ_SUGGESTIONS": {
+      "HEADER": "FAQ suggestions",
+      "SEARCH_PLACEHOLDER": "Search suggestions...",
+      "QUEUE_COUNT": "{count} suggestion to review | {count} suggestions to review",
+      "QUEUE_HINT": "Ranked by customer demand",
+      "SOURCE_COUNT": "{count} conversation | {count} conversations",
+      "REVIEW": "Review sources",
+      "APPROVE": "Aprubahan",
+      "APPROVE_FAQ": "Approve FAQ",
+      "DISMISS": "Dismiss",
+      "SAVE": "I-save ang mga pagbabago",
+      "DETAILS": {
+        "TITLE": "Review FAQ suggestion",
+        "DESCRIPTION": "Captain grouped {count} conversation into this suggestion. Review the evidence and refine the FAQ before approval. | Captain grouped {count} conversations into this suggestion. Review the evidence and refine the FAQ before approval.",
+        "SOURCES": "Source conversations",
+        "SOURCE_PROGRESS": "{visible} of {total}",
+        "NO_SOURCES": "No accessible source conversations were found.",
+        "RETRY": "Retry"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "The review queue is clear",
+        "SUBTITLE": "New FAQ suggestions will appear here when they are ready to review.",
+        "CLEAR_SEARCH": "Clear search"
+      },
+      "SUCCESS": {
+        "APPROVED": "FAQ approved and added to Captain's knowledge.",
+        "DISMISSED": "Suggestion dismissed.",
+        "SAVED": "Suggestion updated."
+      },
+      "ERRORS": {
+        "LOAD": "There was an error loading FAQ suggestions. Please try again.",
+        "LOAD_DETAILS": "There was an error loading the source conversations.",
+        "APPROVE": "There was an error approving the FAQ. Please try again.",
+        "DISMISS": "There was an error dismissing the suggestion. Please try again.",
+        "SAVE": "There was an error saving the suggestion. Please try again."
+      }
+    },
+    "INBOXES": {
+      "HEADER": "Mga Nakakonektang Inbox",
+      "ADD_NEW": "Ikonekta ang bagong inbox",
+      "OPTIONS": {
+        "DISCONNECT": "I-disconnect"
+      },
+      "DELETE": {
+        "TITLE": "Sigurado ka bang ididiskonekta ang inbox?",
+        "DESCRIPTION": "",
+        "CONFIRM": "Oo, tanggalin",
+        "SUCCESS_MESSAGE": "Matagumpay na nadiskonekta ang inbox.",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagdiskonekta ng inbox, pakisubukang muli."
+      },
+      "FORM_DESCRIPTION": "Pumili ng inbox na ikokonekta sa assistant.",
+      "CREATE": {
+        "TITLE": "Ikonekta ang isang Inbox",
+        "SUCCESS_MESSAGE": "Matagumpay na naikonekta ang inbox.",
+        "ERROR_MESSAGE": "Nagkaroon ng error sa pagkonekta ng inbox. Pakisubukang muli."
+      },
+      "FORM": {
+        "INBOX": {
+          "LABEL": "Inbox",
+          "PLACEHOLDER": "Piliin ang inbox kung saan ide-deploy ang assistant.",
+          "ERROR": "Kinakailangan ang pagpili ng inbox."
+        }
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Walang Nakakonektang Inbox",
+        "SUBTITLE": "Ang pagkonekta ng inbox ay nagpapahintulot sa assistant na sagutin ang mga unang tanong mula sa iyong mga customer bago ito ipasa sa iyo."
+      }
+    }
+  }
+}

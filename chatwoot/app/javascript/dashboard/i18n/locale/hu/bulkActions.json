@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} conversations selected",
+    "NONE": "Nincs",
+    "CLEAR_SELECTION": "Kijelölés törlése",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Biztosan hozzárendeled a kijelölt {n} beszélgetést ehhez az ügyintézőhöz: {agentName}? | Biztosan hozzárendeled a kijelölt {n} beszélgetést ehhez az ügyintézőhöz: {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Biztosan megszünteted a kijelölt {n} beszélgetés ügyintézői hozzárendelését? | Biztosan megszünteted a kijelölt {n} beszélgetés ügyintézői hozzárendelését?",
+    "YES": "Igen",
+    "CANCEL": "Mégse",
+    "SEARCH_INPUT_PLACEHOLDER": "Keresés",
+    "ASSIGN_AGENT_TOOLTIP": "Ügynök hozzárendelése",
+    "ASSIGN_TEAM_TOOLTIP": "Csapat hozzárendelése",
+    "ASSIGN_SUCCESFUL": "Beszélgetés sikeresen hozzá lett rendelve.",
+    "ASSIGN_FAILED": "Nem sikerült beszélgetéseket hozzárendelni. Kérjük, próbálja újra.",
+    "RESOLVE_SUCCESFUL": "Beszélgetés sikeresen megoldva.",
+    "RESOLVE_FAILED": "Nem sikerült megoldani a beszélgetéseket. Kérjük, próbálja újra.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "Csak a kiválasztott beszélgetések láthatóak ezen az oldalon.",
+    "UPDATE": {
+      "CHANGE_STATUS": "Státusz változtatása",
+      "SNOOZE_UNTIL": "Halasztás",
+      "UPDATE_SUCCESFUL": "Beszélgetés státusza sikeresen frissítve ",
+      "UPDATE_FAILED": "Nem sikerült frissíteni a beszélgetéseket. Kérjük, próbálja újra."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "Címkék hozzárendelése",
+      "REMOVE_LABELS": "Címkék eltávolítása",
+      "ASSIGN_SELECTED_LABELS": "Válogatott címkék hozzárendelése",
+      "REMOVE_SELECTED_LABELS": "Kijelölt címkék eltávolítása",
+      "ASSIGN_SUCCESFUL": "Címkék hozzárendelése sikeres.",
+      "ASSIGN_FAILED": "Nem sikerült címkéket hozzárendelni. Kérjük, próbálja újra.",
+      "REMOVE_SUCCESFUL": "A címkék eltávolítása sikerült.",
+      "REMOVE_FAILED": "Nem sikerült eltávolítani a címkéket. Próbálja újra."
+    },
+    "TEAMS": {
+      "NONE": "Nincs",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Biztosan hozzárendeled a kijelölt {n} beszélgetést ehhez a csapathoz: {teamName}? | Biztosan hozzárendeled a kijelölt {n} beszélgetést ehhez a csapathoz: {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Biztosan megszünteted a kijelölt {n} beszélgetés csapathoz rendelését? | Biztosan megszünteted a kijelölt {n} beszélgetés csapathoz rendelését?",
+      "ASSIGN_SUCCESFUL": "Teams assigned successfully.",
+      "ASSIGN_FAILED": "Nem sikerült csapatot kijelölni. Kérjük, próbálja újra."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Makró futtatása",
+      "EXECUTE_CONFIRMATION_LABEL": "Biztosan futtatja ezt a makrót ({macroName}) {n} beszélgetésen? | Biztosan futtatja ezt a makrót ({macroName}) {n} beszélgetésen?",
+      "QUEUED": "A makró futtatása sorba került {count} beszélgetéshez. | A makró futtatása sorba került {count} beszélgetéshez.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "A makró futtatása sorba került {count} beszélgetéshez. Legalább egy beszélgetésből hiányoznak kötelező attribútumok, ezért nyitva maradhat. | A makró futtatása sorba került {count} beszélgetéshez. Legalább egy beszélgetésből hiányoznak kötelező attribútumok, ezért nyitva maradhat."
+    }
+  }
+}

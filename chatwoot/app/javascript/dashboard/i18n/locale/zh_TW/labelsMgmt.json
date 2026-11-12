@@ -1,0 +1,75 @@
+{
+  "LABEL_MGMT": {
+    "HEADER": "標籤",
+    "HEADER_BTN_TXT": "新增標籤",
+    "LOADING": "正在取得標籤",
+    "DESCRIPTION": "標籤可幫助您分類和排定對話與潛在客戶的優先順序。您可以透過側邊面板將標籤指派給對話或聯絡人。",
+    "LEARN_MORE": "瞭解更多關於標籤",
+    "COUNT": "{n} 個標籤 | {n} 個標籤",
+    "SEARCH_PLACEHOLDER": "搜尋標籤...",
+    "NO_RESULTS": "找不到符合搜尋條件的標籤",
+    "SEARCH_404": "沒有任何項目符合此查詢",
+    "LIST": {
+      "404": "此帳戶中沒有可用的標籤。",
+      "TITLE": "管理標籤",
+      "DESC": "標籤可讓您將對話分組管理。",
+      "TABLE_HEADER": {
+        "NAME": "名稱",
+        "DESCRIPTION": "描述",
+        "COLOR": "顏色",
+        "ACTION": "操作"
+      }
+    },
+    "FORM": {
+      "NAME": {
+        "LABEL": "標籤名稱",
+        "PLACEHOLDER": "標籤名稱",
+        "REQUIRED_ERROR": "標籤名稱為必填",
+        "MINIMUM_LENGTH_ERROR": "最少需要 2 個字元",
+        "VALID_ERROR": "僅允許使用英文字母、數字、連字號和底線"
+      },
+      "DESCRIPTION": {
+        "LABEL": "描述",
+        "PLACEHOLDER": "標籤描述"
+      },
+      "COLOR": {
+        "LABEL": "顏色"
+      },
+      "SHOW_ON_SIDEBAR": {
+        "LABEL": "在側邊欄顯示標籤"
+      },
+      "EDIT": "編輯",
+      "CREATE": "建立",
+      "DELETE": "刪除",
+      "CANCEL": "取消"
+    },
+    "ADD": {
+      "TITLE": "新增標籤",
+      "DESC": "標籤可讓您將對話分組管理。",
+      "API": {
+        "SUCCESS_MESSAGE": "標籤新增成功",
+        "ERROR_MESSAGE": "發生錯誤，請再試一次"
+      }
+    },
+    "EDIT": {
+      "TITLE": "編輯標籤",
+      "API": {
+        "SUCCESS_MESSAGE": "標籤更新成功",
+        "ERROR_MESSAGE": "發生錯誤，請再試一次"
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "刪除",
+      "API": {
+        "SUCCESS_MESSAGE": "標籤刪除成功",
+        "ERROR_MESSAGE": "發生錯誤，請再試一次"
+      },
+      "CONFIRM": {
+        "TITLE": "確認刪除",
+        "MESSAGE": "您確定要刪除嗎？",
+        "YES": "是，刪除",
+        "NO": "不，保留"
+      }
+    }
+  }
+}

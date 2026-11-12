@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "Pasirinkta pokalbių: {conversationCount}",
+    "NONE": "Nėra",
+    "CLEAR_SELECTION": "Clear",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "Taip",
+    "CANCEL": "Atšaukti",
+    "SEARCH_INPUT_PLACEHOLDER": "Ieškoti",
+    "ASSIGN_AGENT_TOOLTIP": "Priskirti Agentą",
+    "ASSIGN_TEAM_TOOLTIP": "Priskirti komandą",
+    "ASSIGN_SUCCESFUL": "Pokalbis priskirtas sėkmingai.",
+    "ASSIGN_FAILED": "Nepavyko priskirti pokalbių. Bandykite dar kartą.",
+    "RESOLVE_SUCCESFUL": "Pokalbio išspręstas sėkmingai.",
+    "RESOLVE_FAILED": "Nepavyko išspręsti pokalbių. Bandykite dar kartą.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "Pasirinkti šiame puslapyje matomi pokalbiai.",
+    "UPDATE": {
+      "CHANGE_STATUS": "Pakeisti būseną",
+      "SNOOZE_UNTIL": "Atidėti",
+      "UPDATE_SUCCESFUL": "Pokalbio būsena atnaujinta sėkmingai.",
+      "UPDATE_FAILED": "Nepavyko atnaujinti pokalbių. Bandykite dar kartą."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "Priskirti etiketes",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "Priskirti pažymėtas etiketes",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "Etiketės sėkmingai priskirtos.",
+      "ASSIGN_FAILED": "Nepavyko priskirti etikečių. Prašau, pabandykite dar kartą.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "Nėra",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "Teams assigned successfully.",
+      "ASSIGN_FAILED": "Nepavyko priskirti komandą. Prašau, pabandykite dar kartą."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

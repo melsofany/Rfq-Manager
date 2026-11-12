@@ -1,0 +1,357 @@
+{
+  "CAMPAIGN": {
+    "LIVE_CHAT": {
+      "HEADER_TITLE": "Canlı sohbet kampanyaları",
+      "NEW_CAMPAIGN": "Kampanya Oluştur",
+      "CARD": {
+        "STATUS": {
+          "ENABLED": "Etkin",
+          "DISABLED": "Devre dışı"
+        },
+        "CAMPAIGN_DETAILS": {
+          "SENT_BY": "Gönderen",
+          "BOT": "Bot",
+          "FROM": "dan",
+          "URL": "URL:"
+        }
+      },
+      "EMPTY_STATE": {
+        "TITLE": "Canlı sohbet kampanyası mevcut değil",
+        "SUBTITLE": "Proaktif mesajlar kullanarak müşterilerinizle iletişim kurun. Başlamak için 'Kampanya Oluştur' butonuna tıklayın."
+      },
+      "CREATE": {
+        "TITLE": "Canlı sohbet kampanyası oluşturun",
+        "CANCEL_BUTTON_TEXT": "İptal Et",
+        "CREATE_BUTTON_TEXT": "Yarat",
+        "FORM": {
+          "TITLE": {
+            "LABEL": "Başlık",
+            "PLACEHOLDER": "Lütfen kampanya başlığını giriniz",
+            "ERROR": "Başlık gerekli"
+          },
+          "MESSAGE": {
+            "LABEL": "Mesaj",
+            "PLACEHOLDER": "Lütfen kampanya mesajı giriniz",
+            "ERROR": "Mesaj gerekli"
+          },
+          "INBOX": {
+            "LABEL": "Gelen Kutu Seç",
+            "PLACEHOLDER": "Gelen Kutu Seç",
+            "ERROR": "Gelen kutusu seçimi gerekli"
+          },
+          "SENT_BY": {
+            "LABEL": "Tarafından gönderildi",
+            "PLACEHOLDER": "Lütfen göndereni seçin",
+            "ERROR": "Gönderen bilgisi gerekli"
+          },
+          "END_POINT": {
+            "LABEL": "URL",
+            "PLACEHOLDER": "Lütfen URL giriniz",
+            "ERROR": "Lütfen geçerli bir adres girin"
+          },
+          "TIME_ON_PAGE": {
+            "LABEL": "Yayım süresi(saniye)",
+            "PLACEHOLDER": "Lütfen saat seçiniz",
+            "ERROR": "Yayın süresi seçiniz"
+          },
+          "OTHER_PREFERENCES": {
+            "TITLE": "Diğer tercihler",
+            "ENABLED": "Kampanyayı başlat",
+            "TRIGGER_ONLY_BUSINESS_HOURS": "Sadece çalışma saatleri içerisinde tetikle"
+          },
+          "BUTTONS": {
+            "CREATE": "Oluştur",
+            "CANCEL": "İptal Et"
+          },
+          "API": {
+            "SUCCESS_MESSAGE": "Canlı sohbet kampanyası başarıyla oluşturuldu",
+            "ERROR_MESSAGE": "Bir hata oluştu, lütfen tekrar deneyin."
+          }
+        }
+      },
+      "EDIT": {
+        "TITLE": "Canlı sohbet kampanyasını düzenle",
+        "FORM": {
+          "API": {
+            "SUCCESS_MESSAGE": "Canlı sohbet kampanyası başarıyla güncellendi",
+            "ERROR_MESSAGE": "Bir hata oluştu, lütfen tekrar deneyin."
+          }
+        }
+      }
+    },
+    "SMS": {
+      "HEADER_TITLE": "SMS kampanyaları",
+      "NEW_CAMPAIGN": "Kampanya oluştur",
+      "EMPTY_STATE": {
+        "TITLE": "SMS kampanyası mevcut değil",
+        "SUBTITLE": "Müşterilerinize doğrudan ulaşmak için bir SMS kampanyası başlatın. Kolaylıkla teklifler gönderin veya duyurular yapın. Başlamak için 'Kampanya oluştur'a tıklayın."
+      },
+      "CARD": {
+        "STATUS": {
+          "PROCESSING": "İşleniyor",
+          "COMPLETED": "Tamamlandı",
+          "SCHEDULED": "Planlanmış"
+        },
+        "CAMPAIGN_DETAILS": {
+          "SENT_FROM": "Sent from",
+          "ON": "on"
+        }
+      },
+      "CREATE": {
+        "TITLE": "Create SMS campaign",
+        "CANCEL_BUTTON_TEXT": "İptal Et",
+        "CREATE_BUTTON_TEXT": "Oluştur",
+        "FORM": {
+          "TITLE": {
+            "LABEL": "Başlık",
+            "PLACEHOLDER": "Lütfen kampanya başlığını giriniz",
+            "ERROR": "Başlık gerekli"
+          },
+          "MESSAGE": {
+            "LABEL": "Mesaj",
+            "PLACEHOLDER": "Lütfen kampanya mesajı giriniz",
+            "ERROR": "Mesaj gerekli"
+          },
+          "INBOX": {
+            "LABEL": "Gelen Kutu Seç",
+            "PLACEHOLDER": "Gelen Kutu Seç",
+            "ERROR": "Gelen kutusu seçimi gerekli"
+          },
+          "AUDIENCE": {
+            "LABEL": "Kitle",
+            "PLACEHOLDER": "Müşteri etiketlerini seçin",
+            "ERROR": "Kitle seçimi gerekli"
+          },
+          "SCHEDULED_AT": {
+            "LABEL": "Planlanan zaman",
+            "PLACEHOLDER": "Lütfen saati seçiniz",
+            "ERROR": "Planlanan zaman seçimi gerekli"
+          },
+          "BUTTONS": {
+            "CREATE": "Oluştur",
+            "CANCEL": "İptal Et"
+          },
+          "API": {
+            "SUCCESS_MESSAGE": "SMS kampanyası başarıyla oluşturuldu",
+            "ERROR_MESSAGE": "Bir hata oluştu, lütfen tekrar deneyin."
+          }
+        }
+      }
+    },
+    "WHATSAPP": {
+      "HEADER_TITLE": "WhatsApp kampanyaları",
+      "NEW_CAMPAIGN": "Kampanya Oluştur",
+      "EMPTY_STATE": {
+        "TITLE": "WhatsApp kampanyası mevcut değil",
+        "SUBTITLE": "Müşterilerinize doğrudan ulaşmak için bir WhatsApp kampanyası başlatın. Kolaylıkla teklifler gönderin veya duyurular yapın. Başlamak için 'Kampanya oluştur'a tıklayın."
+      },
+      "CARD": {
+        "ANALYTICS": "View analytics",
+        "STATUS": {
+          "PROCESSING": "İşleniyor",
+          "COMPLETED": "Tamamlandı",
+          "SCHEDULED": "Planlanmış"
+        },
+        "CAMPAIGN_DETAILS": {
+          "SENT_FROM": "Sent from",
+          "ON": "on"
+        }
+      },
+      "FORM": {
+        "CREATE_TITLE": "Kampanya Oluştur",
+        "LIVE_TEST": "Live test",
+        "LIVE_TEST_TOOLTIP": "Live test will be available soon",
+        "SCHEDULE": "Schedule campaign",
+        "SCHEDULED_FOR": "Scheduled for {date}",
+        "RESCHEDULE": "Reschedule",
+        "DISCARD": "Discard changes",
+        "SAVE": "Değişiklikleri Kaydet",
+        "BASIC_SETTINGS": {
+          "TITLE": "Temel ayarlar",
+          "NAME": {
+            "LABEL": "Başlık",
+            "PLACEHOLDER": "Enter the title of the campaign"
+          },
+          "INBOX": {
+            "LABEL": "Gelen Kutusu",
+            "PLACEHOLDER": "Gelen kutusu seçin"
+          }
+        },
+        "AUDIENCE": {
+          "TITLE": "Kitle",
+          "TIER_DESCRIPTION": "Your WhatsApp account can message up to {tier}.",
+          "TIER_UNKNOWN": "Select an inbox to see the messaging limit of your WhatsApp account.",
+          "LEARN_MORE": "Daha Fazla",
+          "LABELS": {
+            "LABEL": "Etiketler",
+            "PLACEHOLDER": "Müşteri etiketlerini seçin"
+          },
+          "SELECTED_COUNT": "{count} contacts selected",
+          "VIEW": "Görünüm",
+          "EMPTY_STATE": "Select at least one label to build the audience.",
+          "CONTACTS": {
+            "TITLE": "Kişiler",
+            "TAGGED_WITH": "etiketlendi",
+            "SEARCH_PLACEHOLDER": "Ad, e-posta adresi veya telefon numarasına göre ara",
+            "EMPTY_STATE": "Hiçbir kişi bulunamadı"
+          }
+        },
+        "TEMPLATE": {
+          "TITLE": "Template",
+          "SELECT": {
+            "LABEL": "Template",
+            "PLACEHOLDER": "Şablon seçin"
+          },
+          "EMPTY_STATE": "Select an inbox to load its approved templates",
+          "NO_TEMPLATES": "This inbox has no approved templates that can be used in a campaign",
+          "HEADER_LABEL": "Başlık",
+          "INVALID_MEDIA_URL": "Enter a valid HTTP or HTTPS URL.",
+          "HEADER_PLACEHOLDER": "Enter {type} header",
+          "DOCUMENT_NAME_PLACEHOLDER": "Enter document name",
+          "BODY_LABEL": "Gövde",
+          "BUTTONS_LABEL": "Butonlar",
+          "VARIABLE_PLACEHOLDER": "Enter variable {variable}",
+          "BUTTON_PLACEHOLDER": "Enter parameter for button {index}"
+        },
+        "ACCOUNT_INFORMATION": {
+          "TITLE": "Account information",
+          "MESSAGING_TIER": "Messaging tier",
+          "ACCOUNT_STATUS": "Account status",
+          "ACCOUNT_HEALTH": "Account health",
+          "STATUS_DESCRIPTION": "Current mode of this WhatsApp number",
+          "HEALTH_DESCRIPTION": "Quality rating assigned by Meta",
+          "EMPTY_STATE": "Select an inbox to see its WhatsApp account information.",
+          "UNAVAILABLE": "Şu anda müsait değil",
+          "OPEN": "Open in WhatsApp Manager"
+        },
+        "PREVIEW": {
+          "TITLE": "Mesaj önizlemesi",
+          "EMPTY_STATE": "Select a template to preview the message.",
+          "FOOTNOTE": "This may vary slightly per OS. Perform a live test to confirm. Default values for the highlighted variables will be stored upon saving."
+        },
+        "SCHEDULE_POPOVER": {
+          "LABEL": "Zamanlama",
+          "CANCEL": "İptal Et",
+          "CREATE": "Yarat"
+        },
+        "API": {
+          "CREATE_SUCCESS": "WhatsApp campaign created successfully",
+          "CREATE_ERROR": "Bir hata oluştu, lütfen tekrar deneyin.",
+          "UPDATE_SUCCESS": "WhatsApp campaign updated successfully",
+          "UPDATE_ERROR": "Bir hata oluştu, lütfen tekrar deneyin."
+        }
+      },
+      "ANALYTICS": {
+        "LOADING": "Loading analytics...",
+        "EMPTY": "No delivery records found.",
+        "EMPTY_FILTER": "No {status} delivery records found.",
+        "DELIVERIES_ERROR": "Delivery records couldn't be loaded. Refresh the page to try again.",
+        "EMPTY_STATE": {
+          "ERROR": {
+            "TITLE": "Analytics couldn't be loaded",
+            "DESCRIPTION": "Refresh the page to try again."
+          },
+          "PENDING": {
+            "TITLE": "Delivery data will appear once sending begins",
+            "DESCRIPTION": "There are no delivery records for this campaign yet."
+          },
+          "UNAVAILABLE": {
+            "TITLE": "Analytics aren't available for this campaign",
+            "DESCRIPTION": "No delivery data was recorded for this campaign. This can happen for campaigns sent before campaign analytics were introduced."
+          }
+        },
+        "PROCESSING_NOTICE": "This campaign is still sending. Counts, percentages, and delivery records are partial and include only contacts processed so far. More contacts will appear as sending continues.",
+        "RATE": "{value}% of audience",
+        "SENT_ON": "Sent on {date}",
+        "PAGE_INFO": "{totalItems} kişiden {startItem} - {endItem} arası gösteriliyor",
+        "BREADCRUMB": {
+          "CAMPAIGNS": "Kampanyalar",
+          "WHATSAPP": "WhatsApp"
+        },
+        "FILTERS": {
+          "ALL": "Hepsi"
+        },
+        "METRICS": {
+          "AUDIENCE": {
+            "LABEL": "Kitle",
+            "HINT": "Contacts included in this campaign."
+          },
+          "SENT": {
+            "LABEL": "Submitted to WhatsApp",
+            "HINT": "Messages accepted by WhatsApp for delivery."
+          },
+          "DELIVERED": {
+            "LABEL": "Delivered",
+            "HINT": "Messages that reached the contact's device. Read messages are included."
+          },
+          "READ": {
+            "LABEL": "Oku",
+            "HINT": "Messages opened by the contact."
+          },
+          "FAILED": {
+            "LABEL": "Başarısız",
+            "HINT": "Messages WhatsApp could not deliver."
+          },
+          "SKIPPED": {
+            "LABEL": "Skipped",
+            "HINT": "Contacts skipped before sending, usually because of a missing or invalid phone number."
+          }
+        },
+        "STATUS": {
+          "QUEUED": "Queued",
+          "SENT": "Awaiting delivery update",
+          "DELIVERED": "Delivered",
+          "READ": "Oku",
+          "FAILED": "Başarısız",
+          "SKIPPED": "Skipped"
+        },
+        "BREAKDOWN": {
+          "TITLE": "Delivery breakdown",
+          "DELIVERY_RATE": "{value}% delivered",
+          "LEGEND": {
+            "READ": "Oku",
+            "DELIVERED": "Delivered",
+            "FAILED": "Başarısız",
+            "SKIPPED": "Skipped",
+            "PENDING": "Queued or awaiting update"
+          }
+        },
+        "TABLE": {
+          "TITLE": "Deliveries",
+          "CONTACT": "İletişim",
+          "STATUS": "Durum",
+          "MESSAGE": "Mesaj",
+          "MESSAGE_NOT_GENERATED": "Not generated",
+          "REASON": "Reason",
+          "ERROR_CODE": "Code {code}"
+        },
+        "PAYWALL": {
+          "TITLE": "Unlock campaign analytics",
+          "AVAILABLE_ON": "Campaign analytics is available on Business and Enterprise plans.",
+          "UPGRADE_PROMPT": "Upgrade to track campaign delivery, read status, and failed messages.",
+          "UPGRADE_NOW": "View plans",
+          "CANCEL_ANYTIME": "Change or cancel your plan anytime."
+        },
+        "ENTERPRISE_PAYWALL": {
+          "AVAILABLE_ON": "Campaign analytics is available on paid self-hosted plans.",
+          "UPGRADE_PROMPT": "Upgrade your installation to track campaign delivery, read status, and failed messages.",
+          "ASK_ADMIN": "Contact your instance administrator to upgrade."
+        }
+      }
+    },
+    "HISTORY": {
+      "LABEL": "Campaign",
+      "LOAD_MORE": "Load earlier campaigns"
+    },
+    "CONFIRM_DELETE": {
+      "TITLE": "Silmek istediğinizden emin misiniz?",
+      "DESCRIPTION": "Silme işlemi kalıcıdır ve geri alınamaz.",
+      "WHATSAPP_DESCRIPTION": "Deleting this campaign will also remove its saved message history and delivery details. Messages already sent on WhatsApp will remain. This cannot be undone.",
+      "CONFIRM": "Sil",
+      "API": {
+        "SUCCESS_MESSAGE": "Kampanya başarıyla silindi",
+        "ERROR_MESSAGE": "Bir hata oluştu, lütfen tekrar deneyin."
+      }
+    }
+  }
+}

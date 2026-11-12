@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "自動化",
+    "DESCRIPTION": "自動化は、ラベルの追加や会話を最適な担当者に割り当てるといった手動で行う必要のある既存のプロセスを置き換え、効率化することができます。これにより、チームは強みを発揮しつつ、ルーチンタスクに費やす時間を削減できます。",
+    "LEARN_MORE": "自動化について学ぶ",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "自動化ルールを取得中",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "自動化ルールを追加",
+      "SUBMIT": "作成",
+      "CANCEL_BUTTON_TEXT": "キャンセル",
+      "FORM": {
+        "NAME": {
+          "LABEL": "ルール名",
+          "PLACEHOLDER": "ルール名を入力してください",
+          "ERROR": "名前が必須です"
+        },
+        "DESC": {
+          "LABEL": "説明",
+          "PLACEHOLDER": "ルールの説明を入力してください",
+          "ERROR": "説明は必須です"
+        },
+        "EVENT": {
+          "LABEL": "イベント",
+          "PLACEHOLDER": "選択してください",
+          "ERROR": "イベントは必須です"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Retry",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Runs the moment an event happens, as long as the conditions match."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Wait condition",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "受信トレイ",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "条件"
+        },
+        "ACTIONS": {
+          "LABEL": "アクション"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "条件を追加",
+      "ACTION_BUTTON_LABEL": "アクションを追加",
+      "API": {
+        "SUCCESS_MESSAGE": "自動化ルールが正常に追加されました",
+        "ERROR_MESSAGE": "自動化ルールを作成できませんでした。後でもう一度お試しください"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "名前",
+        "ACTIVE": "有効",
+        "CREATED_ON": "作成日"
+      },
+      "404": "自動化ルールが見つかりません",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "自動化ルールを削除",
+      "SUBMIT": "削除",
+      "CANCEL_BUTTON_TEXT": "キャンセル",
+      "CONFIRM": {
+        "TITLE": "削除の確認",
+        "MESSAGE": "削除してもよろしいですか？",
+        "YES": "削除する",
+        "NO": "いいえ"
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "自動化ルールが正常に削除されました",
+        "ERROR_MESSAGE": "自動化ルールを削除できませんでした。後でもう一度お試しください"
+      }
+    },
+    "EDIT": {
+      "TITLE": "自動化ルールを編集",
+      "SUBMIT": "更新",
+      "CANCEL_BUTTON_TEXT": "キャンセル",
+      "API": {
+        "SUCCESS_MESSAGE": "自動化ルールが正常に更新されました",
+        "ERROR_MESSAGE": "自動化ルールを更新できませんでした。後でもう一度お試しください"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "複製",
+      "API": {
+        "SUCCESS_MESSAGE": "自動化ルールが正常に複製されました",
+        "ERROR_MESSAGE": "自動化ルールを複製できませんでした。後でもう一度お試しください"
+      }
+    },
+    "FORM": {
+      "EDIT": "編集",
+      "CREATE": "作成",
+      "DELETE": "削除",
+      "CANCEL": "キャンセル",
+      "RESET_MESSAGE": "イベントタイプを変更すると、以下に追加された条件やアクションがリセットされます"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "保存するには少なくとも1つの条件が必要です",
+      "CONTACT_CUSTOM_ATTR_LABEL": "連絡先カスタム属性",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "会話カスタム属性",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "保存するには少なくとも1つのアクションが必要です",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "メッセージをここに入力してください",
+      "TEAM_DROPDOWN_PLACEHOLDER": "チームを選択してください",
+      "EMAIL_INPUT_PLACEHOLDER": "メールアドレスを入力してください",
+      "URL_INPUT_PLACEHOLDER": "URLを入力してください",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "自動化ルールを有効化",
+      "DEACTIVATION_TITLE": "自動化ルールを無効化",
+      "ACTIVATION_DESCRIPTION": "この操作により、自動化ルール『{automationName}』が有効になります。本当に実行しますか？",
+      "DEACTIVATION_DESCRIPTION": "この操作により、自動化ルール『{automationName}』が無効になります。本当に実行しますか？",
+      "ACTIVATION_SUCCESFUL": "自動化ルールが正常に有効化されました",
+      "DEACTIVATION_SUCCESFUL": "自動化ルールが正常に無効化されました",
+      "ACTIVATION_ERROR": "自動化ルールを有効化できませんでした。後でもう一度お試しください",
+      "DEACTIVATION_ERROR": "自動化ルールを無効化できませんでした。後でもう一度お試しください",
+      "CONFIRMATION_LABEL": "はい",
+      "CANCEL_LABEL": "いいえ"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "添付ファイルをアップロードできませんでした。後でもう一度お試しください",
+      "LABEL_IDLE": "添付ファイルをアップロード",
+      "LABEL_UPLOADING": "アップロード中...",
+      "LABEL_UPLOADED": "正常にアップロードされました",
+      "LABEL_UPLOAD_FAILED": "アップロードに失敗しました"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "属性キーが必須です",
+      "FILTER_OPERATOR_REQUIRED": "フィルター演算子が必須です",
+      "VALUE_REQUIRED": "値は必須です",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "値は1から998の間である必要があります",
+      "ACTION_PARAMETERS_REQUIRED": "アクションパラメータが必須です",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "少なくとも1つの条件が必要です",
+      "ATLEAST_ONE_ACTION_REQUIRED": "少なくとも1つのアクションが必要です"
+    },
+    "NONE_OPTION": "なし",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "会話が作成されました",
+      "CONVERSATION_UPDATED": "会話が更新されました",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "会話をミュート",
+      "SNOOZE_CONVERSATION": "会話をスヌーズ",
+      "RESOLVE_CONVERSATION": "会話を解決",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "優先度を変更",
+      "ADD_SLA": "SLAを追加",
+      "OPEN_CONVERSATION": "会話を開く",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "なし",
+      "LOW": "低",
+      "MEDIUM": "中",
+      "HIGH": "高",
+      "URGENT": "緊急"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "非公開メモ",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "Eメール",
+      "INBOX": "受信トレイ",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "電話番号",
+      "STATUS": "状況",
+      "BROWSER_LANGUAGE": "ブラウザの言語",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "国",
+      "COMPANY_NAME": "企業名",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "担当者",
+      "TEAM_NAME": "チーム",
+      "PRIORITY": "優先度",
+      "LABELS": "ラベル",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

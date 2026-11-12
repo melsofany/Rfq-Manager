@@ -1,0 +1,199 @@
+import { createApp } from 'vue';
+import VueDOMPurifyHTML from 'vue-dompurify-html';
+import { domPurifyConfig } from '../shared/helpers/HTMLSanitizer';
+import { directive as onClickaway } from 'vue3-click-away';
+import { isSameHost } from '@chatwoot/utils';
+
+import slugifyWithCounter from '@sindresorhus/slugify';
+import PublicArticleSearch from './components/PublicArticleSearch.vue';
+import TableOfContents from './components/TableOfContents.vue';
+import SidebarThemeToggle from './components/SidebarThemeToggle.vue';
+import { initializeTheme } from './portalThemeHelper.js';
+import { getLanguageDirection } from 'dashboard/components/widgets/conversation/advancedFilterItems/languages.js';
+
+export const getHeadingsfromTheArticle = () => {
+  const rows = [];
+  const articleElement = document.getElementById('cw-article-content');
+  articleElement.querySelectorAll('h1, h2, h3').forEach(element => {
+    const headingText = element.innerText;
+    const slug = slugifyWithCounter(headingText);
+    element.id = slug;
+    element.className = 'scroll-mt-24 heading';
+
+    const permalink = document.createElement('a');
+    permalink.className = 'permalink text-slate-600 ml-3';
+    permalink.href = `#${slug}`;
+    permalink.title = headingText;
+    permalink.dataset.turbo = 'false';
+    permalink.textContent = '#';
+    element.appendChild(permalink);
+    rows.push({
+      slug,
+      title: headingText,
+      tag: element.tagName.toLowerCase(),
+    });
+  });
+  return rows;
+};
+
+export const openExternalLinksInNewTab = () => {
+  const { customDomain, hostURL } = window.portalConfig;
+  const isOnArticlePage =
+    document.querySelector('#cw-article-content') !== null;
+
+  document.addEventListener('click', event => {
+    if (!isOnArticlePage) return;
+
+    const link = event.target.closest('a');
+
+    if (link) {
+      const currentLocation = window.location.href;
+      const linkHref = link.href;
+
+      // Check against current location and custom domains
+      const isInternalLink =
+        isSameHost(linkHref, currentLocation) ||
+        (customDomain && isSameHost(linkHref, customDomain)) ||
+        (hostURL && isSameHost(linkHref, hostURL));
+
+      if (!isInternalLink) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer'; // Security and performance benefits
+        // Prevent default if you want to stop the link from opening in the current tab
+        event.stopPropagation();
+      }
+    }
+  });
+};
+
+export const InitializationHelpers = {
+  navigateToLocalePage: () => {
+    document.addEventListener('change', e => {
+      const localeSwitcher = e.target.closest('.locale-switcher');
+      if (!localeSwitcher) return;
+
+      const targetUrl = new URL(localeSwitcher.value, window.location.origin);
+      const isHelpCenterUrl = targetUrl.pathname.startsWith('/hc/');
+
+      if (targetUrl.origin !== window.location.origin || !isHelpCenterUrl)
+        return;
+
+      window.location.assign(targetUrl.href);
+    });
+  },
+
+  initializeSearch: () => {
+    ['#search-wrap', '#search-wrap-hero'].forEach(selector => {
+      const mountPoint = document.querySelector(selector);
+      if (!mountPoint) return;
+      const size = mountPoint.dataset.size || 'default';
+      const showKbd = !!mountPoint.dataset.kbd;
+      // eslint-disable-next-line vue/one-component-per-file
+      const app = createApp({
+        components: { PublicArticleSearch },
+        data() {
+          return { size, showKbd };
+        },
+        template: '<PublicArticleSearch :size="size" :show-kbd="showKbd" />',
+      });
+      app.use(VueDOMPurifyHTML, domPurifyConfig);
+      app.directive('on-clickaway', onClickaway);
+      app.mount(selector);
+    });
+  },
+
+  initializeTableOfContents: () => {
+    const isOnArticlePage = document.querySelector('#cw-hc-toc');
+    if (isOnArticlePage) {
+      // eslint-disable-next-line vue/one-component-per-file
+      const app = createApp({
+        components: { TableOfContents },
+        data() {
+          return { rows: getHeadingsfromTheArticle() };
+        },
+        template: '<table-of-contents :rows="rows" />',
+      });
+
+      app.use(VueDOMPurifyHTML, domPurifyConfig);
+      app.mount('#cw-hc-toc');
+    }
+  },
+
+  initializeSidebarThemeToggle: () => {
+    const mountPoint = document.querySelector('#sidebar-theme-toggle');
+    if (mountPoint) {
+      // eslint-disable-next-line vue/one-component-per-file
+      const app = createApp({
+        components: { SidebarThemeToggle },
+        template: '<sidebar-theme-toggle />',
+      });
+      app.directive('on-clickaway', onClickaway);
+      app.mount('#sidebar-theme-toggle');
+    }
+  },
+
+  initializeDetailsClickAway: () => {
+    document.addEventListener('click', event => {
+      document
+        .querySelectorAll('details[data-close-on-clickaway][open]')
+        .forEach(details => {
+          if (!details.contains(event.target)) {
+            details.removeAttribute('open');
+          }
+        });
+    });
+  },
+
+  appendPlainParamToURLs: () => {
+    [...document.getElementsByTagName('a')].forEach(aTagElement => {
+      if (aTagElement.href && aTagElement.href.includes('/hc/')) {
+        const url = new URL(aTagElement.href);
+        url.searchParams.set('show_plain_layout', 'true');
+
+        aTagElement.setAttribute('href', url);
+      }
+    });
+  },
+
+  setDirectionAttribute: () => {
+    const htmlElement = document.querySelector('html');
+    // If direction is already applied through props, do not apply again (iframe case)
+    const hasDirApplied = htmlElement.getAttribute('data-dir-applied');
+    if (!htmlElement || hasDirApplied) return;
+
+    const localeFromHtml = htmlElement.lang;
+    htmlElement.dir =
+      localeFromHtml && getLanguageDirection(localeFromHtml) ? 'rtl' : 'ltr';
+  },
+
+  initializeThemesInPortal: initializeTheme,
+
+  initialize: () => {
+    openExternalLinksInNewTab();
+    InitializationHelpers.setDirectionAttribute();
+    if (window.portalConfig.isPlainLayoutEnabled === 'true') {
+      InitializationHelpers.appendPlainParamToURLs();
+    } else {
+      InitializationHelpers.initializeThemesInPortal();
+      InitializationHelpers.navigateToLocalePage();
+      InitializationHelpers.initializeSearch();
+      InitializationHelpers.initializeTableOfContents();
+      InitializationHelpers.initializeSidebarThemeToggle();
+      InitializationHelpers.initializeDetailsClickAway();
+    }
+  },
+
+  onLoad: () => {
+    InitializationHelpers.initialize();
+    if (window.location.hash) {
+      if ('scrollRestoration' in window.history) {
+        window.history.scrollRestoration = 'manual';
+      }
+
+      const a = document.createElement('a');
+      a.href = window.location.hash;
+      a['data-turbo'] = false;
+      a.click();
+    }
+  },
+};

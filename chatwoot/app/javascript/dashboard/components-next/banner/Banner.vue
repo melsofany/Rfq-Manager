@@ -1,0 +1,87 @@
+<script setup>
+import { computed, useSlots } from 'vue';
+import Spinner from 'dashboard/components-next/spinner/Spinner.vue';
+
+const props = defineProps({
+  color: {
+    type: String,
+    default: 'slate',
+    validator: value =>
+      ['blue', 'ruby', 'amber', 'slate', 'teal'].includes(value),
+  },
+  actionLabel: {
+    type: String,
+    default: null,
+  },
+  isLoading: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const emit = defineEmits(['action']);
+const slots = useSlots();
+
+const hasActions = computed(() => Boolean(props.actionLabel || slots.actions));
+
+const bannerClass = computed(() => {
+  const classMap = {
+    slate:
+      'bg-n-slate-3 border-n-slate-4 text-n-slate-11 [&_.link]:text-n-slate-11',
+    amber:
+      'bg-n-amber-3 border-n-amber-4 text-n-amber-11 [&_.link]:text-n-amber-11',
+    teal: 'bg-n-teal-3 border-n-teal-4 text-n-teal-11 [&_.link]:text-n-teal-11',
+    ruby: 'bg-n-ruby-3 border-n-ruby-4 text-n-ruby-11 [&_.link]:text-n-ruby-11',
+    blue: 'bg-n-blue-3 border-n-blue-4 text-n-blue-11 [&_.link]:text-n-blue-11',
+  };
+
+  return classMap[props.color];
+});
+
+const buttonClass = computed(() => {
+  const classMap = {
+    slate: 'bg-n-slate-4 hover:bg-n-slate-5 text-n-slate-11',
+    amber: 'bg-n-amber-4 hover:bg-n-amber-5 text-n-amber-11',
+    teal: 'bg-n-teal-4 hover:bg-n-teal-5 text-n-teal-11',
+    ruby: 'bg-n-ruby-4 hover:bg-n-ruby-5 text-n-ruby-11',
+    blue: 'bg-n-blue-4 hover:bg-n-blue-5 text-n-blue-11',
+  };
+
+  return classMap[props.color];
+});
+
+const triggerAction = () => {
+  if (props.isLoading) return;
+  emit('action');
+};
+</script>
+
+<template>
+  <div
+    class="text-sm rounded-xl flex items-center justify-between gap-2 border"
+    :class="[
+      bannerClass,
+      {
+        'py-2 px-3': !hasActions,
+        'ps-3 p-2': hasActions,
+      },
+    ]"
+  >
+    <div>
+      <slot />
+    </div>
+    <div v-if="hasActions" class="flex-shrink-0">
+      <slot name="actions">
+        <button
+          class="px-3 py-1 w-auto grid place-content-center rounded-lg whitespace-nowrap"
+          :class="buttonClass"
+          :disabled="isLoading"
+          @click="triggerAction"
+        >
+          <Spinner v-if="isLoading" :size="16" />
+          <span v-else>{{ actionLabel }}</span>
+        </button>
+      </slot>
+    </div>
+  </div>
+</template>

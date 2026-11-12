@@ -1,0 +1,147 @@
+openapi: '3.1.0'
+info:
+  title: Chatwoot
+  description: This is the API documentation for Chatwoot server.
+  version: 1.1.0
+  termsOfService: https://www.chatwoot.com/terms-of-service/
+  contact:
+    email: hello@chatwoot.com
+  license:
+    name: MIT License
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: https://app.chatwoot.com/
+paths:
+  $ref: ./paths/index.yml
+components:
+  schemas:
+    $ref: ./definitions/index.yml
+  parameters:
+    $ref: ./parameters/index.yml
+  securitySchemes:
+    userBearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Authenticate with `Authorization: Bearer <token>` using a user API token from **Profile Settings**. Available in Chatwoot `v4.19.0` and later.'
+    agentBotBearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Authenticate with `Authorization: Bearer <token>` using an agent bot token from **Settings → Agent Bots**. Available in Chatwoot `v4.19.0` and later.'
+    platformAppBearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Authenticate with `Authorization: Bearer <token>` using a platform app token from **Super Admin**. Available in Chatwoot `v4.19.0` and later.'
+    userApiKey:
+      type: apiKey
+      in: header
+      name: api_access_token
+      description: 'Find your API token in **Profile Settings**. The `api_access_token` header remains supported, but will be deprecated in a future release. For new integrations, use Bearer authentication.'
+    agentBotApiKey:
+      type: apiKey
+      in: header
+      name: api_access_token
+      description: 'Find your agent bot token in **Settings → Agent Bots**. For new integrations, use Bearer authentication in Chatwoot `v4.19.0` and later. Agent bot tokens can access only bot-permitted APIs.'
+    platformAppApiKey:
+      type: apiKey
+      in: header
+      name: api_access_token
+      description: 'Create a platform app in **Super Admin** to get its token. For new integrations, use Bearer authentication in Chatwoot `v4.19.0` and later. Platform app tokens can provision agent bots, accounts, users, and roles.'
+tags:
+  - name: Accounts
+    description: Account management APIs
+  - name: Account Users
+    description: Account user management APIs
+  - name: AgentBots
+    description: Bot integrations
+  - name: Users
+    description: User management APIs
+  - name: Account AgentBots
+    description: Account-specific Agent Bots
+  - name: Agents
+    description: Agent management APIs
+  - name: Campaigns
+    description: Create, schedule, and manage campaigns. Requires an account administrator and API access enabled for the account.
+  - name: Canned Responses
+    description: Pre-defined responses for common queries
+  - name: Contacts
+    description: Contact management APIs
+  - name: Contact Labels
+    description: Manage contact labels
+  - name: Conversation Assignments
+    description: Manage conversation assignments
+  - name: Conversation Labels
+    description: Manage conversation labels
+  - name: Conversations
+    description: Conversation management APIs
+  - name: Custom Attributes
+    description: Custom fields for contacts and conversations
+  - name: Custom Filters
+    description: Saved filters for conversations
+  - name: Inboxes
+    description: Communication channels setup
+  - name: Integrations
+    description: Third-party integrations
+  - name: Labels
+    description: Account label management APIs
+  - name: Messages
+    description: Message management APIs
+  - name: Profile
+    description: User profile APIs
+  - name: Reports
+    description: Analytics and reporting APIs
+  - name: Teams
+    description: Team management APIs
+  - name: Webhooks
+    description: Event notification webhooks
+  - name: Automation Rule
+    description: Workflow automation rules
+  - name: Help Center
+    description: Knowledge base management
+  - name: Contacts API
+    description: Public contact APIs
+  - name: Conversations API
+    description: Public conversation APIs
+  - name: Messages API
+    description: Public message APIs
+  - name: CSAT Survey Page
+    description: Customer satisfaction survey
+x-tagGroups:
+  - name: Platform
+    tags:
+      - Accounts
+      - Account Users
+      - AgentBots
+      - Users
+  - name: Application
+    tags:
+      - Account AgentBots
+      - Account
+      - Agents
+      - Audit Logs
+      - Campaigns
+      - Canned Responses
+      - Contacts
+      - Contact Labels
+      - Conversation Assignments
+      - Conversation Labels
+      - Conversations
+      - Custom Attributes
+      - Custom Filters
+      - Inboxes
+      - Integrations
+      - Labels
+      - Messages
+      - Profile
+      - Reports
+      - Teams
+      - Webhooks
+      - Automation Rule
+      - Help Center
+  - name: Client
+    tags:
+      - Contacts API
+      - Conversations API
+      - Messages API
+  - name: Others
+    tags:
+      - CSAT Survey Page

@@ -1,0 +1,25 @@
+class HookPolicy < ApplicationPolicy
+  def create?
+    @account_user.administrator?
+  end
+
+  def auth?
+    create?
+  end
+
+  def complete_install?
+    create?
+  end
+
+  def update?
+    @account_user.administrator?
+  end
+
+  def process_event?
+    true
+  end
+
+  def destroy?
+    @account_user.administrator?
+  end
+end

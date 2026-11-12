@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} conversas selecionadas",
+    "NONE": "Nenhuma",
+    "CLEAR_SELECTION": "Limpar",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "Sim",
+    "CANCEL": "Cancelar",
+    "SEARCH_INPUT_PLACEHOLDER": "Procurar",
+    "ASSIGN_AGENT_TOOLTIP": "Atribuir agente",
+    "ASSIGN_TEAM_TOOLTIP": "Atribuir equipa",
+    "ASSIGN_SUCCESFUL": "Conversas atribuídas com sucesso.",
+    "ASSIGN_FAILED": "Falha ao atribuir conversas. Por favor, tente novamente.",
+    "RESOLVE_SUCCESFUL": "Conversas resolvidas com sucesso.",
+    "RESOLVE_FAILED": "Falha ao resolver conversas. Por favor, tente novamente.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "As conversas visíveis nesta página estão apenas selecionadas.",
+    "UPDATE": {
+      "CHANGE_STATUS": "Alterar estado",
+      "SNOOZE_UNTIL": "Adiar",
+      "UPDATE_SUCCESFUL": "Estado da conversa atualizado com sucesso.",
+      "UPDATE_FAILED": "Falha ao atualizar conversas. Por favor, tente novamente."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "Atribuir etiquetas",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "Atribuir etiquetas selecionadas",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "Etiquetas atribuídas com sucesso.",
+      "ASSIGN_FAILED": "Falha ao atribuir etiquetas. Por favor, tente novamente.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "Nenhuma",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "Equipas atribuídas.",
+      "ASSIGN_FAILED": "Falha ao atribuir equipa. Tente novamente."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

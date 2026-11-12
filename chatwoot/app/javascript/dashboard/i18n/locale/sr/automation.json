@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Automatizacija",
+    "DESCRIPTION": "Automation can replace and streamline existing processes that require manual effort, such as adding labels and assigning conversations to the most suitable agent. This allows the team to focus on their strengths while reducing time spent on routine tasks.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "Prikupljanje pravila automatizacije",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "Dodaj pravilo automatizacije",
+      "SUBMIT": "Napravi",
+      "CANCEL_BUTTON_TEXT": "Otkaži",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Naziv pravila",
+          "PLACEHOLDER": "Unesite naziv pravila",
+          "ERROR": "Ime je neophodno"
+        },
+        "DESC": {
+          "LABEL": "Opis",
+          "PLACEHOLDER": "Unesite opis pravila",
+          "ERROR": "Opis je neophodan"
+        },
+        "EVENT": {
+          "LABEL": "Događaj",
+          "PLACEHOLDER": "Molim izaberite jedno",
+          "ERROR": "Događaj je obavezan"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Retry",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Runs the moment an event happens, as long as the conditions match."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Wait condition",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "Prijemno sanduče",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "Uslovi"
+        },
+        "ACTIONS": {
+          "LABEL": "Akcije"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Dodaj uslov",
+      "ACTION_BUTTON_LABEL": "Dodaj akciju",
+      "API": {
+        "SUCCESS_MESSAGE": "Pravilo automatizacije je uspešno dodato",
+        "ERROR_MESSAGE": "Nije bilo moguće napraviti pravilo automatizacije. Molim vas pokušajte ponovo"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Ime",
+        "ACTIVE": "Aktivno",
+        "CREATED_ON": "Napravljeno"
+      },
+      "404": "Nisu pronađena pravila automatizacije",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "Obriši pravilo automatizacije",
+      "SUBMIT": "Izbriši",
+      "CANCEL_BUTTON_TEXT": "Otkaži",
+      "CONFIRM": {
+        "TITLE": "Potvrdite brisanje",
+        "MESSAGE": "Sigurni ste da želite izbrisati ",
+        "YES": "Da, izbriši ",
+        "NO": "Ne, zadrži "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Pravilo automatizacije je uspešno obrisano",
+        "ERROR_MESSAGE": "Nije bilo moguće obrisati pravilo automatizacije. Molim vas pokušajte ponovo"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Uredi pravilo automatizacije",
+      "SUBMIT": "Primeni",
+      "CANCEL_BUTTON_TEXT": "Otkaži",
+      "API": {
+        "SUCCESS_MESSAGE": "Pravilo automatizacije je uspešno izmenjeno",
+        "ERROR_MESSAGE": "Nije bilo moguće izmeniti pravilo automatizacije. Molim vas pokušajte ponovo"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Kloniraj",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatizacija je uspešno klonirana",
+        "ERROR_MESSAGE": "Nije bilo moguće klonirati pravilo automatizacije. Molim vas pokušajte ponovo"
+      }
+    },
+    "FORM": {
+      "EDIT": "Uredi",
+      "CREATE": "Napravi",
+      "DELETE": "Izbriši",
+      "CANCEL": "Otkaži",
+      "RESET_MESSAGE": "Promena tipa događaja će resetovati uslove i događaje koje ste dodali ispod"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Morate imati barem jedan uslov da bi ste mogli da sačuvate",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Contact Custom Attributes",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Conversation Custom Attributes",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Morate imati barem jednu akciju da bi ste mogli da sačuvate",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Unesite ovde vašu poruku",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Izaberite timove",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Aktiviraj pravilo automatizacije",
+      "DEACTIVATION_TITLE": "Deaktiviraj pravilo automatizacije",
+      "ACTIVATION_DESCRIPTION": "Ova akcija će aktivirati pravilo automatizacije '{automationName}'. Da li zaista želite da nastavite?",
+      "DEACTIVATION_DESCRIPTION": "Ova akcija će deaktivirati pravilo automatizacije '{automationName}'. Da li zaista želite da nastavite?",
+      "ACTIVATION_SUCCESFUL": "Pravilo automatizacije je uspešno aktivirano",
+      "DEACTIVATION_SUCCESFUL": "Pravilo automatizacije je uspešno deaktivirano",
+      "ACTIVATION_ERROR": "Nije bilo moguće aktivirati automatizaciju. Molim vas pokušajte ponovo",
+      "DEACTIVATION_ERROR": "Nije bilo moguće deaktivirati automatizaciju. Molim vas pokušajte ponovo",
+      "CONFIRMATION_LABEL": "Da",
+      "CANCEL_LABEL": "Ne"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Nije bilo moguće dodati prilog. Molim vas pokušajte ponovo",
+      "LABEL_IDLE": "Dodaj prilog",
+      "LABEL_UPLOADING": "Dodavanje...",
+      "LABEL_UPLOADED": "Successfully Uploaded",
+      "LABEL_UPLOAD_FAILED": "Dodavanje nije uspelo"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Vrednost je neophodna",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Value must be between 1 and 998",
+      "ACTION_PARAMETERS_REQUIRED": "Action parameters are required",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Niko",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Razgovor je napravljen",
+      "CONVERSATION_UPDATED": "Razgovor je izmenjen",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "Utišaj razgovor",
+      "SNOOZE_CONVERSATION": "Odloži razgovor",
+      "RESOLVE_CONVERSATION": "Reši razgovor",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "Change Priority",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Otvoren razgovor",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Niko",
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "URGENT": "Urgent"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "Privatna beleška",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "E-pošta",
+      "INBOX": "Prijemno sanduče",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "Broj telefona",
+      "STATUS": "Status",
+      "BROWSER_LANGUAGE": "Jezik pregledača",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "Država",
+      "COMPANY_NAME": "Firma",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Tim",
+      "PRIORITY": "Priority",
+      "LABELS": "Oznake",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

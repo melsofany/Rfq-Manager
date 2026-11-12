@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount}개의 대화가 선택되었습니다",
+    "NONE": "없음",
+    "CLEAR_SELECTION": "초기화",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "예",
+    "CANCEL": "취소",
+    "SEARCH_INPUT_PLACEHOLDER": "검색",
+    "ASSIGN_AGENT_TOOLTIP": "에이전트 배정",
+    "ASSIGN_TEAM_TOOLTIP": "팀 배정",
+    "ASSIGN_SUCCESFUL": "대화가 성공적으로 배정되었습니다.",
+    "ASSIGN_FAILED": "대화 배정에 실패했습니다. 다시 시도하십시오.",
+    "RESOLVE_SUCCESFUL": "대화가 성공적으로 해결되었습니다.",
+    "RESOLVE_FAILED": "대화 해결에 실패했습니다. 다시 시도하십시오.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "이 페이지에 표시된 대화만 선택되었습니다.",
+    "UPDATE": {
+      "CHANGE_STATUS": "상태 변경",
+      "SNOOZE_UNTIL": "일시 중지",
+      "UPDATE_SUCCESFUL": "대화 상태가 성공적으로 업데이트되었습니다.",
+      "UPDATE_FAILED": "대화 업데이트에 실패했습니다. 다시 시도하십시오."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "필수 속성이 누락되어 대화를 해결할 수 없습니다",
+      "PARTIAL_SUCCESS": "일부 대화는 필수 속성이 필요하여 건너뛰었습니다"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "라벨 배정",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "선택한 라벨 배정",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "라벨이 성공적으로 배정되었습니다.",
+      "ASSIGN_FAILED": "라벨 배정에 실패했습니다. 다시 시도하십시오.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "없음",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "팀이 성공적으로 배정되었습니다.",
+      "ASSIGN_FAILED": "팀 배정에 실패했습니다. 다시 시도하십시오."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

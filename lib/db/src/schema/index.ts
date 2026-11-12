@@ -41,3 +41,4 @@ export * from "./rfq_po_allocations";
 export * from "./field_operations";
 export * from "./finance";
 export * from "./mailbox_access";
+export * from "./chatwoot";

@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "Ekki í boði",
+    "EMAIL_ADDRESS": "Netfang",
+    "PHONE_NUMBER": "Símanúmer",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Einkenni",
+    "COPY_SUCCESSFUL": "Afritað á klemmuspjald",
+    "COMPANY": "Fyrirtæki",
+    "LOCATION": "Staðsetning",
+    "BROWSER_LANGUAGE": "Tungumál Vafra",
+    "CONVERSATION_TITLE": "Nánari upplýsingar samtals",
+    "VIEW_PROFILE": "Skoða prófíl",
+    "BROWSER": "Vafri",
+    "OS": "Stýrikerfi",
+    "INITIATED_FROM": "Hafið frá",
+    "INITIATED_AT": "Hafið",
+    "IP_ADDRESS": "IP tala",
+    "CREATED_AT_LABEL": "Skráð",
+    "NEW_MESSAGE": "Ný skilaboð",
+    "CALL": "Call",
+    "CALL_INITIATED": "Calling the contact…",
+    "CALL_FAILED": "Unable to start the call. Please try again.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Choose a voice inbox"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "Engin fyrri samtöl eru tengd þessum tengilið.",
+      "TITLE": "Fyrri samtöl",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Merkingar Tengiliða",
+        "ERROR": "Tókst ekki að uppfæra merkingar"
+      },
+      "CONVERSATION": {
+        "TITLE": "Merkingar Samtala",
+        "ADD_BUTTON": "Bæta við Merkingum"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "Bæta við Merkingum",
+        "PLACEHOLDER": "Leita að merkingum",
+        "NO_RESULT": "Engar merkingar fundust",
+        "CREATE_LABEL": "Create new label"
+      }
+    },
+    "MERGE_CONTACT": "Sameina tengilið",
+    "CONTACT_ACTIONS": "Aðgerðir tengiliðs",
+    "MUTE_CONTACT": "Block Contact",
+    "UNMUTE_CONTACT": "Unblock Contact",
+    "MUTED_SUCCESS": "This contact is blocked successfully. You will not be notified of any future conversations.",
+    "UNMUTED_SUCCESS": "This contact is unblocked successfully.",
+    "SEND_TRANSCRIPT": "Senda Afrit",
+    "EDIT_LABEL": "Breyta",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "Sérsniðnir Eiginleikar",
+      "CONTACT_LABELS": "Merkingar Tengiliða",
+      "PREVIOUS_CONVERSATIONS": "Fyrri samtöl",
+      "NO_RECORDS_FOUND": "Engir eiginleikar fundust"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "Breyta tengilið",
+    "TITLE": "Breyta tengilið",
+    "DESC": "Breyta smáatriðum tengiliðs"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "Eyða tengilið",
+    "TITLE": "Eyða tengilið",
+    "DESC": "Eyða smáatriðum tengiliðs",
+    "CONFIRM": {
+      "TITLE": "Staðfesta eyðingu",
+      "MESSAGE": "Ertu viss um að þú viljir eyða",
+      "YES": "Já, eyða",
+      "NO": "Nei, hætta við eyðingu"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Tengilið eytt",
+      "ERROR_MESSAGE": "Gat ekki eytt tengilið. Vinsamlegast reyndu aftur síðar."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "Senda",
+      "CANCEL": "Hætta við",
+      "AVATAR": {
+        "LABEL": "Mynd tengiliðs"
+      },
+      "NAME": {
+        "PLACEHOLDER": "Sláðu inn fullt nafn tengiliðsins",
+        "LABEL": "Fullt nafn"
+      },
+      "BIO": {
+        "PLACEHOLDER": "Sláðu inn sögu tengiliðs",
+        "LABEL": "Saga"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "Sláðu inn netfang tengiliðs",
+        "LABEL": "Netfang",
+        "DUPLICATE": "Þetta netfang er í notkun fyrir annan tengilið.",
+        "ERROR": "Vinsamlegast sláðu inn gilt netfang."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "Sláðu inn símanúmer tengiliðs",
+        "LABEL": "Símanúmer",
+        "HELP": "Símanúmer ætti að vera á E.164 sniði, td: +3541234567 [+][landsnúmer][svæðisnúmer][staðbundið símanúmer]",
+        "ERROR": "Símanúmer ætti að vera annað hvort autt eða á E.164 sniði",
+        "DIAL_CODE_ERROR": "Vinsamlegast veldu landsnúmer úr listanum",
+        "DUPLICATE": "Þetta símanúmer er í notkun fyrir annan tengilið."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "Sláðu staðsetningu tengiliðs",
+        "LABEL": "Staðsetning"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "Sláðu inn nafn fyrirtækis",
+        "LABEL": "Nafn fyrirtækis"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Sláðu inn nafn lands",
+        "LABEL": "Nafn lands",
+        "SELECT_PLACEHOLDER": "Velja",
+        "REMOVE": "Fjarlægja",
+        "SELECT_COUNTRY": "Veldu land"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Sláðu inn nafn borgar",
+        "LABEL": "Nafn borgar"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Sláðu inn Facebook notandanafn",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Sláðu inn Twitter notandanafn",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Sláðu inn LinkedIn notandanafn",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Sláðu inn Github notandanafn",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Notandamynd tengiliðs eytt",
+        "ERROR_MESSAGE": "Gat ekki eytt notandamynd tengiliða. Vinsamlegast reyndu aftur síðar."
+      }
+    },
+    "SUCCESS_MESSAGE": "Tengiliðurinn var vistaður",
+    "ERROR_MESSAGE": "Það kom upp villa, vinsamlegast reyndu aftur"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "Hefja samtal",
+    "TITLE": "Nýtt samtal",
+    "DESC": "Byrjaðu nýtt samtal með því að senda ný skilaboð.",
+    "NO_INBOX": "Gat ekki fundið innhólf til að hefja nýtt samtal við þennan tengilið.",
+    "FORM": {
+      "TO": {
+        "LABEL": "Til"
+      },
+      "INBOX": {
+        "LABEL": "Inbox",
+        "PLACEHOLDER": "Choose source inbox",
+        "ERROR": "Veldu innhólf"
+      },
+      "SUBJECT": {
+        "LABEL": "Viðfangsefni",
+        "PLACEHOLDER": "Viðfangsefni",
+        "ERROR": "Viðfangsefni má ekki vera tómt"
+      },
+      "MESSAGE": {
+        "LABEL": "Skilaboð",
+        "PLACEHOLDER": "Skrifaðu skilaboðin þín hér",
+        "ERROR": "Skilaboð mega ekki vera tóm"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Choose files",
+        "HELP_TEXT": "Drag and drop files here or choose files to attach"
+      },
+      "SUBMIT": "Senda skilaboð",
+      "CANCEL": "Hætta við",
+      "SUCCESS_MESSAGE": "Skilaboð send!",
+      "GO_TO_CONVERSATION": "Skoða",
+      "ERROR_MESSAGE": "Gat ekki sent! Reyndu aftur"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "Social Profiles"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Bæta við sérsniðnum eiginleika",
+    "COPY_SUCCESSFUL": "Afritað á klemmuspjald",
+    "SHOW_MORE": "Show all attributes",
+    "SHOW_LESS": "Show less attributes",
+    "ACTIONS": {
+      "COPY": "Afrita eiginleika",
+      "DELETE": "Eyða eiginleika",
+      "EDIT": "Breyta eiginleika"
+    },
+    "ADD": {
+      "TITLE": "Búa til sérsniðin eiginleika",
+      "DESC": "Bæta sérsniðnum eiginleika á þennan tengilið."
+    },
+    "FORM": {
+      "CREATE": "Bæta við eiginleika",
+      "CANCEL": "Hætta við",
+      "NAME": {
+        "LABEL": "Nafn sérsniðins eiginleika",
+        "PLACEHOLDER": "T.d. shopify id",
+        "ERROR": "Ógilt nafn sérsniðins eiginleika"
+      },
+      "VALUE": {
+        "LABEL": "Gildi eiginleika",
+        "PLACEHOLDER": "T.d. 11901"
+      },
+      "ADD": {
+        "TITLE": "Skrá nýjan eiginleika ",
+        "SUCCESS": "Eiginleika bætt við",
+        "ERROR": "Ekki er hægt að bæta við eigindi. Vinsamlegast reyndu aftur síðar"
+      },
+      "UPDATE": {
+        "SUCCESS": "Eiginleika breytt",
+        "ERROR": "Ekki er hægt að uppfæra eigindina. Vinsamlegast reyndu aftur síðar"
+      },
+      "DELETE": {
+        "SUCCESS": "Eiginleika eytt",
+        "ERROR": "Ekki er hægt að eyða eigindinni. Vinsamlegast reyndu aftur síðar"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Bæta við eiginleikum",
+        "PLACEHOLDER": "Leita í eiginleikum",
+        "NO_RESULT": "Engir eiginleikar fundust"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Veldu gildi",
+          "SEARCH_INPUT_PLACEHOLDER": "Leita að gildi",
+          "NO_RESULT": "Engar niðurstöður fundust"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Það þarf að slá inn gilt gildi",
+      "INVALID_URL": "Ógilt URL",
+      "INVALID_INPUT": "Invalid Input"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Sameina tengiliði",
+    "DESCRIPTION": "Sameina tengiliði til að sameina tvo prófíla í einn, þar á meðal alla eiginleika og samtöl. Ef til árekstra kemur munu eiginleikar aðaltengiliðs hafa forgang.",
+    "PRIMARY": {
+      "TITLE": "Aðaltengiliður",
+      "HELP_LABEL": "Eyða"
+    },
+    "PARENT": {
+      "TITLE": "Tengiliður til að sameina",
+      "PLACEHOLDER": "Leita að tengilið",
+      "HELP_LABEL": "Halda eftir"
+    },
+    "SUMMARY": {
+      "TITLE": "Samantekt",
+      "DELETE_WARNING": "Tengilið <strong>{primaryContactName}</strong> verður eytt.",
+      "ATTRIBUTE_WARNING": "Samskiptaupplýsingar <strong>{primaryContactName}</strong> verða afritaðar á <strong>{parentContactName}</strong>."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "Something went wrong. Please try again later."
+    },
+    "FORM": {
+      "SUBMIT": " Sameina tengiliði",
+      "CANCEL": "Hætta við",
+      "CHILD_CONTACT": {
+        "ERROR": "Veldu undir-tengilið til að sameina"
+      },
+      "SUCCESS_MESSAGE": "Tengiliður sameinaður",
+      "ERROR_MESSAGE": "Tókst ekki að sameina tengiliði, reyndu aftur!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "Tengiliðir",
+      "SEARCH_TITLE": "Search contacts",
+      "ACTIVE_TITLE": "Active contacts",
+      "SEARCH_PLACEHOLDER": "Search...",
+      "MESSAGE_BUTTON": "Skilaboð",
+      "SEND_MESSAGE": "Senda skilaboð",
+      "BLOCK_CONTACT": "Block contact",
+      "UNBLOCK_CONTACT": "Unblock contact",
+      "BREADCRUMB": {
+        "CONTACTS": "Tengiliðir"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Add contact",
+          "EXPORT_CONTACT": "Export contacts",
+          "IMPORT_CONTACT": "Import contacts",
+          "SAVE_CONTACT": "Save contact",
+          "EMAIL_ADDRESS_DUPLICATE": "Þetta netfang er í notkun fyrir annan tengilið.",
+          "PHONE_NUMBER_DUPLICATE": "Þetta símanúmer er í notkun fyrir annan tengilið.",
+          "SUCCESS_MESSAGE": "Tengiliðurinn var vistaður",
+          "ERROR_MESSAGE": "Unable to save contact. Please try again later."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "This contact is blocked successfully",
+        "BLOCK_ERROR_MESSAGE": "Unable to block contact. Please try again later.",
+        "UNBLOCK_SUCCESS_MESSAGE": "This contact is unblocked successfully",
+        "UNBLOCK_ERROR_MESSAGE": "Unable to unblock contact. Please try again later.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Import contacts",
+          "DESCRIPTION": "Hlaða inn tengiliðum með CSV skrá.",
+          "DOWNLOAD_LABEL": "Sækja csv sýnishorn.",
+          "LABEL": "CSV skrá:",
+          "CHOOSE_FILE": "Choose file",
+          "CHANGE": "Breyta",
+          "CANCEL": "Hætta við",
+          "IMPORT": "Hlaða inn",
+          "SUCCESS_MESSAGE": "You will be notified via email when the import is complete.",
+          "ERROR_MESSAGE": "Það kom upp villa, vinsamlegast reyndu aftur"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "Export contacts",
+          "DESCRIPTION": "Quickly export a csv file with comprehensive details of your contacts",
+          "CONFIRM": "Export",
+          "SUCCESS_MESSAGE": "Export is in progress, You will be notified via email when export file is ready to dowanlod.",
+          "ERROR_MESSAGE": "Það kom upp villa, vinsamlegast reyndu aftur"
+        },
+        "SORT_BY": {
+          "LABEL": "Sort by",
+          "OPTIONS": {
+            "NAME": "Nafn",
+            "EMAIL": "Tölvupóstfang",
+            "PHONE_NUMBER": "Símanúmer",
+            "COMPANY": "Fyrirtæki",
+            "COUNTRY": "Land",
+            "CITY": "Borg",
+            "LAST_ACTIVITY": "Last activity",
+            "CREATED_AT": "Created at"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Ordering",
+          "OPTIONS": {
+            "ASCENDING": "Ascending",
+            "DESCENDING": "Descending"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "Do you want to save this filter?",
+            "CONFIRM": "Vista síu",
+            "LABEL": "Nafn",
+            "PLACEHOLDER": "Enter the name of the filter",
+            "ERROR": "Enter a valid name",
+            "SUCCESS_MESSAGE": "Filter saved successfully",
+            "ERROR_MESSAGE": "Unable to save filter. Please try again later."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "Staðfesta eyðingu",
+            "DESCRIPTION": "Are you sure you want to delete this filter?",
+            "CONFIRM": "Já, eyða",
+            "CANCEL": "No, Cancel",
+            "SUCCESS_MESSAGE": "Filter deleted successfully",
+            "ERROR_MESSAGE": "Unable to delete filter. Please try again later."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "Nafn",
+      "EMAIL": "Tölvupóstfang",
+      "PHONE_NUMBER": "Símanúmer",
+      "IDENTIFIER": "Einkenni",
+      "COUNTRY": "Land",
+      "CITY": "Borg",
+      "COMPANY": "Fyrirtæki",
+      "CREATED_AT": "Created at",
+      "LAST_ACTIVITY": "Last activity",
+      "REFERER_LINK": "Referer link",
+      "BLOCKED": "Blocked",
+      "BLOCKED_TRUE": "True",
+      "BLOCKED_FALSE": "False",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "Clear filters",
+        "UPDATE_SEGMENT": "Update segment",
+        "APPLY_FILTERS": "Apply filters",
+        "ADD_FILTER": "Add filter"
+      },
+      "TITLE": "Filter contacts",
+      "EDIT_SEGMENT": "Edit segment",
+      "SEGMENT": {
+        "LABEL": "Segment name",
+        "INPUT_PLACEHOLDER": "Enter the name of the segment"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} more filters",
+        "CLEAR_FILTERS": "Clear filters"
+      }
+    },
+    "CARD": {
+      "OF": "of",
+      "VIEW_DETAILS": "Sjá smáatriði",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "Breyta smáatriðum tengiliðs",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Enter the first name"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Enter the last name"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Enter the email address",
+            "DUPLICATE": "Þetta netfang er í notkun fyrir annan tengilið."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Enter the phone number",
+            "DUPLICATE": "Þetta símanúmer er í notkun fyrir annan tengilið."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Sláðu inn nafn borgar"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Select country"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Enter the bio"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "Sláðu inn nafn fyrirtækis"
+          }
+        },
+        "UPDATE_BUTTON": "Update contact",
+        "SUCCESS_MESSAGE": "Contact updated successfully",
+        "ERROR_MESSAGE": "Unable to update contact. Please try again later."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "Edit social links",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Add Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Add Github"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Add Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Add Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Add TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Add LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Add Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "This action is permanent and irreversible.",
+        "BUTTON": "Delete now"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Created {date}",
+      "LAST_ACTIVITY": "Last active {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Permanently delete this contact. This action is irreversible",
+      "DELETE_CONTACT": "Eyða tengilið",
+      "DELETE_DIALOG": {
+        "TITLE": "Staðfesta eyðingu",
+        "DESCRIPTION": "Are you sure you want to delete this contact?",
+        "CONFIRM": "Já, eyða",
+        "API": {
+          "SUCCESS_MESSAGE": "Tengilið eytt",
+          "ERROR_MESSAGE": "Gat ekki eytt tengilið. Vinsamlegast reyndu aftur síðar."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Could not upload avatar. Please try again later.",
+          "SUCCESS_MESSAGE": "Avatar uploaded successfully"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Vefsíðumynd eytt",
+          "ERROR_MESSAGE": "Could not delete avatar. Please try again later."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Attributes",
+        "HISTORY": "History",
+        "NOTES": "Athugasemdir",
+        "MEDIA": "Media",
+        "MERGE": "Merge"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "Engin fyrri samtöl eru tengd þessum tengilið"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Search for attributes",
+        "UNUSED_ATTRIBUTES": "{count} Used attribute | {count} Unused attributes",
+        "EMPTY_STATE": "There are no contact custom attributes available in this account. You can create a custom attribute in settings.",
+        "YES": "Já",
+        "NO": "Nei",
+        "TRIGGER": {
+          "SELECT": "Veldu gildi",
+          "INPUT": "Enter value"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Invalid number",
+          "REQUIRED": "Það þarf að slá inn gilt gildi",
+          "INVALID_INPUT": "Invalid input",
+          "INVALID_URL": "Ógilt URL",
+          "INVALID_DATE": "Invalid date"
+        },
+        "NO_ATTRIBUTES": "Engir eiginleikar fundust",
+        "API": {
+          "SUCCESS_MESSAGE": "Eiginleika breytt",
+          "DELETE_SUCCESS_MESSAGE": "Eiginleika eytt",
+          "UPDATE_ERROR": "Ekki er hægt að uppfæra eigindina. Vinsamlegast reyndu aftur síðar",
+          "DELETE_ERROR": "Ekki er hægt að eyða eigindinni. Vinsamlegast reyndu aftur síðar"
+        }
+      },
+      "MERGE": {
+        "TITLE": "Sameina tengilið",
+        "DESCRIPTION": "Combine two profiles into one, including all attributes and conversations. In case of conflict, the primary contact’s attributes will take precedence.",
+        "PRIMARY": "Aðaltengiliður",
+        "PRIMARY_HELP_LABEL": "To be saved",
+        "PRIMARY_REQUIRED_ERROR": "Please select a contact to merge with before proceeding",
+        "PARENT": "To be merged",
+        "PARENT_HELP_LABEL": "Eyða",
+        "EMPTY_STATE": "No contacts found",
+        "PLACEHOLDER": "Search for primary contact",
+        "SEARCH_PLACEHOLDER": "Leita að tengilið",
+        "SEARCH_ERROR_MESSAGE": "Could not search for contacts. Please try again later.",
+        "SUCCESS_MESSAGE": "Tengiliður sameinaður",
+        "ERROR_MESSAGE": "Tókst ekki að sameina tengiliði, reyndu aftur!",
+        "IS_SEARCHING": "Searching...",
+        "BUTTONS": {
+          "CANCEL": "Hætta við",
+          "CONFIRM": "Sameina tengilið"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Bæta við athugasemd",
+        "WROTE": "wrote",
+        "YOU": "You",
+        "SAVE": "Save note",
+        "ADD_NOTE": "Add contact note",
+        "EXPAND": "Expand",
+        "COLLAPSE": "Collapse",
+        "NO_NOTES": "No notes, you can add notes from the contact details page.",
+        "EMPTY_STATE": "There are no notes associated to this contact. You can add a note by typing in the box above.",
+        "CONVERSATION_EMPTY_STATE": "There are no notes yet. Use the Add note button to create one."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "No contacts found in this account",
+      "SUBTITLE": "Start adding new contacts by clicking on the button below",
+      "BUTTON_LABEL": "Add contact",
+      "SEARCH_EMPTY_STATE_TITLE": "Engir tengiliðir fundust",
+      "LIST_EMPTY_STATE_TITLE": "No contacts available in this view 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "No contacts are active at the moment 🌙"
+    },
+    "LOAD_MORE": "Load more"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Assign Labels",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Labels assigned successfully.",
+    "ASSIGN_LABELS_FAILED": "Failed to assign labels",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Select the labels you want to add to the selected contacts.",
+    "NO_LABELS_FOUND": "No labels available yet.",
+    "SELECTED_COUNT": "{count} selected",
+    "CLEAR_SELECTION": "Clear selection",
+    "SELECT_ALL": "Select all ({count})",
+    "DELETE_CONTACTS": "Eyða",
+    "DELETE_SUCCESS": "Contacts deleted successfully.",
+    "DELETE_FAILED": "Failed to delete contacts.",
+    "DELETE_DIALOG": {
+      "TITLE": "Delete selected contacts",
+      "SINGULAR_TITLE": "Delete selected contact",
+      "DESCRIPTION": "This will permanently delete {count} selected contacts. This action cannot be undone.",
+      "SINGULAR_DESCRIPTION": "This will permanently delete the selected contact. This action cannot be undone.",
+      "CONFIRM_MULTIPLE": "Delete contacts",
+      "CONFIRM_SINGLE": "Eyða tengilið"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "We couldn’t complete the search. Please try again."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "Skoða",
+      "SUCCESS_MESSAGE": "The message was sent successfully!",
+      "ERROR_MESSAGE": "An error occurred while creating the conversation. Please try again later.",
+      "NO_INBOX_ALERT": "There are no available inboxes to start a conversation with this contact.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "Til:",
+        "TAG_INPUT_PLACEHOLDER": "Enter at least 2 characters to search by name, email, or phone number",
+        "CONTACT_CREATING": "Creating contact..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Via:",
+        "BUTTON": "Show inboxes"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Viðfangsefni :",
+        "SUBJECT_PLACEHOLDER": "Enter your email subject here",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_BUTTON": "Bcc"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "Skrifaðu skilaboðin þín hér..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp template: {templateName}",
+          "VARIABLES": "Variables",
+          "BACK": "Go back",
+          "SEND_MESSAGE": "Senda skilaboð"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "BACK": "Go back",
+          "SEND_MESSAGE": "Senda skilaboð"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Discard",
+        "SEND": "Send ({keyCode})"
+      }
+    }
+  }
+}

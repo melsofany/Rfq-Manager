@@ -1,0 +1,112 @@
+{
+  "AUDIT_LOGS": {
+    "HEADER": "Journaux d'audit",
+    "HEADER_BTN_TXT": "Ajouter des journaux d'audit",
+    "LOADING": "Récupération des journaux d'audit",
+    "DESCRIPTION": "Les journaux d’audit consignent les activités de votre compte et vous permettent d’auditer votre compte, votre équipe ou vos services.",
+    "LEARN_MORE": "En savoir plus sur les journaux d'audit",
+    "SEARCH_404": "Il n'y a aucun élément correspondant à cette requête",
+    "SIDEBAR_TXT": "</p><b>Les journaux d'audit</b> </p><p>Les journaux d'audit contiennent des événements et des actions associés un système Chatwoot. </p>",
+    "COUNT": "{n} event | {n} events",
+    "FILTERS": {
+      "SEARCH_PLACEHOLDER": "Search by name or email",
+      "ALL_EVENTS": "All events",
+      "DATE_RANGE": "Date range",
+      "CLEAR_ALL": "Effacer les filtres",
+      "EVENT_TYPE_GROUPS": {
+        "ACCESS": "Access",
+        "AGENTS_TEAMS": "Agents & teams",
+        "CONFIGURATION": "Configuration",
+        "CONVERSATIONS": "Conversations"
+      },
+      "EVENT_TYPES": {
+        "SIGN_IN_OUT": "Sign in / sign out",
+        "AGENTS": "Agents",
+        "TEAMS": "Équipes",
+        "TEAM_MEMBERS": "Team members",
+        "INBOX_MEMBERS": "Inbox collaborators",
+        "ACCOUNT": "Paramètres du compte",
+        "INBOXES": "Boîtes de réception",
+        "WEBHOOKS": "Webhooks",
+        "AUTOMATION_RULES": "Automation rules",
+        "MACROS": "Macros",
+        "CONVERSATION_DELETIONS": "Conversation deletions",
+        "MESSAGE_DELETIONS": "Message deletions"
+      },
+      "SORT": {
+        "NEWEST": "Plus récent en premier",
+        "OLDEST": "Le plus ancien en premier"
+      }
+    },
+    "LIST": {
+      "404": "Il n'y a aucun journal d'audit disponible dans ce compte.",
+      "TITLE": "Gérer les journaux d’audit",
+      "DESC": "Les journaux d'audit sont des traces pour les événements et les actions dans un système Chatwoot.",
+      "TABLE_HEADER": {
+        "ACTIVITY": "User",
+        "TIME": "Action",
+        "IP_ADDRESS": "Adresse IP",
+        "LOCATION": "Localisation"
+      }
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Les journaux d'audit ont bien été récupérés",
+      "ERROR_MESSAGE": "Impossible de se connecter au serveur Woot, veuillez réessayer plus tard"
+    },
+    "DEFAULT_USER": "Système",
+    "AUTOMATION_RULE": {
+      "ADD": "{agentName} a créé une nouvelle règle d'automatisation (#{id})",
+      "EDIT": "{agentName} a mis à jour une règle d'automatisation (#{id})",
+      "DELETE": "{agentName} a supprimé une règle d'automatisation (#{id})"
+    },
+    "ACCOUNT_USER": {
+      "ADD": "{agentName} a invité {invitee} à rejoindre le compte en tant que {role}",
+      "EDIT": {
+        "SELF": "{agentName} a changé sa {attributes} en {values}",
+        "OTHER": "{agentName} a changé {attributes} de {user} en {values}",
+        "DELETED": "{agentName} a changé {attributes} d'un utilisateur supprimé en {values}"
+      }
+    },
+    "INBOX": {
+      "ADD": "{agentName} a créé une nouvelle boîte de réception (#{id})",
+      "EDIT": "{agentName} a mis à jour une boîte de réception (#{id})",
+      "DELETE": "{agentName} a supprimé une boîte de réception (#{id})"
+    },
+    "WEBHOOK": {
+      "ADD": "{agentName} a créé un nouveau webhook (#{id})",
+      "EDIT": "{agentName} a mis à jour un webhook (#{id})",
+      "DELETE": "{agentName} a supprimé un webhook (#{id})"
+    },
+    "USER_ACTION": {
+      "SIGN_IN": "{agentName} s'est connecté",
+      "SIGN_OUT": "{agentName} s'est déconnecté"
+    },
+    "TEAM": {
+      "ADD": "{agentName} a créé une nouvelle équipe (#{id})",
+      "EDIT": "{agentName} a mis à jour une équipe (#{id})",
+      "DELETE": "{agentName} a supprimé une équipe (#{id})"
+    },
+    "MACRO": {
+      "ADD": "{agentName} a créé une nouvelle macro (#{id})",
+      "EDIT": "{agentName} a mis à jour une macro (#{id})",
+      "DELETE": "{agentName} a supprimé une macro (#{id})"
+    },
+    "INBOX_MEMBER": {
+      "ADD": "{agentName} a ajouté {user} à la boîte de réception (#{inbox_id})",
+      "REMOVE": "{agentName} a retiré {user} de la boîte de réception (#{inbox_id})"
+    },
+    "TEAM_MEMBER": {
+      "ADD": "{agentName} a ajouté {user} à l'équipe(#{team_id})",
+      "REMOVE": "{agentName} a retiré {user} de l'équipe (#{team_id})"
+    },
+    "ACCOUNT": {
+      "EDIT": "{agentName} a mis à jour la configuration du compte (#{id})"
+    },
+    "CONVERSATION": {
+      "DELETE": "{agentName} a supprimé la conversation #{id}"
+    },
+    "MESSAGE": {
+      "DELETE": "{agentName} deleted a message in conversation #{conversationId}"
+    }
+  }
+}

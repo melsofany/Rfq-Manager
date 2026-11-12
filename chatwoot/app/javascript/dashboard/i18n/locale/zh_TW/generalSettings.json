@@ -1,0 +1,276 @@
+{
+  "GENERAL_SETTINGS": {
+    "LIMIT_MESSAGES": {
+      "CONVERSATION": "您已超過對話數量上限。Hacker 方案僅允許 500 則對話。",
+      "INBOXES": "您已超過收件匣數量上限。Hacker 方案僅支援網站即時聊天。如需使用電子郵件、WhatsApp 等額外收件匣，請升級至付費方案。",
+      "AGENTS": "您已超過客服人員數量上限。您的方案僅允許 {allowedAgents} 位客服人員。",
+      "NON_ADMIN": "請聯絡您的管理員升級方案，以繼續使用所有功能。"
+    },
+    "TITLE": "帳戶設定",
+    "SUBMIT": "更新設定",
+    "BACK": "返回",
+    "DISMISS": "關閉",
+    "UPDATE": {
+      "ERROR": "無法更新設定，請重試！",
+      "SUCCESS": "已成功更新帳戶設定"
+    },
+    "ACCOUNT_DELETE_SECTION": {
+      "TITLE": "刪除您的帳戶",
+      "NOTE": "一旦刪除帳戶，您的所有資料將被永久刪除。",
+      "BUTTON_TEXT": "刪除您的帳戶",
+      "CONFIRM": {
+        "TITLE": "刪除帳戶",
+        "MESSAGE": "刪除帳戶後將無法復原。請在下方輸入您的帳戶名稱以確認永久刪除。",
+        "BUTTON_TEXT": "刪除",
+        "DISMISS": "取消",
+        "PLACE_HOLDER": "請輸入 {accountName} 以確認"
+      },
+      "SUCCESS": "帳戶已標記為待刪除",
+      "FAILURE": "無法刪除帳戶，請重試！",
+      "SCHEDULED_DELETION": {
+        "TITLE": "帳戶已排定刪除",
+        "MESSAGE_MANUAL": "此帳戶已排定於 {deletionDate} 刪除。此操作由管理員發起，您可以在該日期之前取消刪除。",
+        "MESSAGE_INACTIVITY": "此帳戶因長期未使用，已排定於 {deletionDate} 刪除。您可以在該日期之前取消刪除。",
+        "CLEAR_BUTTON": "取消排定刪除"
+      }
+    },
+    "FORM": {
+      "ERROR": "請修正表單錯誤",
+      "GENERAL_SECTION": {
+        "TITLE": "一般設定",
+        "NOTE": ""
+      },
+      "ACCOUNT_ID": {
+        "TITLE": "帳戶 ID",
+        "NOTE": "如果您正在建立基於 API 的整合，將需要此 ID"
+      },
+      "TRANSLATION": {
+        "TITLE": "Translation",
+        "NOTE": "Speak every customer's language, whatever languages your team knows.",
+        "CAPTAIN": {
+          "TITLE": "Captain",
+          "NOTE": "AI translations that sound natural and keep your tone."
+        },
+        "GOOGLE": {
+          "TITLE": "Google 翻譯",
+          "NOTE": "Quick, reliable translations from Google.",
+          "NOT_CONNECTED": "Not connected",
+          "CONNECT": "連接",
+          "NOT_CONNECTED_HINT": "Google Translate isn't connected yet."
+        },
+        "UPGRADE": {
+          "NOTE": "Upgrade to a paid plan to translate conversations with Captain or Google Translate.",
+          "BUTTON": "升級"
+        },
+        "AUTO_TRANSLATE": {
+          "TITLE": "Auto-translate conversations",
+          "NOTE": "Read every message in your language. Customers get replies in theirs.",
+          "LOCKED": "Choose a service to turn this on.",
+          "NOT_AVAILABLE": "Auto-translate isn't enabled for this account yet."
+        },
+        "API": {
+          "SUCCESS": "Translation settings updated successfully",
+          "ERROR": "Failed to update translation settings"
+        }
+      },
+      "AUTO_RESOLVE": {
+        "TITLE": "自動解決對話",
+        "NOTE": "此設定可讓您在一段時間無活動後自動解決對話。",
+        "DURATION": {
+          "LABEL": "無活動持續時間",
+          "HELP": "對話在無活動多久後自動解決",
+          "PLACEHOLDER": "30",
+          "ERROR": "Auto resolve duration should be between {minDuration} minutes and 999 days",
+          "API": {
+            "SUCCESS": "已成功更新自動解決設定",
+            "ERROR": "無法更新自動解決設定"
+          }
+        },
+        "MESSAGE": {
+          "LABEL": "自訂自動解決訊息",
+          "PLACEHOLDER": "由於 15 天無活動，此對話已被系統標記為已解決",
+          "HELP": "對話自動解決後傳送給客戶的訊息"
+        },
+        "PREFERENCES": "偏好設定",
+        "LABEL": {
+          "LABEL": "自動解決後新增標籤",
+          "PLACEHOLDER": "選擇標籤"
+        },
+        "IGNORE_WAITING": {
+          "LABEL": "跳過等待客服回覆的對話"
+        },
+        "UPDATE_BUTTON": "儲存變更"
+      },
+      "NAME": {
+        "LABEL": "帳戶名稱",
+        "PLACEHOLDER": "您的帳戶名稱",
+        "ERROR": "請輸入有效的帳戶名稱"
+      },
+      "LANGUAGE": {
+        "LABEL": "網站語言",
+        "PLACEHOLDER": "您的帳戶名稱",
+        "ERROR": ""
+      },
+      "DOMAIN": {
+        "LABEL": "接收電子郵件的網域",
+        "PLACEHOLDER": "用於接收郵件的網域",
+        "ERROR": ""
+      },
+      "SUPPORT_EMAIL": {
+        "LABEL": "客服信箱",
+        "PLACEHOLDER": "您公司的客服信箱",
+        "ERROR": ""
+      },
+      "AUTO_RESOLVE_IGNORE_WAITING": {
+        "LABEL": "排除未回覆的對話",
+        "HELP": "啟用後，系統將跳過仍在等待客服回覆的對話，不會自動解決。"
+      },
+      "AUDIO_TRANSCRIPTION": {
+        "TITLE": "語音訊息轉文字",
+        "NOTE": "自動將對話中的語音訊息轉為文字。每當傳送或接收語音訊息時，系統會自動產生文字稿並顯示在訊息旁。",
+        "API": {
+          "SUCCESS": "已成功更新語音轉文字設定",
+          "ERROR": "無法更新語音轉文字設定"
+        }
+      },
+      "ENFORCE_MFA": {
+        "TITLE": "Enforce two-factor authentication",
+        "NOTE": "Require every member of this account to set up two-factor authentication. Members without it will be asked to set it up at their next password sign-in. Sign-ins through Google or SAML are exempt. API access tokens of members who have not set up two-factor authentication stop working for this account until they enrol.",
+        "API": {
+          "SUCCESS": "Two-factor authentication enforcement updated successfully",
+          "ERROR": "Failed to update two-factor authentication enforcement"
+        }
+      },
+      "AUTO_RESOLVE_DURATION": {
+        "LABEL": "無活動自動解決時間",
+        "HELP": "對話在無活動多久後應自動解決",
+        "PLACEHOLDER": "30",
+        "ERROR": "自動解決時間應介於 10 分鐘至 999 天之間",
+        "API": {
+          "SUCCESS": "已成功更新自動解決設定",
+          "ERROR": "無法更新自動解決設定"
+        },
+        "UPDATE_BUTTON": "更新",
+        "MESSAGE_LABEL": "自訂解決訊息",
+        "MESSAGE_PLACEHOLDER": "由於 15 天無活動，此對話已被系統標記為已解決",
+        "MESSAGE_HELP": "當對話因無活動而被系統自動解決時，此訊息將傳送給客戶。"
+      },
+      "FEATURES": {
+        "INBOUND_EMAIL_ENABLED": "您的帳戶已啟用電子郵件對話延續功能。",
+        "CUSTOM_EMAIL_DOMAIN_ENABLED": "您現在可以在自訂網域的信箱中接收郵件。"
+      }
+    },
+    "UPDATE_CHATWOOT": "Chatwoot 有新版本 {latestChatwootVersion} 可供更新，請更新您的執行個體。",
+    "LEARN_MORE": "瞭解更多",
+    "PAYMENT_PENDING": "Your account payment is past due. Please update your payment information to avoid subscription cancellation.",
+    "PAYMENT_PENDING_AGENT": "Your account payment is past due. Please contact your administrator to resolve it.",
+    "UPGRADE": "升級以繼續使用 Chatwoot",
+    "LIMITS_UPGRADE": "您的帳戶已超過使用量上限，請升級方案以繼續使用 Chatwoot",
+    "OPEN_BILLING": "開啟帳單"
+  },
+  "FORMS": {
+    "MULTISELECT": {
+      "ENTER_TO_SELECT": "按下 Enter 以選擇",
+      "ENTER_TO_REMOVE": "按下 Enter 以移除",
+      "NO_OPTIONS": "清單為空",
+      "SELECT_ONE": "選擇其中一項",
+      "SELECT": "選擇"
+    }
+  },
+  "NETWORK": {
+    "NOTIFICATION": {
+      "OFFLINE": "離線",
+      "RECONNECTING": "重新連線中...",
+      "RECONNECT_SUCCESS": "已重新連線"
+    },
+    "BUTTON": {
+      "REFRESH": "重新整理"
+    }
+  },
+  "COMMAND_BAR": {
+    "SEARCH_PLACEHOLDER": "搜尋或快速跳轉",
+    "SNOOZE_PLACEHOLDER": "輸入時間，例如：明天、2 小時後、下週五、1月15日...",
+    "SECTIONS": {
+      "GENERAL": "一般",
+      "REPORTS": "報表",
+      "CONVERSATION": "對話",
+      "BULK_ACTIONS": "批次操作",
+      "CHANGE_ASSIGNEE": "變更負責人",
+      "CHANGE_PRIORITY": "變更優先順序",
+      "CHANGE_TEAM": "變更團隊",
+      "SNOOZE_CONVERSATION": "延後對話",
+      "EXECUTE_MACRO": "Execute Macro",
+      "ADD_LABEL": "為對話新增標籤",
+      "REMOVE_LABEL": "從對話移除標籤",
+      "SETTINGS": "設定",
+      "AI_ASSIST": "AI 助手",
+      "APPEARANCE": "外觀",
+      "SNOOZE_NOTIFICATION": "延後通知"
+    },
+    "COMMANDS": {
+      "GO_TO_MY_INBOX": "Go to My Inbox",
+      "GO_TO_CONVERSATION_DASHBOARD": "前往對話儀表板",
+      "GO_TO_CONTACTS_DASHBOARD": "前往聯絡人儀表板",
+      "GO_TO_CAPTAIN": "Go to Captain",
+      "GO_TO_CALLS_DASHBOARD": "Go to Calls Dashboard",
+      "GO_TO_CAMPAIGNS": "Go to Campaigns",
+      "GO_TO_HELP_CENTER": "Go to Help Center",
+      "GO_TO_REPORTS_OVERVIEW": "前往報表總覽",
+      "GO_TO_CONVERSATION_REPORTS": "前往對話報表",
+      "GO_TO_AGENT_REPORTS": "前往客服人員報表",
+      "GO_TO_LABEL_REPORTS": "前往標籤報表",
+      "GO_TO_INBOX_REPORTS": "前往收件匣報表",
+      "GO_TO_TEAM_REPORTS": "前往團隊報表",
+      "GO_TO_CSAT_REPORTS": "Go to CSAT Reports",
+      "GO_TO_BOT_REPORTS": "Go to Bot Reports",
+      "GO_TO_SLA_REPORTS": "Go to SLA Reports",
+      "GO_TO_SETTINGS_AGENTS": "前往客服人員設定",
+      "GO_TO_SETTINGS_TEAMS": "前往團隊設定",
+      "GO_TO_SETTINGS_INBOXES": "前往收件匣設定",
+      "GO_TO_SETTINGS_TEMPLATES": "Go to Templates",
+      "GO_TO_SETTINGS_LABELS": "前往標籤設定",
+      "GO_TO_SETTINGS_CUSTOM_ATTRIBUTES": "Go to Custom Attributes",
+      "GO_TO_SETTINGS_AUTOMATION": "Go to Automation",
+      "GO_TO_SETTINGS_MACROS": "Go to Macros",
+      "GO_TO_SETTINGS_CANNED_RESPONSES": "前往預設回覆設定",
+      "GO_TO_SETTINGS_SLA": "Go to SLA Settings",
+      "GO_TO_SETTINGS_APPLICATIONS": "前往應用程式設定",
+      "GO_TO_SETTINGS_DATA": "Go to Data",
+      "GO_TO_SETTINGS_AUDIT_LOGS": "Go to Audit Logs",
+      "GO_TO_SETTINGS_BILLING": "Go to Billing",
+      "GO_TO_SETTINGS_ACCOUNT": "前往帳戶設定",
+      "GO_TO_SETTINGS_PROFILE": "前往個人資料設定",
+      "ADD_LABELS_TO_CONVERSATION": "為對話新增標籤",
+      "ASSIGN_AN_AGENT": "指派客服人員",
+      "AI_ASSIST": "AI 助手",
+      "ASSIGN_PRIORITY": "指派優先順序",
+      "ASSIGN_A_TEAM": "指派團隊",
+      "EXECUTE_A_MACRO": "Execute a macro",
+      "MUTE_CONVERSATION": "將對話靜音",
+      "UNMUTE_CONVERSATION": "取消對話靜音",
+      "REMOVE_LABEL_FROM_CONVERSATION": "從對話移除標籤",
+      "REOPEN_CONVERSATION": "重新開啟對話",
+      "RESOLVE_CONVERSATION": "解決對話",
+      "SEND_TRANSCRIPT": "傳送對話記錄電子郵件",
+      "SNOOZE_CONVERSATION": "延後對話",
+      "UNTIL_NEXT_REPLY": "直到下次回覆",
+      "UNTIL_NEXT_WEEK": "直到下週",
+      "UNTIL_TOMORROW": "直到明天",
+      "UNTIL_NEXT_MONTH": "直到下個月",
+      "AN_HOUR_FROM_NOW": "一小時後",
+      "UNTIL_CUSTOM_TIME": "自訂時間...",
+      "CHANGE_APPEARANCE": "變更外觀",
+      "LIGHT_MODE": "淺色",
+      "DARK_MODE": "深色",
+      "SYSTEM_MODE": "跟隨系統",
+      "SNOOZE_NOTIFICATION": "延後通知"
+    }
+  },
+  "DASHBOARD_APPS": {
+    "LOADING_MESSAGE": "正在載入儀表板應用程式..."
+  },
+  "COMMON": {
+    "OR": "或",
+    "CLICK_HERE": "點擊這裡"
+  }
+}

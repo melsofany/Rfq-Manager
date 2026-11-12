@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "Առկա չէ",
+    "EMAIL_ADDRESS": "Էլեկտրոնային հասցե",
+    "PHONE_NUMBER": "Հեռախոսահամար",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Համակարգիչ",
+    "COPY_SUCCESSFUL": "Հաջողությամբ պատճենվեց սեղմատախտակում",
+    "COMPANY": "Ընկերություն",
+    "LOCATION": "Տեղանք",
+    "BROWSER_LANGUAGE": "Browser Language",
+    "CONVERSATION_TITLE": "Հաղորդակցության մանրամասներ",
+    "VIEW_PROFILE": "View Profile",
+    "BROWSER": "Browser",
+    "OS": "Operating System",
+    "INITIATED_FROM": "Սկսվել է՝",
+    "INITIATED_AT": "Սկսվել է՝",
+    "IP_ADDRESS": "IP հասցե",
+    "CREATED_AT_LABEL": "Ստեղծվել է",
+    "NEW_MESSAGE": "Նոր հաղորդագրություն",
+    "CALL": "Զանգ",
+    "CALL_INITIATED": "Զանգը սկսվում է…",
+    "CALL_FAILED": "Չհաջողվեց սկսել զանգը։ Խնդրում ենք փորձել կրկին։",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Ընտրեք ձայնային մուտքագրման արկղը"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "There are no previous conversations associated to this contact.",
+      "TITLE": "Նախորդ զրույցներ",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Կապի պիտակներ",
+        "ERROR": "Չհաջողվեց թարմացնել պիտակները"
+      },
+      "CONVERSATION": {
+        "TITLE": "Հաղորդակցության պիտակներ",
+        "ADD_BUTTON": "Ավելացնել պիտակներ"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "Ավելացնել պիտակներ",
+        "PLACEHOLDER": "Որոնել պիտակներ",
+        "NO_RESULT": "Պիտակներ չեն գտնվել",
+        "CREATE_LABEL": "Ստեղծել նոր պիտակ"
+      }
+    },
+    "MERGE_CONTACT": "Միավորել կապը",
+    "CONTACT_ACTIONS": "Կապի գործողություններ",
+    "MUTE_CONTACT": "Block Contact",
+    "UNMUTE_CONTACT": "Unblock Contact",
+    "MUTED_SUCCESS": "Այս շփումը հաջողությամբ արգելափակվեց։ Դուք այլևս ծանուցումներ չեք ստանա ապագա զրույցների մասին։",
+    "UNMUTED_SUCCESS": "This contact is unblocked successfully.",
+    "SEND_TRANSCRIPT": "Send Transcript",
+    "EDIT_LABEL": "Խմբագրել",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "Հատուկ հատկություններ",
+      "CONTACT_LABELS": "Կապի պիտակներ",
+      "PREVIOUS_CONVERSATIONS": "Նախորդ զրույցներ",
+      "NO_RECORDS_FOUND": "Հայտնաբերված հատկություններ չկան"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "Edit Contact",
+    "TITLE": "Edit contact",
+    "DESC": "Edit contact details"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "Ջնջել կապը",
+    "TITLE": "Ջնջել կապը",
+    "DESC": "Ջնջել կապի մանրամասները",
+    "CONFIRM": {
+      "TITLE": "Հաստատել ջնջումը",
+      "MESSAGE": "Վստա՞հ եք, որ ցանկանում եք ջնջել ",
+      "YES": "Այո, Ջնջել",
+      "NO": "Ոչ, Պահպանել"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Կապը հաջողությամբ ջնջվեց",
+      "ERROR_MESSAGE": "Չհաջողվեց ջնջել կապը։ Խնդրում ենք փորձել ավելի ուշ։"
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "Ուղարկել",
+      "CANCEL": "Չեղարկել",
+      "AVATAR": {
+        "LABEL": "Contact Avatar"
+      },
+      "NAME": {
+        "PLACEHOLDER": "Enter the full name of the contact",
+        "LABEL": "Ամբողջական անուն"
+      },
+      "BIO": {
+        "PLACEHOLDER": "Enter the bio of the contact",
+        "LABEL": "Կենսագրություն"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "Մուտքագրեք շփման էլ. փոստի հասցեն",
+        "LABEL": "Էլեկտրոնային հասցե",
+        "DUPLICATE": "Այս էլ. փոստի հասցեն օգտագործվում է մեկ այլ շփման համար։",
+        "ERROR": "Խնդրում ենք մուտքագրել վավեր էլ. հասցե։"
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "Enter the phone number of the contact",
+        "LABEL": "Հեռախոսահամար",
+        "HELP": "Phone number should be of E.164 format eg: +1415555555 [+][country code][area code][local phone number]",
+        "ERROR": "Հեռախոսահամարը պետք է լինի դատարկ կամ E.164 ձևաչափով",
+        "DIAL_CODE_ERROR": "Please select a dial code from the list",
+        "DUPLICATE": "This phone number is in use for another contact."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "Enter the location of the contact",
+        "LABEL": "Տեղանք"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "Մուտքագրեք ընկերության անունը",
+        "LABEL": "Ընկերության անուն"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Մուտքագրեք երկրի անունը",
+        "LABEL": "Երկրի անուն",
+        "SELECT_PLACEHOLDER": "Ընտրել",
+        "REMOVE": "Հեռացնել",
+        "SELECT_COUNTRY": "Ընտրեք երկիրը"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Մուտքագրեք քաղաքի անունը",
+        "LABEL": "Քաղաքի անուն"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Enter the Facebook username",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Enter the Twitter username",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Enter the LinkedIn username",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Enter the Github username",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Contact avatar deleted successfully",
+        "ERROR_MESSAGE": "Could not delete the contact avatar. Please try again later."
+      }
+    },
+    "SUCCESS_MESSAGE": "Կապը հաջողությամբ պահպանվեց",
+    "ERROR_MESSAGE": "Սխալ է տեղի ունեցել, խնդրում ենք կրկին փորձել"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "Սկսել զրույցը",
+    "TITLE": "Նոր զրույց",
+    "DESC": "Սկսեք նոր զրույց՝ ուղարկելով նոր հաղորդագրություն։",
+    "NO_INBOX": "Couldn't find an inbox to initiate a new conversation with this contact.",
+    "FORM": {
+      "TO": {
+        "LABEL": "Ուղղությամբ"
+      },
+      "INBOX": {
+        "LABEL": "Inbox",
+        "PLACEHOLDER": "Ընտրեք աղբյուրի փոստարկղը",
+        "ERROR": "Ընտրեք մուտքուղի"
+      },
+      "SUBJECT": {
+        "LABEL": "Թեմա",
+        "PLACEHOLDER": "Թեմա",
+        "ERROR": "Թեման չի կարող դատարկ լինել"
+      },
+      "MESSAGE": {
+        "LABEL": "Հաղորդագրություն",
+        "PLACEHOLDER": "Գրեք ձեր հաղորդագրությունը այստեղ",
+        "ERROR": "Հաղորդագրությունը չի կարող դատարկ լինել"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Choose files",
+        "HELP_TEXT": "Drag and drop files here or choose files to attach"
+      },
+      "SUBMIT": "Ուղարկել հաղորդագրություն",
+      "CANCEL": "Չեղարկել",
+      "SUCCESS_MESSAGE": "Հաղորդագրությունը ուղարկվեց։",
+      "GO_TO_CONVERSATION": "Դիտել",
+      "ERROR_MESSAGE": "Չհաջողվեց ուղարկել։ Փորձեք կրկին"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "Social Profiles"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Ավելացնել հարմարեցված հատկություն",
+    "COPY_SUCCESSFUL": "Հաջողությամբ պատճենվեց տուփում",
+    "SHOW_MORE": "Ցույց տալ բոլոր հատկությունները",
+    "SHOW_LESS": "Ցույց տալ քիչ հատկություններ",
+    "ACTIONS": {
+      "COPY": "Պատճենել հատկությունը",
+      "DELETE": "Ջնջել հատկությունը",
+      "EDIT": "Խմբագրել հատկությունը"
+    },
+    "ADD": {
+      "TITLE": "Ստեղծել հարմարեցված հատկություն",
+      "DESC": "Add custom information to this contact."
+    },
+    "FORM": {
+      "CREATE": "Ավելացնել հատկանիշ",
+      "CANCEL": "Չեղարկել",
+      "NAME": {
+        "LABEL": "Հատուկ հատկանիշի անուն",
+        "PLACEHOLDER": "Eg: shopify id",
+        "ERROR": "Անվավեր հարմարեցված հատկության անուն"
+      },
+      "VALUE": {
+        "LABEL": "Հատկության արժեք",
+        "PLACEHOLDER": "Օրինակ՝ 11901 "
+      },
+      "ADD": {
+        "TITLE": "Ստեղծել նոր հատկություն ",
+        "SUCCESS": "Հատկությունը հաջողությամբ ավելացվեց",
+        "ERROR": "Հատկությունը ավելացնել հնարավոր չէ։ Խնդրում ենք փորձել ավելի ուշ"
+      },
+      "UPDATE": {
+        "SUCCESS": "Հատկությունը հաջողությամբ թարմացվեց",
+        "ERROR": "Հատկությունը թարմացնել հնարավոր չէ։ Խնդրում ենք փորձել ավելի ուշ"
+      },
+      "DELETE": {
+        "SUCCESS": "Հատկությունը հաջողությամբ ջնջվեց",
+        "ERROR": "Չհաջողվեց ջնջել հատկությունը։ Խնդրում ենք փորձել ավելի ուշ"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Ավելացնել հատկություններ",
+        "PLACEHOLDER": "Որոնել հատկություններ",
+        "NO_RESULT": "Հատկություններ չեն գտնվել"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Ընտրել արժեքը",
+          "SEARCH_INPUT_PLACEHOLDER": "Search value",
+          "NO_RESULT": "Արդյունք չի գտնվել"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Պահանջվում է վավեր արժեք",
+      "INVALID_URL": "Անվավեր URL",
+      "INVALID_INPUT": "Անվավեր մուտք"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Merge contacts",
+    "DESCRIPTION": "Merge contacts to combine two profiles into one, including all attributes and conversations. In case of conflict, the Primary contact’ s attributes will take precedence.",
+    "PRIMARY": {
+      "TITLE": "Primary contact",
+      "HELP_LABEL": "Ջնջվելու է"
+    },
+    "PARENT": {
+      "TITLE": "Contact to merge",
+      "PLACEHOLDER": "Search for a contact",
+      "HELP_LABEL": "Պահպանվելու է"
+    },
+    "SUMMARY": {
+      "TITLE": "Ամփոփում",
+      "DELETE_WARNING": "Contact of <strong>{primaryContactName}</strong> will be deleted.",
+      "ATTRIBUTE_WARNING": "<strong>{primaryContactName}</strong> շփման մանրամասները կպատճենվեն <strong>{parentContactName}</strong> շփման մեջ։"
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "Ինչ-որ բան սխալ է տեղի ունեցել։ Խնդրում ենք փորձել ավելի ուշ։"
+    },
+    "FORM": {
+      "SUBMIT": " Merge contacts",
+      "CANCEL": "Չեղարկել",
+      "CHILD_CONTACT": {
+        "ERROR": "Ընտրեք ենթաշփման միաձուլելու համար"
+      },
+      "SUCCESS_MESSAGE": "Contact merged successfully",
+      "ERROR_MESSAGE": "Could not merge contacts, try again!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ՀՎԱՏԱՐԱՐՈՒԹՅՈՒՆ՝ {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "Կապեր",
+      "SEARCH_TITLE": "Search contacts",
+      "ACTIVE_TITLE": "Active contacts",
+      "SEARCH_PLACEHOLDER": "Որոնել...",
+      "MESSAGE_BUTTON": "Հաղորդագրություն",
+      "SEND_MESSAGE": "Ուղարկել հաղորդագրություն",
+      "BLOCK_CONTACT": "Block contact",
+      "UNBLOCK_CONTACT": "Unblock contact",
+      "BREADCRUMB": {
+        "CONTACTS": "Կապեր"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Add contact",
+          "EXPORT_CONTACT": "Export contacts",
+          "IMPORT_CONTACT": "Import contacts",
+          "SAVE_CONTACT": "Save contact",
+          "EMAIL_ADDRESS_DUPLICATE": "Այս էլ. փոստի հասցեն օգտագործվում է մեկ այլ շփման համար։",
+          "PHONE_NUMBER_DUPLICATE": "This phone number is in use for another contact.",
+          "SUCCESS_MESSAGE": "Կապը հաջողությամբ պահպանվեց",
+          "ERROR_MESSAGE": "Unable to save contact. Please try again later."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "This contact is blocked successfully",
+        "BLOCK_ERROR_MESSAGE": "Unable to block contact. Please try again later.",
+        "UNBLOCK_SUCCESS_MESSAGE": "This contact is unblocked successfully",
+        "UNBLOCK_ERROR_MESSAGE": "Unable to unblock contact. Please try again later.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Import contacts",
+          "DESCRIPTION": "Import contacts through a CSV file.",
+          "DOWNLOAD_LABEL": "Ներբեռնեք օրինակային csv նմուշ։",
+          "LABEL": "CSV ֆայլ:",
+          "CHOOSE_FILE": "Choose file",
+          "CHANGE": "Փոխել",
+          "CANCEL": "Չեղարկել",
+          "IMPORT": "Ներմուծել",
+          "SUCCESS_MESSAGE": "Ներմուծման ավարտի մասին կստանաք էլեկտրոնային նամակ։",
+          "ERROR_MESSAGE": "Սխալ է տեղի ունեցել, խնդրում ենք փորձել կրկին"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "Export contacts",
+          "DESCRIPTION": "Արագ արտահանեք շփումների մանրամասնություններով csv ֆայլ",
+          "CONFIRM": "Արտահանել",
+          "SUCCESS_MESSAGE": "Export is in progress, You will be notified via email when export file is ready to dowanlod.",
+          "ERROR_MESSAGE": "Սխալ է տեղի ունեցել, խնդրում ենք կրկին փորձել"
+        },
+        "SORT_BY": {
+          "LABEL": "Տեսակավորել ըստ",
+          "OPTIONS": {
+            "NAME": "Անուն",
+            "EMAIL": "Էլեկտրոնային հասցե",
+            "PHONE_NUMBER": "Հեռախոսահամար",
+            "COMPANY": "Ընկերություն",
+            "COUNTRY": "Երկիր",
+            "CITY": "Քաղաք",
+            "LAST_ACTIVITY": "Վերջին ակտիվություն",
+            "CREATED_AT": "Ստեղծվել է"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Տեսակավորում",
+          "OPTIONS": {
+            "ASCENDING": "Աճման կարգով",
+            "DESCENDING": "Նվազման կարգով"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "Ցանկանու՞մ եք պահպանել այս ֆիլտրը:",
+            "CONFIRM": "Պահպանել զտիչը",
+            "LABEL": "Անուն",
+            "PLACEHOLDER": "Enter the name of the filter",
+            "ERROR": "Մուտքագրեք վավեր անուն",
+            "SUCCESS_MESSAGE": "Filter saved successfully",
+            "ERROR_MESSAGE": "Unable to save filter. Please try again later."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "Հաստատել ջնջումը",
+            "DESCRIPTION": "Are you sure you want to delete this filter?",
+            "CONFIRM": "Այո, ջնջել",
+            "CANCEL": "Ոչ, չեղարկել",
+            "SUCCESS_MESSAGE": "Filter deleted successfully",
+            "ERROR_MESSAGE": "Unable to delete filter. Please try again later."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "Անուն",
+      "EMAIL": "Էլեկտրոնային հասցե",
+      "PHONE_NUMBER": "Հեռախոսահամար",
+      "IDENTIFIER": "Նույնացուցիչ",
+      "COUNTRY": "Երկիր",
+      "CITY": "Քաղաք",
+      "COMPANY": "Ընկերություն",
+      "CREATED_AT": "Ստեղծվել է",
+      "LAST_ACTIVITY": "Վերջին ակտիվություն",
+      "REFERER_LINK": "Հղման հասցե",
+      "BLOCKED": "Արգելափակված",
+      "BLOCKED_TRUE": "Այո",
+      "BLOCKED_FALSE": "Ոչ",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "Մաքրել զտիչները",
+        "UPDATE_SEGMENT": "Թարմացնել հատվածը",
+        "APPLY_FILTERS": "Կիրառել զտիչները",
+        "ADD_FILTER": "Ավելացնել դիտակետ"
+      },
+      "TITLE": "Զտել շփումները",
+      "EDIT_SEGMENT": "Խմբագրել հատվածը",
+      "SEGMENT": {
+        "LABEL": "Հատվածի անունը",
+        "INPUT_PLACEHOLDER": "Մուտքագրեք հատվածի անունը"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} more filters",
+        "CLEAR_FILTERS": "Մաքրել զտիչները"
+      }
+    },
+    "CARD": {
+      "OF": "of",
+      "VIEW_DETAILS": "Դիտել մանրամասները",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "Edit contact details",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Մուտքագրեք անունը"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Մուտքագրեք ազգանունը"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Մուտքագրեք էլեկտրոնային հասցեն",
+            "DUPLICATE": "Այս էլ. փոստի հասցեն օգտագործվում է մեկ այլ շփման համար։"
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Մուտքագրեք հեռախոսահամարը",
+            "DUPLICATE": "This phone number is in use for another contact."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Մուտքագրեք քաղաքի անունը"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Ընտրեք երկիրը"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Մուտքագրեք կենսագրությունը"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "Մուտքագրեք ընկերության անունը"
+          }
+        },
+        "UPDATE_BUTTON": "Update contact",
+        "SUCCESS_MESSAGE": "Contact updated successfully",
+        "ERROR_MESSAGE": "Unable to update contact. Please try again later."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "Խմբագրել սոցիալական հղումները",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Add Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Add Github"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Add Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Add Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Add TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Add LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Add Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "Այս գործողությունը մշտական է և անշրջելի։",
+        "BUTTON": "Ջնջել հիմա"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Ստեղծվել է {date}",
+      "LAST_ACTIVITY": "Last active {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Մշտապես ջնջեք այս շփումը։ Այս գործողությունը անշրջելի է",
+      "DELETE_CONTACT": "Ջնջել կապը",
+      "DELETE_DIALOG": {
+        "TITLE": "Հաստատել ջնջումը",
+        "DESCRIPTION": "Are you sure you want to delete this contact?",
+        "CONFIRM": "Այո, ջնջել",
+        "API": {
+          "SUCCESS_MESSAGE": "Կապը հաջողությամբ ջնջվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ջնջել կապը։ Խնդրում ենք փորձել ավելի ուշ։"
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Could not upload avatar. Please try again later.",
+          "SUCCESS_MESSAGE": "Avatar uploaded successfully"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Պատկերը հաջողությամբ ջնջվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ջնջել պատկերը։ Խնդրում ենք փորձել ավելի ուշ։"
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Գործոններ",
+        "HISTORY": "Պատմություն",
+        "NOTES": "Նշումներ",
+        "MEDIA": "Media",
+        "MERGE": "Միավորել"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "There are no previous conversations associated to this contact"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Որոնել հատկանիշներ",
+        "UNUSED_ATTRIBUTES": "{count} Օգտագործված հատկանիշ | {count} Չօգտագործված հատկանիշներ",
+        "EMPTY_STATE": "There are no contact custom attributes available in this account. You can create a custom attribute in settings.",
+        "YES": "Այո",
+        "NO": "Ոչ",
+        "TRIGGER": {
+          "SELECT": "Ընտրեք արժեքը",
+          "INPUT": "Մուտքագրեք արժեքը"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Անվավեր թիվ",
+          "REQUIRED": "Պահանջվում է վավեր արժեք",
+          "INVALID_INPUT": "Անվավեր մուտքագրում",
+          "INVALID_URL": "Անվավեր URL",
+          "INVALID_DATE": "Անվավեր ամսաթիվ"
+        },
+        "NO_ATTRIBUTES": "Հատկություններ չեն գտնվել",
+        "API": {
+          "SUCCESS_MESSAGE": "Հատկությունը հաջողությամբ թարմացվեց",
+          "DELETE_SUCCESS_MESSAGE": "Գույքը հաջողությամբ ջնջվեց",
+          "UPDATE_ERROR": "Չհաջողվեց թարմացնել գույքը։ Խնդրում ենք փորձել ավելի ուշ",
+          "DELETE_ERROR": "Չհաջողվեց ջնջել գույքը։ Խնդրում ենք փորձել ավելի ուշ"
+        }
+      },
+      "MERGE": {
+        "TITLE": "Միավորել կապը",
+        "DESCRIPTION": "Միացրեք երկու պրոֆիլ մեկում՝ ներառյալ բոլոր հատկանիշներն ու զրույցները։ Կոնֆլիկտի դեպքում առաջնային շփման հատկանիշներն ունեն առավելություն։",
+        "PRIMARY": "Primary contact",
+        "PRIMARY_HELP_LABEL": "Պահպանվելու է",
+        "PRIMARY_REQUIRED_ERROR": "Խնդրում ենք ընտրել մի շփում միաձուլելու համար, նախքան շարունակելը",
+        "PARENT": "Միաձուլվելու է",
+        "PARENT_HELP_LABEL": "Ջնջվելու է",
+        "EMPTY_STATE": "Կապեր չեն գտնվել",
+        "PLACEHOLDER": "Որոնել հիմնական կապը",
+        "SEARCH_PLACEHOLDER": "Որոնել կապ",
+        "SEARCH_ERROR_MESSAGE": "Could not search for contacts. Please try again later.",
+        "SUCCESS_MESSAGE": "Contact merged successfully",
+        "ERROR_MESSAGE": "Could not merge contacts, try again!",
+        "IS_SEARCHING": "Որոնվում է...",
+        "BUTTONS": {
+          "CANCEL": "Չեղարկել",
+          "CONFIRM": "Միավորել կապը"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Ավելացնել նշում",
+        "WROTE": "գրել է",
+        "YOU": "Դուք",
+        "SAVE": "Պահպանել նշումը",
+        "ADD_NOTE": "Add contact note",
+        "EXPAND": "Բացել",
+        "COLLAPSE": "Փակել",
+        "NO_NOTES": "No notes, you can add notes from the contact details page.",
+        "EMPTY_STATE": "Այս շփման հետ կապված նշումներ չկան։ Կարող եք ավելացնել նշում՝ վերևի տուփում գրելով։",
+        "CONVERSATION_EMPTY_STATE": "Նշումներ դեռ չկան։ Օգտագործեք «Ավելացնել նշում» կոճակը՝ նոր նշում ստեղծելու համար։"
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "No contacts found in this account",
+      "SUBTITLE": "Start adding new contacts by clicking on the button below",
+      "BUTTON_LABEL": "Add contact",
+      "SEARCH_EMPTY_STATE_TITLE": "Ձեր որոնմանը համապատասխան շփումներ չկան 🔍",
+      "LIST_EMPTY_STATE_TITLE": "No contacts available in this view 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "No contacts are active at the moment 🌙"
+    },
+    "LOAD_MORE": "Բեռնել ավելին"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Նշումներ նշանակել",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Նշումները հաջողությամբ նշանակվեցին։",
+    "ASSIGN_LABELS_FAILED": "Հնարավոր չեղավ նշանակել պիտակները",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Select the labels you want to add to the selected contacts.",
+    "NO_LABELS_FOUND": "Դեռ պիտակներ չկան։",
+    "SELECTED_COUNT": "{count} ընտրված",
+    "CLEAR_SELECTION": "Մաքրել ընտրությունը",
+    "SELECT_ALL": "Ընտրել բոլորը ({count})",
+    "DELETE_CONTACTS": "Ջնջել",
+    "DELETE_SUCCESS": "Կապերը հաջողությամբ ջնջվեցին։",
+    "DELETE_FAILED": "Չհաջողվեց ջնջել կապերը։",
+    "DELETE_DIALOG": {
+      "TITLE": "Ջնջել ընտրված կապերը",
+      "SINGULAR_TITLE": "Delete selected contact",
+      "DESCRIPTION": "Սա մշտապես կջնջի ընտրված {count} շփումները։ Այս գործողությունը անշրջելի է։",
+      "SINGULAR_DESCRIPTION": "Սա մշտապես կջնջի ընտրված շփումը։ Այս գործողությունը անշրջելի է։",
+      "CONFIRM_MULTIPLE": "Delete contacts",
+      "CONFIRM_SINGLE": "Ջնջել կապը"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "Որոնումը հնարավոր չեղավ ավարտել։ Խնդրում ենք փորձել կրկին։"
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "Դիտել",
+      "SUCCESS_MESSAGE": "Հաղորդագրությունը հաջողությամբ ուղարկվեց։",
+      "ERROR_MESSAGE": "Խոսակցություն ստեղծելիս սխալ է տեղի ունեցել։ Խնդրում ենք փորձել ավելի ուշ։",
+      "NO_INBOX_ALERT": "There are no available inboxes to start a conversation with this contact.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "Ուղղված՝:",
+        "TAG_INPUT_PLACEHOLDER": "Մուտքագրեք առնվազն 2 տառ՝ որոնելու համար անունով, էլեկտրոնային հասցեով կամ հեռախոսահամարով",
+        "CONTACT_CREATING": "Կապ ստեղծվում է..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Միջոցով:",
+        "BUTTON": "Ցույց տալ մուտքերը"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Թեմա՝:",
+        "SUBJECT_PLACEHOLDER": "Enter your email subject here",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Մուտքագրեք առնվազն 2 տառ՝ որոնելու համար էլեկտրոնային հասցեով",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Մուտքագրեք առնվազն 2 տառ՝ որոնելու համար էլեկտրոնային հասցեով",
+        "BCC_BUTTON": "Թաքնված հղում"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "Գրեք ձեր հաղորդագրությունը այստեղ..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Ընտրել ձևանմուշը",
+        "SEARCH_PLACEHOLDER": "Որոնել ձևանմուշներ",
+        "EMPTY_STATE": "Ձևանմուշներ չեն գտնվել",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp template: {templateName}",
+          "VARIABLES": "Փոփոխականներ",
+          "BACK": "Վերադառնալ",
+          "SEND_MESSAGE": "Ուղարկել հաղորդագրություն"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Ընտրեք ձևանմուշը",
+        "SEARCH_PLACEHOLDER": "Որոնեք ձևանմուշները",
+        "EMPTY_STATE": "Ձևանմուշներ չեն գտնվել",
+        "TEMPLATE_PARSER": {
+          "BACK": "Վերադառնալ",
+          "SEND_MESSAGE": "Ուղարկել հաղորդագրություն"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Բաց թողնել",
+        "SEND": "Ուղարկել ({keyCode})"
+      }
+    }
+  }
+}

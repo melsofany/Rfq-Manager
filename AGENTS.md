@@ -4691,3 +4691,194 @@ Postgres حقيقي.
 - **الدرس**: عندما تعرض قائمة تجميعاً وتعرض شاشة التفاصيل عنصراً واحداً، اسأل
   «هل كلتاهما تجمّعان بنفس الطريقة؟» — هنا كانت القائمة تجمع والتفاصيل لا تجمع،
   فبدت القائمة سليمة والتفاصيل مكسورة.
+
+## Chatwoot is an agent console on an API channel — never a WhatsApp channel
+
+Replacing the hand-built `/whatsapp` page (2453 lines) with Chatwoot failed once
+before (PR #5 added it, PR #6 reverted) because Chatwoot's **WhatsApp channel**
+would take over the Meta webhook. That webhook (`/api/webhook/whatsapp`) is what
+drives RFQ sending, PO dispatch, the representative bot and the AI assistant —
+pointing Meta at Chatwoot silently breaks all of them.
+
+- **The webhook is the gateway; Chatwoot is a view.** Wire Chatwoot on an **API
+  inbox** and mirror in both directions: inbound (our webhook → Chatwoot),
+  outbound (our sends → Chatwoot), and agent replies (Chatwoot webhook → our
+  `sendWhatsAppText` → also recorded in `whatsapp_chats`). One conversation, one
+  source of truth.
+- **Never point Meta at Chatwoot.** `docs/CHATWOOT_INTEGRATION.md` previously
+  instructed exactly that ("stop the old webhook") — a doc that breaks sending.
+- **Mirroring must be best-effort.** Every Chatwoot call is wrapped; a Chatwoot
+  outage must never fail an inbound message or an RFQ/PO send.
+- **`private` notes are internal.** The agent-reply webhook must reject
+  `private: true` or the team's internal discussion is sent to the supplier. A
+  test caught this, not review — keep the guard and its test.
+- **Own-message dedup.** Chatwoot echoes every message we mirror back on its
+  webhook; `ownMessageIds` (bounded) stops us forwarding our own sends to
+  WhatsApp a second time.
+- **Unconfigured = today's behaviour exactly.** With no `CHATWOOT_*` vars
+  `/whatsapp` renders the built-in chat, and a Chatwoot outage shows a button
+  back to it. `/whatsapp-legacy` keeps the built-in page reachable.
+- **Hosting is a separate Rails stack** (web + Sidekiq + Postgres + Redis) and
+  cannot run on the Node service; ~$23/mo on Render, ~$6/mo on a VPS, or paid
+  Chatwoot Cloud. The code is safe to merge before hosting is decided.
+
+## Chatwoot: a conversation is per REQUEST, not per supplier phone (feat/chatwoot-agent-console)
+
+- **The defect**: `chatwoot_links` was keyed on `phone` alone, so one supplier's
+  several open pricing requests collapsed into ONE conversation. A reply to
+  Ahmed's request and a reply to Abdelrahman's request landed in the same thread
+  and nothing recorded which request — or which employee — was being answered.
+  The ownership the console exists to show was simply absent.
+- **The key is `(phone, rfqId)`**: the CONTACT is per phone (one supplier), the
+  CONVERSATION is per request. `employee_id`/`employee_name` ride on the row.
+  `rfqId = 0` means "no request context" — 0 rather than NULL so it can take part
+  in the unique index (a NULL in a Postgres unique index does not collide).
+- **Resolution order is the whole design** (`pickRequestFromText`): an explicit
+  request number in the text is AUTHORITATIVE — the supplier naming their request
+  must never be overruled; else a supplier with exactly ONE open request is
+  unambiguous; else **stay ambiguous on purpose**. Guessing files a price under
+  the wrong request and the wrong employee, and a wrong price is worse than an
+  unlabelled thread. The webhook then asks the supplier which request they mean
+  (tappable buttons carrying the number + the responsible employee's name).
+- **Match on alphanumerics, not on the literal string**: a supplier retyping
+  «RFQ 2026 000222» for «RFQ-2026-000222» must still match. The first cut
+  stripped only whitespace and a test caught it. This is the same class as the
+  EDC `26R 011936` / `26R011936` canonicalisation rule.
+- **Stale-button guard**: the chosen request is re-read from the OPEN set before
+  it is honoured, so a button from an old menu cannot file a reply against
+  another supplier's request or a closed one.
+- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table**, so the DDL
+  adds `rfq_id`/`employee_id`/`employee_name`/`id` explicitly, and the primary-key
+  move to the surrogate `id` runs ONLY while the PK is still on the old shape
+  (otherwise it would fight the new table). Same rule as the delivery-idempotency
+  incident.
+- **The PO mirror deliberately carries NO `rfqId`** — `supplier-po-no-rfq.test.ts`
+  guards that no RFQ reference ever reaches a supplier, and adding one tripped it.
+  The guard was right: a supplier-facing PO must not expose our request number.
+- **`mirrorInboundMessage`/`mirrorOutboundMessage` are best-effort by design.**
+  A Chatwoot outage degrades the console; it must never stop an RFQ from being
+  sent or a supplier reply from being stored.
+- Tests: `chatwoot-ownership.test.ts` (7) — phone canonicalisation + the
+  resolution rules, including the separator-tolerant match that failed against
+  the first cut. **2279 api-server tests** pass; tsc (libs + api-server + portal)
+  clean; repo-wide prettier clean; portal build clean.
+- **Push**: the environment `$GITHUB_TOKEN` is the read-only `ghu_` OAuth token —
+  `POST /git/refs` returns `403 Resource not accessible by integration` even
+  though `GET /repos/...` reports `permissions.push: true`, and `git push` is
+  refused. A user-issued `ghp_` token with `repo` scope works end-to-end (push →
+  poll `commits/<sha>/check-runs` → update the PR body via `PATCH /pulls/:n`).
+  Reset the remote to the credential-less URL afterwards.
+- **Status**: PR #437 updated (`d699369`), all 4 CI checks green
+  (Type Check / Format Check / Tests / Build+E2E), `mergeable_state: clean`.
+
+
+## Chatwoot CE embedded natively — vendor as container, own the thread (PR #437)
+
+The console is Chatwoot Community Edition running **from this repository**, not a
+service we call. `chatwoot/` is the upstream tree vendored byte-for-byte
+(v4.19.1 @ `caab07a8f00032d5205b5a5d7e2eb0ba2f3d2d82`, recorded in
+`chatwoot/UPSTREAM.md`); `chatwoot-cortoba/` is the **only** thing we own.
+
+- **Never edit `chatwoot/`.** Bumping Chatwoot must stay a change of one Docker
+  tag plus one line of `UPSTREAM.md`. Anything we add lives in
+  `chatwoot-cortoba/`, so a future upgrade diff is readable.
+- **Two configuration traps, both measured**: plain `postgres` fails
+  `db:chatwoot_prepare` with `extension "vector" is not available` (use
+  `pgvector/pgvector:pg16`), and production Rails aborts at boot without
+  `SECRET_KEY_BASE`.
+- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table** (again). The
+  overlay's attributes and the idempotency columns must be `ALTER TABLE ... ADD
+  COLUMN IF NOT EXISTS`, or a pre-existing database silently lacks them.
+
+### The defect the test caught, not the code review
+
+**`external_source_ids` duplicated every message.** `Message` declares
+`store :external_source_ids, accessors: [:slack], coder: JSON`, which serialises
+an assigned **Hash into a JSON *string*** in the jsonb column. A guard written as
+`external_source_ids ->> 'cortoba' = ?` therefore never matched — every re-import
+appended a full duplicate set. Measured: three imports left **6** messages where
+3 were expected, with identical `"{\"cortoba\":\"wamid.TEST1\"}"` values.
+
+The fix is `messages.source_id` — the indexed **text** column Chatwoot's own
+WhatsApp integration stores the inbound message id in
+(`app/services/whatsapp/contact_info_response_service.rb`). After the change:
+three imports → `1 contact / 1 conversation / 3 messages`, timestamps preserved.
+
+**Rule**: before using a jsonb column as an idempotency key, check the model for
+`store ... coder: JSON` — it turns structured values into strings and makes
+`->>` comparisons silently never match. Prefer a plain indexed text column.
+
+### A failed resolution must never be cached
+
+`ensureAgentForEmail` caches resolved agents so a busy thread does not re-list
+the roster. The first cut cached on failure too, which would have made that
+employee **permanently unassignable** for the life of the process — a transient
+Chatwoot blip becoming a permanent one. Only successes are cached; the guard
+fails against the caching version (verified by injecting it).
+
+### Routing priority, and why each rung is deliberate
+
+`pickAssignee` decides who owns a supplier thread: **owner** (they know the
+request) → **online agent** (a supplier should not wait for someone away) →
+**administrator** (CE has no supervisor role, so admins are the escalation tier)
+→ **unassigned, LABELLED** so it appears in the console's unassigned view rather
+than disappearing. Nobody-available is a routing OUTCOME, not an error to retry
+forever — that distinction is what keeps the retry honest.
+
+`availability_status` is **computed** (stored `availability` + live Redis
+presence via `AvailabilityStatusable`), so a freshly provisioned agent always
+reports `offline` even with an online preference. Do not read it as a stored
+column — it is not one, and the API's `role` enum in CE is only
+`agent`/`administrator`.
+
+### Two facts that cost time, recorded so they cost nothing next time
+
+- **The conversation API id is `display_id`, not the primary key.**
+  `_conversation.json.jbuilder` emits `json.id conversation.display_id` and
+  `Conversations::BaseController` resolves with `find_by!(display_id:)`. A SQL
+  check against `conversations.id` will "prove" an assignment is missing when it
+  is not — compare `display_id`.
+- **`AccessToken` has no `name` column** (`id, owner_type, owner_id, token,
+  created_at, updated_at`). `AccessToken.create!(owner:, name:)` raises
+  `unknown attribute 'name'`.
+
+### Verification that actually proves it
+
+A mocked guard proves the policy, not the integration. The bridge client was
+driven against the **real running Chatwoot** (`listAgents` → `createAgent` →
+`findAgentByEmail` uppercase → `createContact` → `createConversation` →
+`setConversationCustomAttributes` → `assignConversation` → `createMessage`), and
+the routing ladder was exercised live: nobody online → the administrator was
+assigned and the thread labelled `cortoba:مشرف`. Both probe files were deleted
+afterwards.
+
+### Where the business rules live — deliberately in ONE place
+
+Which pricing request a reply answers, and who owns it, are decided in
+`artifacts/api-server/src/modules/chatwoot/bridge.ts`, next to the WhatsApp
+gateway. They are **not** re-implemented in the Ruby overlay: two copies of one
+truth is how they drift apart. The overlay only does what can *only* be done
+inside Chatwoot — console configuration and a faithful historical import (the
+REST API cannot set `created_at` or a message id).
+
+### CI / repo hygiene for a 9.7k-file vendor tree
+
+- `.prettierignore` **and** `.gitignore` both need `chatwoot/`; the format gate is
+  repo-wide, and 9.7k upstream files would fail it instantly.
+- Exclude heavy non-code assets (`spec/`, `public/videos/`, `*.onnx`,
+  `node_modules/`, `public/packs/`) — that is what takes the commit from 232 MB
+  to **60.1 MB / 8597 files** (largest blob 1.38 MB).
+- To check the real (tracked-files-only) format gate without committing
+  anything: `git ls-files -z | grep -zE '\.(ts|tsx|js|mjs|json|css|md)$' |
+  xargs -0 prettier --check`.
+- CI runs only **typecheck + tests + format** (no eslint), so an eslint error
+  cannot block a deploy — but the format gate absolutely can.
+- `pnpm` is not on PATH; use the corepack shim
+  (`/acp-node/lib/node_modules/corepack/shims`) with
+  `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`.
+- Run the suite with `env -i PATH="$PATH" HOME="$HOME"` — exported
+  `SMTP_*`/`AI_*`/`GOOGLE_*`/`CHATWOOT_*` make unrelated tests fail.
+
+**Tests**: 2300 api-server (chatwoot-assignment 21, up from 0) + 78 portal pass;
+tsc (libs + api-server + portal) clean; tracked-file format gate clean; eslint
+clean on the changed files. Committed `fb7fcd9` on `feat/chatwoot-agent-console`.

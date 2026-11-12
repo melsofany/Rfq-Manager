@@ -1,0 +1,276 @@
+{
+  "GENERAL_SETTINGS": {
+    "LIMIT_MESSAGES": {
+      "CONVERSATION": "대화 제한을 초과했습니다. Hacker 플랜은 500개의 대화만 허용합니다.",
+      "INBOXES": "받은 메시지함 제한을 초과했습니다. Hacker 플랜은 웹사이트 실시간 채팅만 지원합니다. 이메일, WhatsApp 등의 추가 받은 메시지함은 유료 플랜이 필요합니다.",
+      "AGENTS": "에이전트 제한을 초과했습니다. 현재 플랜은 {allowedAgents}명의 에이전트만 허용합니다.",
+      "NON_ADMIN": "플랜을 업그레이드하고 모든 기능을 계속 사용하려면 관리자에게 문의하십시오."
+    },
+    "TITLE": "계정 설정",
+    "SUBMIT": "설정 업데이트",
+    "BACK": "뒤로",
+    "DISMISS": "닫기",
+    "UPDATE": {
+      "ERROR": "설정을 업데이트할 수 없습니다, 다시 시도하십시오!",
+      "SUCCESS": "계정 설정이 성공적으로 업데이트됨"
+    },
+    "ACCOUNT_DELETE_SECTION": {
+      "TITLE": "계정 삭제",
+      "NOTE": "계정을 삭제하면 모든 데이터가 삭제됩니다.",
+      "BUTTON_TEXT": "계정 삭제",
+      "CONFIRM": {
+        "TITLE": "계정 삭제",
+        "MESSAGE": "계정 삭제는 되돌릴 수 없습니다. 영구적으로 삭제하려면 아래에 계정 이름을 입력하십시오.",
+        "BUTTON_TEXT": "삭제",
+        "DISMISS": "취소",
+        "PLACE_HOLDER": "확인하려면 {accountName}을(를) 입력하십시오"
+      },
+      "SUCCESS": "계정이 삭제 예정으로 표시되었습니다",
+      "FAILURE": "계정을 삭제할 수 없습니다. 다시 시도하십시오!",
+      "SCHEDULED_DELETION": {
+        "TITLE": "계정 삭제 예약됨",
+        "MESSAGE_MANUAL": "이 계정은 {deletionDate}에 삭제될 예정입니다. 관리자가 요청했습니다. 해당 날짜 이전에 삭제를 취소할 수 있습니다.",
+        "MESSAGE_INACTIVITY": "이 계정은 비활성으로 인해 {deletionDate}에 삭제될 예정입니다. 해당 날짜 이전에 삭제를 취소할 수 있습니다.",
+        "CLEAR_BUTTON": "예약된 삭제 취소"
+      }
+    },
+    "FORM": {
+      "ERROR": "양식 오류를 수정하십시오.",
+      "GENERAL_SECTION": {
+        "TITLE": "일반 설정",
+        "NOTE": ""
+      },
+      "ACCOUNT_ID": {
+        "TITLE": "계정 ID",
+        "NOTE": "API 기반 통합을 구축하는 경우 이 ID가 필요합니다"
+      },
+      "TRANSLATION": {
+        "TITLE": "Translation",
+        "NOTE": "Speak every customer's language, whatever languages your team knows.",
+        "CAPTAIN": {
+          "TITLE": "Captain",
+          "NOTE": "AI translations that sound natural and keep your tone."
+        },
+        "GOOGLE": {
+          "TITLE": "Google Translate",
+          "NOTE": "Quick, reliable translations from Google.",
+          "NOT_CONNECTED": "Not connected",
+          "CONNECT": "연결",
+          "NOT_CONNECTED_HINT": "Google Translate isn't connected yet."
+        },
+        "UPGRADE": {
+          "NOTE": "Upgrade to a paid plan to translate conversations with Captain or Google Translate.",
+          "BUTTON": "업그레이드"
+        },
+        "AUTO_TRANSLATE": {
+          "TITLE": "Auto-translate conversations",
+          "NOTE": "Read every message in your language. Customers get replies in theirs.",
+          "LOCKED": "Choose a service to turn this on.",
+          "NOT_AVAILABLE": "Auto-translate isn't enabled for this account yet."
+        },
+        "API": {
+          "SUCCESS": "Translation settings updated successfully",
+          "ERROR": "Failed to update translation settings"
+        }
+      },
+      "AUTO_RESOLVE": {
+        "TITLE": "대화 자동 해결",
+        "NOTE": "이 설정을 사용하면 일정 기간 비활성 후 대화를 자동으로 해결할 수 있습니다.",
+        "DURATION": {
+          "LABEL": "비활성 기간",
+          "HELP": "대화가 자동 해결되기까지의 비활성 기간",
+          "PLACEHOLDER": "30",
+          "ERROR": "Auto resolve duration should be between {minDuration} minutes and 999 days",
+          "API": {
+            "SUCCESS": "자동 해결 설정이 성공적으로 업데이트되었습니다",
+            "ERROR": "자동 해결 설정을 업데이트하지 못했습니다"
+          }
+        },
+        "MESSAGE": {
+          "LABEL": "사용자 지정 자동 해결 메시지",
+          "PLACEHOLDER": "15일간 비활성으로 인해 시스템이 대화를 해결됨으로 표시했습니다",
+          "HELP": "대화가 자동 해결된 후 고객에게 전송되는 메시지"
+        },
+        "PREFERENCES": "환경설정",
+        "LABEL": {
+          "LABEL": "자동 해결 후 라벨 추가",
+          "PLACEHOLDER": "라벨 선택"
+        },
+        "IGNORE_WAITING": {
+          "LABEL": "에이전트 응답 대기 중인 대화 건너뛰기"
+        },
+        "UPDATE_BUTTON": "변경사항 저장"
+      },
+      "NAME": {
+        "LABEL": "계정 이름",
+        "PLACEHOLDER": "당신의 계정 이름",
+        "ERROR": "올바른 계정 이름을 입력하십시오."
+      },
+      "LANGUAGE": {
+        "LABEL": "사이트 언어",
+        "PLACEHOLDER": "당신의 계정 이름",
+        "ERROR": ""
+      },
+      "DOMAIN": {
+        "LABEL": "수신 이메일 도메인",
+        "PLACEHOLDER": "이메일을 수신할 도메인",
+        "ERROR": ""
+      },
+      "SUPPORT_EMAIL": {
+        "LABEL": "이메일 지원",
+        "PLACEHOLDER": "회사 지원 이메일",
+        "ERROR": ""
+      },
+      "AUTO_RESOLVE_IGNORE_WAITING": {
+        "LABEL": "미응답 대화 제외",
+        "HELP": "활성화하면 시스템이 아직 에이전트 응답을 기다리고 있는 대화의 해결을 건너뜁니다."
+      },
+      "AUDIO_TRANSCRIPTION": {
+        "TITLE": "음성 메시지 변환",
+        "NOTE": "대화에서 음성 메시지를 자동으로 텍스트로 변환합니다. 음성 메시지가 전송되거나 수신될 때마다 텍스트 변환본을 생성하여 메시지와 함께 표시합니다.",
+        "API": {
+          "SUCCESS": "음성 변환 설정이 성공적으로 업데이트되었습니다",
+          "ERROR": "음성 변환 설정을 업데이트하지 못했습니다"
+        }
+      },
+      "ENFORCE_MFA": {
+        "TITLE": "Enforce two-factor authentication",
+        "NOTE": "Require every member of this account to set up two-factor authentication. Members without it will be asked to set it up at their next password sign-in. Sign-ins through Google or SAML are exempt. API access tokens of members who have not set up two-factor authentication stop working for this account until they enrol.",
+        "API": {
+          "SUCCESS": "Two-factor authentication enforcement updated successfully",
+          "ERROR": "Failed to update two-factor authentication enforcement"
+        }
+      },
+      "AUTO_RESOLVE_DURATION": {
+        "LABEL": "해결을 위한 비활성 기간",
+        "HELP": "활동이 없을 경우 대화를 자동 해결하는 기간",
+        "PLACEHOLDER": "30",
+        "ERROR": "자동 해결 기간은 10분에서 999일 사이여야 합니다",
+        "API": {
+          "SUCCESS": "자동 해결 설정이 성공적으로 업데이트되었습니다",
+          "ERROR": "자동 해결 설정을 업데이트하지 못했습니다"
+        },
+        "UPDATE_BUTTON": "업데이트",
+        "MESSAGE_LABEL": "사용자 지정 해결 메시지",
+        "MESSAGE_PLACEHOLDER": "15일간 비활성으로 인해 시스템이 대화를 해결됨으로 표시했습니다",
+        "MESSAGE_HELP": "비활성으로 인해 시스템이 자동으로 대화를 해결할 때 고객에게 전송되는 메시지입니다."
+      },
+      "FEATURES": {
+        "INBOUND_EMAIL_ENABLED": "계정에 대해 이메일을 통한 대화 연속성이 활성화되었습니다.",
+        "CUSTOM_EMAIL_DOMAIN_ENABLED": "지금 사용자 지정 도메인에서 이메일을 받을 수 있습니다."
+      }
+    },
+    "UPDATE_CHATWOOT": "Chatwoot에 대한 {latestChatwootVersion} 업데이트를 사용할 수 있습니다. 인스턴스를 업데이트하십시오.",
+    "LEARN_MORE": "자세히 알아보기",
+    "PAYMENT_PENDING": "Your account payment is past due. Please update your payment information to avoid subscription cancellation.",
+    "PAYMENT_PENDING_AGENT": "Your account payment is past due. Please contact your administrator to resolve it.",
+    "UPGRADE": "Chatwoot을 계속 사용하려면 업그레이드하십시오",
+    "LIMITS_UPGRADE": "계정이 사용 제한을 초과했습니다. Chatwoot을 계속 사용하려면 플랜을 업그레이드하십시오",
+    "OPEN_BILLING": "청구서 열기"
+  },
+  "FORMS": {
+    "MULTISELECT": {
+      "ENTER_TO_SELECT": "선택하려면 Enter 키를 누르십시오.",
+      "ENTER_TO_REMOVE": "제거하려면 Enter 키를 누르십시오.",
+      "NO_OPTIONS": "목록이 비어 있습니다",
+      "SELECT_ONE": "하나 선택",
+      "SELECT": "선택"
+    }
+  },
+  "NETWORK": {
+    "NOTIFICATION": {
+      "OFFLINE": "오프라인",
+      "RECONNECTING": "재연결 중...",
+      "RECONNECT_SUCCESS": "재연결됨"
+    },
+    "BUTTON": {
+      "REFRESH": "새로고침"
+    }
+  },
+  "COMMAND_BAR": {
+    "SEARCH_PLACEHOLDER": "검색 또는 바로가기",
+    "SNOOZE_PLACEHOLDER": "시간을 입력하세요. 예: 내일, 2시간 후, 다음 금요일, 1월 15일...",
+    "SECTIONS": {
+      "GENERAL": "일반",
+      "REPORTS": "보고서",
+      "CONVERSATION": "대화",
+      "BULK_ACTIONS": "일괄 작업",
+      "CHANGE_ASSIGNEE": "담당자 변경",
+      "CHANGE_PRIORITY": "우선순위 변경",
+      "CHANGE_TEAM": "팀 변경",
+      "SNOOZE_CONVERSATION": "대화 일시 중지",
+      "EXECUTE_MACRO": "Execute Macro",
+      "ADD_LABEL": "대화에 라벨 추가",
+      "REMOVE_LABEL": "대화에서 라벨 제거",
+      "SETTINGS": "설정",
+      "AI_ASSIST": "AI 어시스트",
+      "APPEARANCE": "외관",
+      "SNOOZE_NOTIFICATION": "알림 일시 중지"
+    },
+    "COMMANDS": {
+      "GO_TO_MY_INBOX": "Go to My Inbox",
+      "GO_TO_CONVERSATION_DASHBOARD": "대화 대시보드로 이동",
+      "GO_TO_CONTACTS_DASHBOARD": "연락처 대시보드로 이동",
+      "GO_TO_CAPTAIN": "Go to Captain",
+      "GO_TO_CALLS_DASHBOARD": "Go to Calls Dashboard",
+      "GO_TO_CAMPAIGNS": "Go to Campaigns",
+      "GO_TO_HELP_CENTER": "Go to Help Center",
+      "GO_TO_REPORTS_OVERVIEW": "보고서 개요로 이동",
+      "GO_TO_CONVERSATION_REPORTS": "대화 보고서로 이동",
+      "GO_TO_AGENT_REPORTS": "에이전트 보고서로 이동",
+      "GO_TO_LABEL_REPORTS": "라벨 보고서로 이동",
+      "GO_TO_INBOX_REPORTS": "받은 메시지함 보고서로 이동",
+      "GO_TO_TEAM_REPORTS": "팀 보고서로 이동",
+      "GO_TO_CSAT_REPORTS": "Go to CSAT Reports",
+      "GO_TO_BOT_REPORTS": "Go to Bot Reports",
+      "GO_TO_SLA_REPORTS": "Go to SLA Reports",
+      "GO_TO_SETTINGS_AGENTS": "에이전트 설정으로 이동",
+      "GO_TO_SETTINGS_TEAMS": "팀 설정으로 이동",
+      "GO_TO_SETTINGS_INBOXES": "받은 메시지함 설정으로 이동",
+      "GO_TO_SETTINGS_TEMPLATES": "Go to Templates",
+      "GO_TO_SETTINGS_LABELS": "라벨 설정으로 이동",
+      "GO_TO_SETTINGS_CUSTOM_ATTRIBUTES": "Go to Custom Attributes",
+      "GO_TO_SETTINGS_AUTOMATION": "Go to Automation",
+      "GO_TO_SETTINGS_MACROS": "Go to Macros",
+      "GO_TO_SETTINGS_CANNED_RESPONSES": "미리 준비된 응답 설정으로 이동",
+      "GO_TO_SETTINGS_SLA": "Go to SLA Settings",
+      "GO_TO_SETTINGS_APPLICATIONS": "애플리케이션 설정으로 이동",
+      "GO_TO_SETTINGS_DATA": "Go to Data",
+      "GO_TO_SETTINGS_AUDIT_LOGS": "Go to Audit Logs",
+      "GO_TO_SETTINGS_BILLING": "Go to Billing",
+      "GO_TO_SETTINGS_ACCOUNT": "계정 설정으로 이동",
+      "GO_TO_SETTINGS_PROFILE": "프로필 설정으로 이동",
+      "ADD_LABELS_TO_CONVERSATION": "대화에 라벨 추가",
+      "ASSIGN_AN_AGENT": "에이전트 배정",
+      "AI_ASSIST": "AI 어시스트",
+      "ASSIGN_PRIORITY": "우선순위 배정",
+      "ASSIGN_A_TEAM": "팀 배정",
+      "EXECUTE_A_MACRO": "Execute a macro",
+      "MUTE_CONVERSATION": "대화 음소거",
+      "UNMUTE_CONVERSATION": "대화 음소거 해제",
+      "REMOVE_LABEL_FROM_CONVERSATION": "대화에서 라벨 제거",
+      "REOPEN_CONVERSATION": "대화 다시 열기",
+      "RESOLVE_CONVERSATION": "대화 해결",
+      "SEND_TRANSCRIPT": "이메일 대화록 전송",
+      "SNOOZE_CONVERSATION": "대화 일시 중지",
+      "UNTIL_NEXT_REPLY": "다음 답장까지",
+      "UNTIL_NEXT_WEEK": "다음 주까지",
+      "UNTIL_TOMORROW": "내일까지",
+      "UNTIL_NEXT_MONTH": "다음 달까지",
+      "AN_HOUR_FROM_NOW": "1시간 후까지",
+      "UNTIL_CUSTOM_TIME": "사용자 지정...",
+      "CHANGE_APPEARANCE": "외관 변경",
+      "LIGHT_MODE": "라이트",
+      "DARK_MODE": "다크",
+      "SYSTEM_MODE": "시스템",
+      "SNOOZE_NOTIFICATION": "알림 일시 중지"
+    }
+  },
+  "DASHBOARD_APPS": {
+    "LOADING_MESSAGE": "대시보드 앱을 불러오는 중..."
+  },
+  "COMMON": {
+    "OR": "또는",
+    "CLICK_HERE": "여기를 클릭하세요"
+  }
+}

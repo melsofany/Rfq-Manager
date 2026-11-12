@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "مکالمات فیچ کئیے جا رہےہیں",
+    "LOAD_MORE_CONVERSATIONS": "مزید مکالمات لوڈ کریں۔",
+    "EOF": "تمام مکالمات لوڈ ہو گئے 🎉",
+    "LIST": {
+      "404": "اس گروپ میں کوئی فعال گفتگو نہیں ہے۔."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "مکالمات",
+    "MENTION_HEADING": "تذکرہ",
+    "UNATTENDED_HEADING": "Unattended",
+    "SEARCH": {
+      "INPUT": "لوگوں ، چیٹس یا محفوظ کردہ جوابات میں تلاش کریں.."
+    },
+    "FILTER_ALL": "تمام",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "میرا",
+      "unassigned": "نا مقرر کیا ہوا",
+      "all": "تمام"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "کھولیں۔"
+      },
+      "resolved": {
+        "TEXT": "حل ہو گیا۔"
+      },
+      "pending": {
+        "TEXT": "زیر التواء"
+      },
+      "snoozed": {
+        "TEXT": "اسنوز کیا گیا۔"
+      },
+      "all": {
+        "TEXT": "تمام"
+      }
+    },
+    "VIEW_FILTER": "دیکھیں",
+    "SORT_TOOLTIP_LABEL": "Sort conversations",
+    "CHAT_SORT": {
+      "STATUS": "اسٹیٹس",
+      "ORDER_BY": "Order by"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Created at:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Last activity:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Last activity: Oldest first"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Last activity: Newest first"
+      },
+      "created_at_desc": {
+        "TEXT": "Created at: Newest first"
+      },
+      "created_at_asc": {
+        "TEXT": "Created at: Oldest first"
+      },
+      "priority_desc": {
+        "TEXT": "Priority: Highest first"
+      },
+      "priority_asc": {
+        "TEXT": "Priority: Lowest first"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Pending Response: Longest first"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Pending Response: Shortest first"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "تصویری پیغام"
+      },
+      "audio": {
+        "CONTENT": "آڈیو پیغام"
+      },
+      "video": {
+        "CONTENT": "ویڈیو پیغام"
+      },
+      "file": {
+        "CONTENT": "فائل منسلک کرنا"
+      },
+      "location": {
+        "CONTENT": "مقام"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "نے ایک یو آر ایل بھیجا"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Sort conversation",
+      "DROPDOWN_TITLE": "Sort by",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Last activity at",
+          "LABEL": "Last activity"
+        },
+        "CREATED_AT": {
+          "NAME": "Created at",
+          "LABEL": "Created at"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Last user message at",
+          "LABEL": "Last message"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "ای میل کے ذریعے موصول ہوا۔",
+    "VIEW_TWEET_IN_TWITTER": "ٹویٹر میں ٹویٹ دیکھیں",
+    "REPLY_TO_TWEET": "اس ٹویٹ کا جواب دیں۔",
+    "LINK_TO_STORY": "انسٹاگرام سٹوری پر جائیں۔",
+    "SENT": "کامیابی سے بھیج دیا گیا۔",
+    "READ": "Read successfully",
+    "DELIVERED": "Delivered successfully",
+    "NO_MESSAGES": "کوئی پیغامات نہیں۔",
+    "NO_CONTENT": "کوئی مواد دستیاب نہیں ہے۔",
+    "HIDE_QUOTED_TEXT": "اقتباس شدہ متن کو چھپائیں۔",
+    "SHOW_QUOTED_TEXT": "اقتباس شدہ متن دکھائیں۔",
+    "MESSAGE_READ": "پڑھیں",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

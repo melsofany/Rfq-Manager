@@ -1,0 +1,94 @@
+{
+  "CUSTOM_ROLE": {
+    "HEADER": "自訂角色",
+    "LEARN_MORE": "瞭解更多關於自訂角色",
+    "DESCRIPTION": "自訂角色是由帳戶擁有者或管理員建立的角色。這些角色可以指派給客服，以定義他們在帳戶中的存取權限。自訂角色可以根據組織的需求，建立具有特定權限和存取層級的角色。",
+    "COUNT": "{n} 個自訂角色 | {n} 個自訂角色",
+    "HEADER_BTN_TXT": "新增自訂角色",
+    "LOADING": "正在取得自訂角色...",
+    "SEARCH_PLACEHOLDER": "搜尋自訂角色...",
+    "NO_RESULTS": "找不到符合搜尋條件的自訂角色",
+    "SEARCH_404": "沒有任何項目符合此查詢。",
+    "PAYWALL": {
+      "TITLE": "升級以建立自訂角色",
+      "AVAILABLE_ON": "自訂角色功能僅在 Business 和 Enterprise 方案中提供。",
+      "UPGRADE_PROMPT": "升級您的方案以存取進階功能，例如團隊管理、自動化、自訂屬性等。",
+      "UPGRADE_NOW": "立即升級",
+      "CANCEL_ANYTIME": "您可以隨時變更或取消方案"
+    },
+    "ENTERPRISE_PAYWALL": {
+      "AVAILABLE_ON": "自訂角色功能僅在付費方案中提供。",
+      "UPGRADE_PROMPT": "升級至付費方案以存取進階功能，例如稽核日誌、客服容量等。",
+      "ASK_ADMIN": "請聯繫您的管理員進行升級。"
+    },
+    "LIST": {
+      "404": "此帳戶中沒有可用的自訂角色。",
+      "TITLE": "管理自訂角色",
+      "DESC": "自訂角色是由帳戶擁有者或管理員建立的角色。這些角色可以指派給客服，以定義他們在帳戶中的存取權限。自訂角色可以根據組織的需求，建立具有特定權限和存取層級的角色。",
+      "TABLE_HEADER": {
+        "NAME": "名稱",
+        "DESCRIPTION": "描述",
+        "PERMISSIONS": "權限",
+        "ACTIONS": "操作"
+      }
+    },
+    "PERMISSIONS": {
+      "CONVERSATION_MANAGE": "管理所有對話",
+      "CONVERSATION_UNASSIGNED_MANAGE": "管理未指派的對話及指派給自己的對話",
+      "CONVERSATION_PARTICIPATING_MANAGE": "管理參與中的對話及指派給自己的對話",
+      "CONTACT_MANAGE": "管理聯絡人",
+      "REPORT_MANAGE": "管理報表",
+      "KNOWLEDGE_BASE_MANAGE": "管理知識庫"
+    },
+    "FORM": {
+      "NAME": {
+        "LABEL": "名稱",
+        "PLACEHOLDER": "請輸入名稱。",
+        "ERROR": "名稱為必填。"
+      },
+      "DESCRIPTION": {
+        "LABEL": "描述",
+        "PLACEHOLDER": "請輸入描述。",
+        "ERROR": "描述為必填。"
+      },
+      "PERMISSIONS": {
+        "LABEL": "權限",
+        "ERROR": "權限為必填。"
+      },
+      "CANCEL_BUTTON_TEXT": "取消",
+      "API": {
+        "ERROR_MESSAGE": "無法連接伺服器，請再試一次。"
+      }
+    },
+    "ADD": {
+      "TITLE": "新增自訂角色",
+      "DESC": "自訂角色可讓您建立具有特定權限和存取層級的角色，以符合組織的需求。",
+      "SUBMIT": "送出",
+      "API": {
+        "SUCCESS_MESSAGE": "自訂角色新增成功。"
+      }
+    },
+    "EDIT": {
+      "BUTTON_TEXT": "編輯",
+      "TITLE": "編輯自訂角色",
+      "DESC": "自訂角色可讓您建立具有特定權限和存取層級的角色，以符合組織的需求。",
+      "SUBMIT": "更新",
+      "API": {
+        "SUCCESS_MESSAGE": "自訂角色更新成功。"
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "刪除",
+      "API": {
+        "SUCCESS_MESSAGE": "自訂角色刪除成功。",
+        "ERROR_MESSAGE": "無法連接伺服器，請再試一次。"
+      },
+      "CONFIRM": {
+        "TITLE": "刪除確認",
+        "MESSAGE": "您確定要刪除嗎？",
+        "YES": "是，刪除",
+        "NO": "不，保留"
+      }
+    }
+  }
+}

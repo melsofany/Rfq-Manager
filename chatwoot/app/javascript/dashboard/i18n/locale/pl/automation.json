@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Automatyzacja",
+    "DESCRIPTION": "Automation can replace and streamline existing processes that require manual effort, such as adding labels and assigning conversations to the most suitable agent. This allows the team to focus on their strengths while reducing time spent on routine tasks.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "Pobieranie reguł automatyzacji",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "Dodaj regułę automatyzacji",
+      "SUBMIT": "Stwórz",
+      "CANCEL_BUTTON_TEXT": "Anuluj",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Nazwa reguły",
+          "PLACEHOLDER": "Wprowadź nazwę reguły",
+          "ERROR": "Nazwa jest wymagana"
+        },
+        "DESC": {
+          "LABEL": "Opis",
+          "PLACEHOLDER": "Wprowadź opis reguły",
+          "ERROR": "Opis jest wymagany"
+        },
+        "EVENT": {
+          "LABEL": "Zdarzenie",
+          "PLACEHOLDER": "Wybierz jedno",
+          "ERROR": "Zdarzenie jest wymagane"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Retry",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Runs the moment an event happens, as long as the conditions match."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Wait condition",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "Skrzynka odbiorcza",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "Warunki"
+        },
+        "ACTIONS": {
+          "LABEL": "Akcje"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Dodaj warunek",
+      "ACTION_BUTTON_LABEL": "Dodaj akcję",
+      "API": {
+        "SUCCESS_MESSAGE": "Reguła automatyzacji została dodana",
+        "ERROR_MESSAGE": "Nie udało się utworzyć reguły automatyzacji, spróbuj ponownie później"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Imię",
+        "ACTIVE": "Aktywne",
+        "CREATED_ON": "Utworzona dnia"
+      },
+      "404": "Nie znaleziono reguł automatyzacji",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "Usuń regułę automatyzacji",
+      "SUBMIT": "Usuń",
+      "CANCEL_BUTTON_TEXT": "Anuluj",
+      "CONFIRM": {
+        "TITLE": "Potwierdź usunięcie",
+        "MESSAGE": "Czy na pewno chcesz usunąć ",
+        "YES": "Tak, usuń ",
+        "NO": "Nie, zachowaj "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Reguła automatyzacji została usunięta",
+        "ERROR_MESSAGE": "Nie udało się usunąć reguły automatyzacji, spróbuj ponownie później"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Edytuj regułę automatyzacji",
+      "SUBMIT": "Aktualizuj",
+      "CANCEL_BUTTON_TEXT": "Anuluj",
+      "API": {
+        "SUCCESS_MESSAGE": "Reguła automatyzacji została zaktualizowana",
+        "ERROR_MESSAGE": "Nie udało się zaktualizować reguły automatyzacji, spróbuj ponownie później"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Klonuj",
+      "API": {
+        "SUCCESS_MESSAGE": "Reguła automatyzacji została sklonowana pomyślnie",
+        "ERROR_MESSAGE": "Nie udało się sklonować reguły automatyzacji, spróbuj ponownie później"
+      }
+    },
+    "FORM": {
+      "EDIT": "Edytuj",
+      "CREATE": "Stwórz",
+      "DELETE": "Usuń",
+      "CANCEL": "Anuluj",
+      "RESET_MESSAGE": "Zmiana typu zdarzenia spowoduje zresetowanie dodanych warunków i zdarzeń poniżej"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Musisz mieć co najmniej jeden warunek, aby zapisać",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Niestandardowe atrybuty kontaktu",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Niestandardowe atrybuty rozmowy",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Musisz mieć co najmniej jedną akcję, aby zapisać",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Wprowadź swoją wiadomość tutaj",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Wybierz zespoły",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Aktywuj regułę automatyzacji",
+      "DEACTIVATION_TITLE": "Wyłącz regułę automatyzacji",
+      "ACTIVATION_DESCRIPTION": "Ta akcja spowoduje aktywację reguły automatyzacji '{automationName}'. Czy na pewno chcesz kontynuować?",
+      "DEACTIVATION_DESCRIPTION": "Ta akcja spowoduje deaktywację reguły automatyzacji '{automationName}'. Czy na pewno chcesz kontynuować?",
+      "ACTIVATION_SUCCESFUL": "Reguła automatyzacji została pomyślnie aktywowana",
+      "DEACTIVATION_SUCCESFUL": "Reguła automatyzacji została pomyślnie wyłączona",
+      "ACTIVATION_ERROR": "Nie można aktywować reguły automatyzacji, spróbuj ponownie później",
+      "DEACTIVATION_ERROR": "Nie można wyłączyć reguły automatyzacji, spróbuj ponownie później",
+      "CONFIRMATION_LABEL": "Tak",
+      "CANCEL_LABEL": "Nie"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Nie udało się przesłać załącznika, spróbuj ponownie",
+      "LABEL_IDLE": "Prześlij załącznik",
+      "LABEL_UPLOADING": "Przesyłanie...",
+      "LABEL_UPLOADED": "Przesłano pomyślnie",
+      "LABEL_UPLOAD_FAILED": "Nie udało się przesłać załącznika"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Wartość jest wymagana",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Value must be between 1 and 998",
+      "ACTION_PARAMETERS_REQUIRED": "Action parameters are required",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Brak",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Rozpoczęcie rozmowy",
+      "CONVERSATION_UPDATED": "Aktualizacja rozmowy",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "Wycisz kontakt",
+      "SNOOZE_CONVERSATION": "Zatrzymaj rozmowę",
+      "RESOLVE_CONVERSATION": "Zamknij rozmowę",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "Zmień priorytet",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Otwórz rozmowę",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Brak",
+      "LOW": "Niski",
+      "MEDIUM": "Średni",
+      "HIGH": "Wysoki",
+      "URGENT": "Pilne"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "Notatka prywatna",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "E-mail",
+      "INBOX": "Skrzynka odbiorcza",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "Numer telefonu",
+      "STATUS": "Status",
+      "BROWSER_LANGUAGE": "Język przeglądarki",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "Kraj",
+      "COMPANY_NAME": "Firma",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Zespół",
+      "PRIORITY": "Priorytet",
+      "LABELS": "Etykiety",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

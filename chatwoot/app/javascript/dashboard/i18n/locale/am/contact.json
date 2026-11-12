@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "አይገኝም",
+    "EMAIL_ADDRESS": "ኢሜይል አድራሻ",
+    "PHONE_NUMBER": "ስልክ ቁጥር",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "መለያ",
+    "COPY_SUCCESSFUL": "ወደ ክሊፕቦርድ ተቀይሯል",
+    "COMPANY": "ኩባንያ",
+    "LOCATION": "አካባቢ",
+    "BROWSER_LANGUAGE": "የአሳሽ ቋንቋ",
+    "CONVERSATION_TITLE": "የውይይት ዝርዝሮች",
+    "VIEW_PROFILE": "መገለጫ እይ",
+    "BROWSER": "አሳሽ መሣሪያ",
+    "OS": "ኦፕሬቲንግ ስስተም",
+    "INITIATED_FROM": "ከዚህ ተጀምሯል",
+    "INITIATED_AT": "በዚህ ጊዜ ተጀምሯል",
+    "IP_ADDRESS": "የIP አድራሻ",
+    "CREATED_AT_LABEL": "የተፈጠረበት",
+    "NEW_MESSAGE": "አዲስ መልእክት",
+    "CALL": "ደውል",
+    "CALL_INITIATED": "ለእውነተኛው እውቀት መደወል እየተከናወነ ነው…",
+    "CALL_FAILED": "ጥሪውን መጀመር አልቻልንም። እባክዎ ደግመው ይሞክሩ።.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "የድምፅ ኢንቦክስ ይምረጡ"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "ከዚህ እውነተኛ ግንኙነት ጋር የተያያዙ ያለፉ ውይይቶች አልተገኙም።.",
+      "TITLE": "የቀድሞ ውይይቶች",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "የእውቂያ መለያዎች",
+        "ERROR": "መለያዎችን ማዘመን አልተቻለም"
+      },
+      "CONVERSATION": {
+        "TITLE": "የውይይት መለያዎች",
+        "ADD_BUTTON": "መለያዎችን አክል"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "መለያዎችን ያክሉ",
+        "PLACEHOLDER": "መለያዎችን ይፈልጉ",
+        "NO_RESULT": "መለያዎች አልተገኙም",
+        "CREATE_LABEL": "አዲስ ሌብል ይፍጠሩ"
+      }
+    },
+    "MERGE_CONTACT": "አገናኝ አንድ አድርግ",
+    "CONTACT_ACTIONS": "የእውቂያ እርምጃዎች",
+    "MUTE_CONTACT": "እውቂያን አጥፋ",
+    "UNMUTE_CONTACT": "እውቂያን አንቀላፋ",
+    "MUTED_SUCCESS": "ይህ እውነተኛ ግንኙነት በተሳካ ሁኔታ ተከልክሏል። በወደፊቱ ውይይቶች ላይ ምንም ማሳወቂያ አታገኙም።.",
+    "UNMUTED_SUCCESS": "ይህ እውነተኛ ግንኙነት በተሳካ ሁኔታ ከተከልከለ ተነስቷል።.",
+    "SEND_TRANSCRIPT": "ቅጽ ላክ",
+    "EDIT_LABEL": "አርትዕ",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "ብለዋይ ባህሪያት",
+      "CONTACT_LABELS": "የእውቂያ መለያዎች",
+      "PREVIOUS_CONVERSATIONS": "ያለፉ ውይይቶች",
+      "NO_RECORDS_FOUND": "ባህሪያት አልተገኙም"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "ንግግር አርትዕ",
+    "TITLE": "ንግግር አስተካክል",
+    "DESC": "የንግግር ዝርዝሮችን አስተካክል"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "እውቂያ ሰርዝ",
+    "TITLE": "እውቂያ ሰርዝ",
+    "DESC": "የእውቂያ ዝርዝሮች ሰርዝ",
+    "CONFIRM": {
+      "TITLE": "ማጥፋት አረጋግጥ",
+      "MESSAGE": "ማጥፋት እርግጠኛ ነህ ",
+      "YES": "አዎን፣ አጥፋ",
+      "NO": "አይ፣ አስቀምጥ"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "እውነተኛ ተገናኝ ተሰርዟል",
+      "ERROR_MESSAGE": "እውነተኛውን ግንኙነት ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "አስገባ",
+      "CANCEL": "ተወው",
+      "AVATAR": {
+        "LABEL": "የእውቂያ ፎቶ"
+      },
+      "NAME": {
+        "PLACEHOLDER": "የእውቂያን ሙሉ ስም ያስገቡ",
+        "LABEL": "ሙሉ ስም"
+      },
+      "BIO": {
+        "PLACEHOLDER": "የእውቂያን ራእይ ያስገቡ",
+        "LABEL": "ራእይ"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "የእውቂያ ኢሜይል አድራሻ አስገባ",
+        "LABEL": "የኢሜይል አድራሻ",
+        "DUPLICATE": "ይህ ኢሜይል አድራሻ ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።.",
+        "ERROR": "እባክዎ ትክክለኛ ኢሜይል አድራሻ ያስገቡ።."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "የእውቂያ ስልክ ቁጥር አስገባ",
+        "LABEL": "የስልክ ቁጥር",
+        "HELP": "ስልክ ቁጥር እንደ E.164 ቅርጸ ቁጥር መሆን አለበት ለምሳሌ፡ +1415555555 [+][የሀገር ኮድ][የአካባቢ ኮድ][የአካባቢ ስልክ ቁጥር]። ከዝርዝር ዝርዝር የዳይል ኮድ መምረጥ ይችላሉ።.",
+        "ERROR": "ስልክ ቁጥሩ ባዶ ወይም በE.164 ቅርጸ ቁጥር መሆን አለበት",
+        "DIAL_CODE_ERROR": "እባክዎ ከዝርዝሩ ውስጥ የዳይል ኮድ ይምረጡ",
+        "DUPLICATE": "ይህ ስልክ ቁጥር ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "የእውቂያውን ቦታ ያስገቡ",
+        "LABEL": "ቦታ"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "የኩባንያውን ስም ያስገቡ",
+        "LABEL": "የኩባንያ ስም"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "የሀገር ስም ያስገቡ",
+        "LABEL": "የሀገር ስም",
+        "SELECT_PLACEHOLDER": "ይምረጡ",
+        "REMOVE": "አስወግዱ",
+        "SELECT_COUNTRY": "አገር ይምረጡ"
+      },
+      "CITY": {
+        "PLACEHOLDER": "የከተማውን ስም ያስገቡ",
+        "LABEL": "የከተማ ስም"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "የFacebook የተጠቃሚ ስም ያስገቡ",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Twitter የተጠቃሚ ስም ያስገቡ",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "LinkedIn የተጠቃሚ ስም ያስገቡ",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Github የተጠቃሚ ስም አስገባ",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "የእውቂያ ፎቶ በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR_MESSAGE": "የእውነተኛውን ግንኙነት አባት ምስል ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+      }
+    },
+    "SUCCESS_MESSAGE": "እውቀቱ በተሳካ ሁኔታ ተቀምጧል",
+    "ERROR_MESSAGE": "ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "ውይይት ጀምር",
+    "TITLE": "አዲስ ውይይት",
+    "DESC": "አዲስ መልእክት በማስተላለፍ አዲስ ውይይት ይጀምሩ።.",
+    "NO_INBOX": "ከዚህ እውነተኛ ግንኙነት ጋር አዲስ ውይይት ለመጀመር የሚገባ ኢንቦክስ አልተገኘም።.",
+    "FORM": {
+      "TO": {
+        "LABEL": "ወደ"
+      },
+      "INBOX": {
+        "LABEL": "በInbox እንደ መንገድ",
+        "PLACEHOLDER": "የምንጭ ኢንቦክስ ይምረጡ",
+        "ERROR": "ኢንቦክስ ይምረጡ"
+      },
+      "SUBJECT": {
+        "LABEL": "ርዕስ",
+        "PLACEHOLDER": "ርዕስ",
+        "ERROR": "ርዕስ ባዶ መሆን አይችልም"
+      },
+      "MESSAGE": {
+        "LABEL": "መልእክት",
+        "PLACEHOLDER": "መልእክትዎን እዚህ ይጽፉ",
+        "ERROR": "መልእክት ባዶ መሆን አይችልም"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "ፋይሎችን ይምረጡ",
+        "HELP_TEXT": "ፋይሎችን እዚህ ያስነሱ ወይም ለመጫን ፋይሎችን ይምረጡ"
+      },
+      "SUBMIT": "መልእክት ላክ",
+      "CANCEL": "ሰርዝ",
+      "SUCCESS_MESSAGE": "መልእክት ተልኳል!",
+      "GO_TO_CONVERSATION": "እይ",
+      "ERROR_MESSAGE": "መልእክት ማስተላለፊያ አልተሳካም! እንደገና ይሞክሩ"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "ማህበራዊ መለያዎች"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "ባለሙያ ባህሪ ያክሉ",
+    "COPY_SUCCESSFUL": "በቅጂ ሰንጠረዥ ተሳክቷል",
+    "SHOW_MORE": "ሁሉንም ባህሪያት አሳይ",
+    "SHOW_LESS": "ትንሽ ባህሪያት አሳይ",
+    "ACTIONS": {
+      "COPY": "ባህሪውን ቅጂ አድርግ",
+      "DELETE": "ባህሪውን አስወግድ",
+      "EDIT": "ባህሪውን አርትዕ"
+    },
+    "ADD": {
+      "TITLE": "ባለሙያ ባህሪ ይፍጠሩ",
+      "DESC": "ለዚህ እውነተኛ ግንኙነት ብለው የተለየ መረጃ ያክሉ።."
+    },
+    "FORM": {
+      "CREATE": "ባህሪ ያክሉ",
+      "CANCEL": "ሰርዝ",
+      "NAME": {
+        "LABEL": "የተለየ ባህሪ ስም",
+        "PLACEHOLDER": "ለምሳሌ፡ shopify id",
+        "ERROR": "የተሳሳተ የብለት ባህሪ ስም"
+      },
+      "VALUE": {
+        "LABEL": "የባህሪ እሴት",
+        "PLACEHOLDER": "ለምሳሌ፡ 11901 "
+      },
+      "ADD": {
+        "TITLE": "አዲስ ባህሪ ፍጠር ",
+        "SUCCESS": "ባህሪው በተሳካ ሁኔታ ተጨምሯል",
+        "ERROR": "ባህሪውን ማከማቸት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      },
+      "UPDATE": {
+        "SUCCESS": "ባህሪው በተሳካ ሁኔታ ተዘምኗል",
+        "ERROR": "ባህሪውን ማዘመን አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      },
+      "DELETE": {
+        "SUCCESS": "ባህሪው በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR": "ባህሪውን ማስወገድ አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "ባህሪዎችን ያክሉ",
+        "PLACEHOLDER": "ባህሪዎችን ይፈልጉ",
+        "NO_RESULT": "ባህሪዎች አልተገኙም"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "እሴት ይምረጡ",
+          "SEARCH_INPUT_PLACEHOLDER": "እሴት ፈልግ",
+          "NO_RESULT": "ውጤት አልተገኘም"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "ትክክለኛ እሴት ያስፈልጋል",
+      "INVALID_URL": "የተሳሳተ URL",
+      "INVALID_INPUT": "ልክ ያልሆነ ግቤት"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "እያንዳንዱን አገናኝ",
+    "DESCRIPTION": "እውነተኛዎችን ለሁለት ፕሮፋይሎች አንድ ለማድረግ ያጣሩ፣ ሁሉንም ባህሪያትና ውይይቶች ጨምሮ። በግጭት ሁኔታ ዋናው እውነተኛ ባህሪያት ቅድሚያ ይኖራቸዋል።.",
+    "PRIMARY": {
+      "TITLE": "ዋና እያንዳንዱ",
+      "HELP_LABEL": "ለማጥፋት ነው"
+    },
+    "PARENT": {
+      "TITLE": "ለመቀላቀል ያለው እውቂያ",
+      "PLACEHOLDER": "እውቂያ ፈልግ",
+      "HELP_LABEL": "ሊጠበቅ የሚገባ"
+    },
+    "SUMMARY": {
+      "TITLE": "ማጠቃለያ",
+      "DELETE_WARNING": "<strong>{primaryContactName}</strong> የሚባለው እውነተኛ ግንኙነት ይሰረዝ።.",
+      "ATTRIBUTE_WARNING": "<strong>{primaryContactName}</strong> የሚባለው የእውነተኛ ግንኙነት ዝርዝሮች ወደ <strong>{parentContactName}</strong> ይቅደምታሉ።."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "አንዳንድ ነገር ተሳስቷል። እባክዎ በኋላ ደግመው ይሞክሩ።."
+    },
+    "FORM": {
+      "SUBMIT": " ንግግሮችን አንቀሳቅስ",
+      "CANCEL": "ተወው",
+      "CHILD_CONTACT": {
+        "ERROR": "ለመአንቀሳቀስ ልጅ ንግግር ይምረጡ"
+      },
+      "SUCCESS_MESSAGE": "ንግግሩ በተሳካ ሁኔታ ተያይዟል",
+      "ERROR_MESSAGE": "እባክዎ እንደገና ይሞክሩ፤ እውቂያዎችን ማዋቀር አልተቻለም!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(መለያ: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "እውቂያዎች",
+      "SEARCH_TITLE": "እውቂያዎችን ይፈልጉ",
+      "ACTIVE_TITLE": "ንቁ እውቂያዎች",
+      "SEARCH_PLACEHOLDER": "ፈልግ...",
+      "MESSAGE_BUTTON": "መልእክት",
+      "SEND_MESSAGE": "መልእክት ላክ",
+      "BLOCK_CONTACT": "እውቂያ አካውንት አክል",
+      "UNBLOCK_CONTACT": "እውቂያ አካውንት አልክ",
+      "BREADCRUMB": {
+        "CONTACTS": "እውቂያዎች"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "እውቂያ አክል",
+          "EXPORT_CONTACT": "እውቂያዎችን ውጣ",
+          "IMPORT_CONTACT": "እውቂያዎችን አስመጣ",
+          "SAVE_CONTACT": "እውቂያ አስቀምጥ",
+          "EMAIL_ADDRESS_DUPLICATE": "ይህ ኢሜይል አድራሻ ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።.",
+          "PHONE_NUMBER_DUPLICATE": "ይህ ስልክ ቁጥር ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።.",
+          "SUCCESS_MESSAGE": "እውቂያ በተሳካ ሁኔታ ተቀምጧል",
+          "ERROR_MESSAGE": "እውነተኛውን ግንኙነት ማስቀመጥ አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "ይህ እውነተኛ እንደተከለከለ ተሳክቷል",
+        "BLOCK_ERROR_MESSAGE": "እውነተኛውን ግንኙነት መከልከል አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።.",
+        "UNBLOCK_SUCCESS_MESSAGE": "ይህ እውነተኛ በተሳካ ሁኔታ ከተከለከለ ተለይቷል",
+        "UNBLOCK_ERROR_MESSAGE": "እውነተኛውን ግንኙነት ከመከልከል መነሳት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።.",
+        "IMPORT_CONTACT": {
+          "TITLE": "እያካተቱ አድራሻዎች",
+          "DESCRIPTION": "እውነተኛዎችን በCSV ፋይል በመጫን ያስመጡ።.",
+          "DOWNLOAD_LABEL": "ናሙና የCSV ፋይል ያውርዱ።.",
+          "LABEL": "CSV ፋይል፡:",
+          "CHOOSE_FILE": "ፋይል ይምረጡ",
+          "CHANGE": "ቀይር",
+          "CANCEL": "ሰርዝ",
+          "IMPORT": "አስመጣ",
+          "SUCCESS_MESSAGE": "እስከ አስመጣ ሲጠናቀቅ በኢሜይል ይማሳውቃሉ።.",
+          "ERROR_MESSAGE": "ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "ኮንታክቶችን ውጣ",
+          "DESCRIPTION": "በፍጥነት ከኮንታክቶችዎ ዝርዝር ያለው ኮምፕሪሃንሲቭ ዝርዝር ያለውን csv ፋይል ውጣ",
+          "CONFIRM": "ውጣ",
+          "SUCCESS_MESSAGE": "የማስወገጃ ሂደት በመካከል ነው። የማስወገጃ ፋይል ለማውረድ ሲዝግጅ በኢሜይል ይማሳውቃሉ።.",
+          "ERROR_MESSAGE": "ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ"
+        },
+        "SORT_BY": {
+          "LABEL": "በደረጃ ያደርጉ",
+          "OPTIONS": {
+            "NAME": "ስም",
+            "EMAIL": "ኢሜይል",
+            "PHONE_NUMBER": "ስልክ ቁጥር",
+            "COMPANY": "ኩባንያ",
+            "COUNTRY": "አገር",
+            "CITY": "ከተማ",
+            "LAST_ACTIVITY": "የመጨረሻ እንቅስቃሴ",
+            "CREATED_AT": "ተፈጥሯል በ"
+          }
+        },
+        "ORDER": {
+          "LABEL": "ቅደም ተከተል",
+          "OPTIONS": {
+            "ASCENDING": "ከታች ወደ ላይ",
+            "DESCENDING": "ከላይ ወደ ታች"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "ይህን አጣሪ ማስቀመጥ ይፈልጋሉ?",
+            "CONFIRM": "አጣሪ አስቀምጥ",
+            "LABEL": "ስም",
+            "PLACEHOLDER": "የፊልተሩን ስም ያስገቡ",
+            "ERROR": "ትክክለኛ ስም ያስገቡ",
+            "SUCCESS_MESSAGE": "ፊልተሩ በተሳካ ሁኔታ ተቀምጧል",
+            "ERROR_MESSAGE": "መለያዎችን ማስቀመጥ አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "ማጥፋትን አረጋግጡ",
+            "DESCRIPTION": "እርግጠኛ ነዎት ይህን አሰሳ ማጥፋት ይፈልጋሉ?",
+            "CONFIRM": "አዎን፣ አጥፋ",
+            "CANCEL": "አይ፣ ሰርዝ",
+            "SUCCESS_MESSAGE": "አሰሳው በተሳካ ሁኔታ ተሰርዟል",
+            "ERROR_MESSAGE": "መለያዎችን ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "ስም",
+      "EMAIL": "ኢሜይል",
+      "PHONE_NUMBER": "ስልክ ቁጥር",
+      "IDENTIFIER": "መለያ",
+      "COUNTRY": "አገር",
+      "CITY": "ከተማ",
+      "COMPANY": "ኩባንያ",
+      "CREATED_AT": "ተፈጥሯል በ",
+      "LAST_ACTIVITY": "መጨረሻ እንቅስቃሴ",
+      "REFERER_LINK": "የመግቢያ አገናኝ አገናኝ",
+      "BLOCKED": "ተከለ",
+      "BLOCKED_TRUE": "እውነት",
+      "BLOCKED_FALSE": "ሐሰት",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "ፈልጋቶችን አጽዳ",
+        "UPDATE_SEGMENT": "ክፍል አዘምን",
+        "APPLY_FILTERS": "ፈልጋቶችን አተግብር",
+        "ADD_FILTER": "ፊልተር አክል"
+      },
+      "TITLE": "እውቂያዎችን ፊልተር አድርግ",
+      "EDIT_SEGMENT": "ክፍል አርትዕ",
+      "SEGMENT": {
+        "LABEL": "የክፍል ስም",
+        "INPUT_PLACEHOLDER": "የክፍል ስም አስገባ"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} ተጨማሪ አሰላለፊዎች",
+        "CLEAR_FILTERS": "አሰላለፊዎችን አጽዳ"
+      }
+    },
+    "CARD": {
+      "OF": "ከ",
+      "VIEW_DETAILS": "ዝርዝሮችን እይ",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "የእውቂያ ዝርዝሮችን አርትዕ",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "የመጀመሪያ ስም አስገባ"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "የአያያዝ ስም ያስገቡ"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "የኢሜል አድራሻ ያስገቡ",
+            "DUPLICATE": "ይህ ኢሜይል አድራሻ ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "የስልክ ቁጥር ያስገቡ",
+            "DUPLICATE": "ይህ ስልክ ቁጥር ለሌላ እውነተኛ ግንኙነት ተጠቃሚ ነው።."
+          },
+          "CITY": {
+            "PLACEHOLDER": "የከተማ ስም ያስገቡ"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "ሀገር ይምረጡ"
+          },
+          "BIO": {
+            "PLACEHOLDER": "ባዮ አስገባ"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "የኩባንያ ስም አስገባ"
+          }
+        },
+        "UPDATE_BUTTON": "እውነተኛውን አገናኝ አዘምን",
+        "SUCCESS_MESSAGE": "እውነተኛው አገናኝ በተሳካ ሁኔታ ተሻሽሏል",
+        "ERROR_MESSAGE": "እውነተኛውን ግንኙነት ማዘመን አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "ማህበራዊ መረጃ አገናኝ አርትዕ",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Facebook አክል"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Github አክል"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Instagram አክል"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Telegram ያክሉ"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "TikTok ያክሉ"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "LinkedIn አክል"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Twitter አክል"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "ይህ እርምጃ ቋሚ ነው እና መመለስ አይቻልም።",
+        "BUTTON": "አሁን ሰርዝ"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "ተፈጥሯል {date}",
+      "LAST_ACTIVITY": "መጨረሻ እንቅስቃሴ {date}",
+      "DELETE_CONTACT_DESCRIPTION": "ይህን እውነተኛ ሁኔታ ለማጥፋት ያስችላል። ይህ እርምጃ አልተቀየረም",
+      "DELETE_CONTACT": "እውነተኛ ሁኔታ ሰጥተው ያጥፉ",
+      "DELETE_DIALOG": {
+        "TITLE": "ማጥፋት አረጋግጥ",
+        "DESCRIPTION": "ይህን እውቂያ ማጥፋት እርግጠኛ ነዎት?",
+        "CONFIRM": "አዎን፣ አጥፋ",
+        "API": {
+          "SUCCESS_MESSAGE": "እውነተኛ ተገናኝ ተሰርዟል",
+          "ERROR_MESSAGE": "እውነተኛውን ግንኙነት ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "አባት ምስል ማስገባት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።.",
+          "SUCCESS_MESSAGE": "አቫታር በተሳካ ሁኔታ ተሰብስቧል"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "አቫታር በተሳካ ሁኔታ ተሰርዟል",
+          "ERROR_MESSAGE": "አባት ምስል ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "ባህሪያት",
+        "HISTORY": "ታሪክ",
+        "NOTES": "ማስታወሻዎች",
+        "MEDIA": "Media",
+        "MERGE": "አንድነት አድርግ"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "ከዚህ እውነተኛ ግንኙነት ጋር የተያያዙ የቀድሞ ውይይቶች የሉም"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "ለባህሪዎች ፈልግ",
+        "UNUSED_ATTRIBUTES": "{count} ተጠቃሚ ባህሪ | {count} ያልተጠቀሙ ባህሪዎች",
+        "EMPTY_STATE": "በዚህ መለያ ውስጥ የእውነተኛ ግንኙነት ብለው የተለየ ባህሪያት አልተገኙም። በቅንብሮች ውስጥ ብለው የተለየ ባህሪ ማፍጠር ይችላሉ።.",
+        "YES": "አዎን",
+        "NO": "አይ",
+        "TRIGGER": {
+          "SELECT": "እሴት ይምረጡ",
+          "INPUT": "እባክዎ እሴት ያስገቡ"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "የተሳሳተ ቁጥር",
+          "REQUIRED": "ትክክለኛ እሴት አስፈላጊ ነው",
+          "INVALID_INPUT": "የተሳሳተ ግቤት",
+          "INVALID_URL": "የተሳሳተ URL",
+          "INVALID_DATE": "የተሳሳተ ቀን"
+        },
+        "NO_ATTRIBUTES": "ምንም ባህሪያት አልተገኙም",
+        "API": {
+          "SUCCESS_MESSAGE": "ባህሪው በተሳካ ሁኔታ ተሻሽሏል",
+          "DELETE_SUCCESS_MESSAGE": "ባህሪው በተሳካ ሁኔታ ተሰርዟል",
+          "UPDATE_ERROR": "ባህሪውን ማሻሻል አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ",
+          "DELETE_ERROR": "ባህሪውን ማጥፋት አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+        }
+      },
+      "MERGE": {
+        "TITLE": "ንግግር አንድ አድርግ",
+        "DESCRIPTION": "ሁለት ፕሮፋይሎችን አንድ ለማድረግ ያጣሩ፣ ሁሉንም ባህሪያትና ውይይቶች ጨምሮ። በግጭት ሁኔታ ዋናው እውነተኛ ባህሪያት ቅድሚያ ይኖራቸዋል።.",
+        "PRIMARY": "ዋና እውቂያ",
+        "PRIMARY_HELP_LABEL": "ለመቀመጥ",
+        "PRIMARY_REQUIRED_ERROR": "ከመቀጠል በፊት ለመቀላቀል እባክዎ እውቂያ ይምረጡ",
+        "PARENT": "ለመቀላቀል",
+        "PARENT_HELP_LABEL": "ለማጥፋት",
+        "EMPTY_STATE": "አንድም እውቂያ አልተገኘም",
+        "PLACEHOLDER": "ዋና እውቂያ ይፈልጉ",
+        "SEARCH_PLACEHOLDER": "እውቂያ ይፈልጉ",
+        "SEARCH_ERROR_MESSAGE": "እውነተኛዎችን ለመፈለግ አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ።.",
+        "SUCCESS_MESSAGE": "እውቂያ በተሳካ ሁኔታ ተዋህዷል",
+        "ERROR_MESSAGE": "እባክዎ እንደገና ይሞክሩ፤ እባክዎ አድራሻዎችን ማያያዣ አልተሳካም!",
+        "IS_SEARCHING": "በመፈለግ ላይ...",
+        "BUTTONS": {
+          "CANCEL": "ሰርዝ",
+          "CONFIRM": "አድራሻ አያያዥ"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "ማስታወሻ ያክሉ",
+        "WROTE": "ጻፈ",
+        "YOU": "አንተ",
+        "SAVE": "ማስታወሻ አስቀምጥ",
+        "ADD_NOTE": "የእውቂያ ማስታወሻ አክል",
+        "EXPAND": "አስፋፋ",
+        "COLLAPSE": "ሰብስብ",
+        "NO_NOTES": "ማስታወሻዎች የሉም፣ ከእውቂያው ዝርዝር ገፅ ላይ ማስታወሻዎችን መጨመር ይችላሉ።",
+        "EMPTY_STATE": "ከዚህ እውነተኛ ግንኙነት ጋር የተያያዙ ማስታወሻዎች አልተገኙም። በላይ ባለው ሳጥን ውስጥ በመጻፍ ማስታወሻ ማክለት ይችላሉ።.",
+        "CONVERSATION_EMPTY_STATE": "እስካሁን ማስታወሻዎች አልተገኙም። አዲስ ማስታወሻ ለመፍጠር የማስታወሻ አዝራር ይጠቀሙ።."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "በዚህ መለያ ውስጥ አንድም እውቂያ አልተገኘም",
+      "SUBTITLE": "ከታች ያለውን አዝራር በመጫን አዲስ እውቂያዎችን ጀምር",
+      "BUTTON_LABEL": "እውቂያ አክል",
+      "SEARCH_EMPTY_STATE_TITLE": "በፍለጋዎ ምንም እውቂያ አልተስማማም 🔍",
+      "LIST_EMPTY_STATE_TITLE": "በዚህ እይታ ውስጥ እውቂያ አይገኝም 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "በአሁኑ ጊዜ ንቁ እውቂያዎች የሉም 🌙"
+    },
+    "LOAD_MORE": "ተጨማሪ አስገባ"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "መለያዎችን መሰጠት",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "መለያዎች በተሳካ ሁኔታ ተመዝግበዋል።.",
+    "ASSIGN_LABELS_FAILED": "መለያዎችን ማስመዝገብ አልተሳካም",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "ለተመረጡት እውነተኛዎች የሚያክሉትን መለያዎች ይምረጡ።.",
+    "NO_LABELS_FOUND": "እስካሁን መለያዎች አልተገኙም።.",
+    "SELECTED_COUNT": "{count} ተመርጧል",
+    "CLEAR_SELECTION": "ምርጫ አጽዳ",
+    "SELECT_ALL": "ሁሉንም ይምረጡ ({count})",
+    "DELETE_CONTACTS": "ሰርዝ",
+    "DELETE_SUCCESS": "እውነተኛዎች በተሳካ ሁኔታ ተሰርዟል።.",
+    "DELETE_FAILED": "እውነተኛዎችን ማጥፋት አልተቻለም።.",
+    "DELETE_DIALOG": {
+      "TITLE": "የተመረጡትን እያጥፉ",
+      "SINGULAR_TITLE": "የተመረጡትን እውቂያ ሰርዝ",
+      "DESCRIPTION": "ይህ የተመረጡትን {count} እውነተኛዎች በቋሚነት ይሰረዝ። ይህ እርምጃ አይተካልም።.",
+      "SINGULAR_DESCRIPTION": "ይህ የተመረጠውን እውነተኛ ግንኙነት በቋሚነት ይሰረዝ። ይህ እርምጃ አይተካልም።.",
+      "CONFIRM_MULTIPLE": "እውቂያዎችን ሰርዝ",
+      "CONFIRM_SINGLE": "እውቂያ ሰርዝ"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "ፍለጋው አልተጠናቀቀም። እባክዎ ደግመው ይሞክሩ።."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "እይ",
+      "SUCCESS_MESSAGE": "መልእክቱ በተሳካ ሁኔታ ተልኳል!",
+      "ERROR_MESSAGE": "ውይይቱን ሲፈጥሩ ስህተት ተከስቷል። እባክዎ በኋላ ደግመው ይሞክሩ።.",
+      "NO_INBOX_ALERT": "ከዚህ እውነተኛ ግንኙነት ጋር ለመጀመር የሚገባ ኢንቦክስ አልተገኘም።.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "ወደ፡:",
+        "TAG_INPUT_PLACEHOLDER": "በስም፣ በኢሜይል ወይም በስልክ ቁጥር ለመፈለግ ቢያንስ 2 ቁምፊዎችን ያስገቡ",
+        "CONTACT_CREATING": "እውቂያ በማፍጠር ላይ..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "በኩል፡:",
+        "BUTTON": "ኢንቦክሶችን አሳይ"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "ርዕስ :",
+        "SUBJECT_PLACEHOLDER": "የኢሜል ርዕስዎን እዚህ ያስገቡ",
+        "CC_LABEL": "ቅድሚያ ተቀባይ:",
+        "CC_PLACEHOLDER": "በኢሜይል ለመፈለግ ቢያንስ 2 ቁምፊዎችን ያስገቡ",
+        "BCC_LABEL": "በቅርብ ተቀባይ:",
+        "BCC_PLACEHOLDER": "በኢሜይል ለመፈለግ ቢያንስ 2 ቁምፊዎችን ያስገቡ",
+        "BCC_BUTTON": "በቅርብ ተቀባይ"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "መልእክትዎን እዚህ ይጽፉ..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "አብነት ይምረጡ",
+        "SEARCH_PLACEHOLDER": "አብነቶችን ይፈልጉ",
+        "EMPTY_STATE": "አንድም አብነት አልተገኘም",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp አብነት: {templateName}",
+          "VARIABLES": "ተለዋዋጮች",
+          "BACK": "ተመለስ",
+          "SEND_MESSAGE": "መልእክት ላክ"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "አብነት ይምረጡ",
+        "SEARCH_PLACEHOLDER": "አብነቶችን ይፈልጉ",
+        "EMPTY_STATE": "አብነቶች አልተገኙም",
+        "TEMPLATE_PARSER": {
+          "BACK": "ተመለስ",
+          "SEND_MESSAGE": "መልእክት ላክ"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "ሰርዝ",
+        "SEND": "ላክ ({keyCode})"
+      }
+    }
+  }
+}

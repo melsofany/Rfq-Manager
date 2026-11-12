@@ -1,0 +1,190 @@
+<script>
+import SearchSuggestions from './SearchSuggestions.vue';
+import PublicSearchInput from './PublicSearchInput.vue';
+
+import ArticlesAPI from '../api/article';
+
+export default {
+  components: {
+    PublicSearchInput,
+    SearchSuggestions,
+  },
+  props: {
+    size: {
+      type: String,
+      default: 'default',
+      validator: value => ['small', 'default'].includes(value),
+    },
+    showKbd: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ['input', 'blur'],
+  data() {
+    return {
+      searchTerm: '',
+      isLoading: false,
+      showSearchBox: false,
+      searchResults: [],
+    };
+  },
+
+  computed: {
+    portalSlug() {
+      return window.portalConfig.portalSlug;
+    },
+    localeCode() {
+      return window.portalConfig.localeCode;
+    },
+    normalizedSearchTerm() {
+      return this.searchTerm.trim();
+    },
+    shouldShowSearchBox() {
+      return this.normalizedSearchTerm !== '' && this.showSearchBox;
+    },
+    searchTranslations() {
+      const { searchTranslations = {} } = window.portalConfig;
+      return searchTranslations;
+    },
+    kbdLabel() {
+      if (!this.showKbd) return '';
+      const isMac = /Mac|iPhone|iPad|iPod/i.test(
+        navigator.platform || navigator.userAgent
+      );
+      return isMac ? '⌘ K' : 'Ctrl K';
+    },
+  },
+
+  watch: {
+    currentPage() {
+      this.clearSearchTerm();
+    },
+  },
+
+  mounted() {
+    if (this.showKbd) document.addEventListener('keydown', this.onKeydown);
+  },
+
+  unmounted() {
+    if (this.showKbd) document.removeEventListener('keydown', this.onKeydown);
+    clearTimeout(this.typingTimer);
+  },
+
+  methods: {
+    onUpdateSearchTerm(value) {
+      this.searchTerm = value;
+      if (this.typingTimer) {
+        clearTimeout(this.typingTimer);
+      }
+
+      if (this.normalizedSearchTerm === '') {
+        this.searchResults = [];
+        this.isLoading = false;
+        this.closeSearch();
+        return;
+      }
+
+      this.openSearch();
+      this.isLoading = true;
+      this.typingTimer = setTimeout(() => {
+        this.fetchArticlesByQuery();
+      }, 1000);
+    },
+    onChange(e) {
+      this.$emit('input', e.target.value);
+    },
+    onBlur(e) {
+      this.$emit('blur', e.target.value);
+    },
+    openSearch() {
+      this.showSearchBox = true;
+    },
+    closeSearch() {
+      this.showSearchBox = false;
+    },
+    clearSearchTerm() {
+      this.searchTerm = '';
+    },
+    onKeydown(e) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        if (this.$refs.searchInput) this.$refs.searchInput.focusInput();
+      }
+      if (e.key === 'Escape') {
+        this.closeSearch();
+        if (this.$refs.searchInput) this.$refs.searchInput.blurInput();
+      }
+    },
+    async fetchArticlesByQuery() {
+      const query = this.normalizedSearchTerm;
+      if (!query) {
+        this.isLoading = false;
+        return;
+      }
+
+      try {
+        this.isLoading = true;
+        this.searchResults = [];
+        const { data } = await ArticlesAPI.searchArticles(
+          this.portalSlug,
+          this.localeCode,
+          query
+        );
+        this.searchResults = data.payload;
+      } catch (error) {
+        // Show something wrong message
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    handleSubmit() {
+      const query = this.normalizedSearchTerm;
+      if (!query) return;
+
+      const searchParams = new URLSearchParams({ query });
+      const { theme, isPlainLayoutEnabled } = window.portalConfig;
+
+      if (theme) searchParams.set('theme', theme);
+      if (isPlainLayoutEnabled === 'true') {
+        searchParams.set('show_plain_layout', 'true');
+      }
+
+      window.location.href = `/hc/${this.portalSlug}/${this.localeCode}/search?${searchParams.toString()}`;
+    },
+  },
+};
+</script>
+
+<template>
+  <div v-on-clickaway="closeSearch" class="relative w-full max-w-5xl my-4">
+    <form @submit.prevent="handleSubmit">
+      <PublicSearchInput
+        ref="searchInput"
+        :search-term="searchTerm"
+        :search-placeholder="searchTranslations.searchPlaceholder"
+        :size="size"
+        :kbd="kbdLabel"
+        @update:search-term="onUpdateSearchTerm"
+        @focus="openSearch"
+      />
+      <button type="submit" class="sr-only">
+        {{ searchTranslations.submit }}
+      </button>
+    </form>
+    <div
+      v-if="shouldShowSearchBox"
+      class="absolute w-full top-14"
+      @mouseover="openSearch"
+    >
+      <SearchSuggestions
+        :items="searchResults"
+        :is-loading="isLoading"
+        :search-term="normalizedSearchTerm"
+        :empty-placeholder="searchTranslations.emptyPlaceholder"
+        :results-title="searchTranslations.resultsTitle"
+        :loading-placeholder="searchTranslations.loadingPlaceholder"
+      />
+    </div>
+  </div>
+</template>

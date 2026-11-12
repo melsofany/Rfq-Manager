@@ -1,0 +1,75 @@
+{
+  "LABEL_MGMT": {
+    "HEADER": "Label",
+    "HEADER_BTN_TXT": "Tambah label",
+    "LOADING": "Memuatkan label",
+    "DESCRIPTION": "Label membantu anda mengkategorikan dan mengutamakan perbualan dan prospek. Anda boleh menetapkan label kepada perbualan atau kenalan menggunakan panel sisi.",
+    "LEARN_MORE": "Ketahui lebih lanjut tentang label",
+    "COUNT": "{n} label | {n} labels",
+    "SEARCH_PLACEHOLDER": "Cari label...",
+    "NO_RESULTS": "Tiada label ditemui yang sepadan dengan carian anda",
+    "SEARCH_404": "Tiada item yang sepadan dengan pertanyaan ini",
+    "LIST": {
+      "404": "Tiada label tersedia dalam akaun ini.",
+      "TITLE": "Urus label",
+      "DESC": "Label membolehkan anda mengumpulkan perbualan bersama-sama.",
+      "TABLE_HEADER": {
+        "NAME": "Nama",
+        "DESCRIPTION": "Penerangan",
+        "COLOR": "Warna",
+        "ACTION": "Tindakan-tindakan"
+      }
+    },
+    "FORM": {
+      "NAME": {
+        "LABEL": "Nama Label",
+        "PLACEHOLDER": "Nama label",
+        "REQUIRED_ERROR": "Nama label diperlukan",
+        "MINIMUM_LENGTH_ERROR": "Panjang minimum 2 diperlukan",
+        "VALID_ERROR": "Hanya Alfabet, Nombor, Tanda Hubung dan Garis Bawah dibenarkan"
+      },
+      "DESCRIPTION": {
+        "LABEL": "Penerangan",
+        "PLACEHOLDER": "Penerangan Label"
+      },
+      "COLOR": {
+        "LABEL": "Warna"
+      },
+      "SHOW_ON_SIDEBAR": {
+        "LABEL": "Tunjukkan label pada bar sisi"
+      },
+      "EDIT": "Sunting",
+      "CREATE": "Cipta",
+      "DELETE": "Padamkan",
+      "CANCEL": "Batalkan"
+    },
+    "ADD": {
+      "TITLE": "Tambah label",
+      "DESC": "Label membolehkan anda mengelompokkan perbualan bersama-sama.",
+      "API": {
+        "SUCCESS_MESSAGE": "Label berjaya ditambah",
+        "ERROR_MESSAGE": "Terdapat ralat, sila cuba lagi"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Sunting label",
+      "API": {
+        "SUCCESS_MESSAGE": "Label berjaya dikemas kini",
+        "ERROR_MESSAGE": "Terdapat ralat, sila cuba lagi"
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "Padamkan",
+      "API": {
+        "SUCCESS_MESSAGE": "Label berjaya dipadam",
+        "ERROR_MESSAGE": "Terdapat ralat, sila cuba lagi"
+      },
+      "CONFIRM": {
+        "TITLE": "Pasti Padamkan",
+        "MESSAGE": "Adakan anda pasti untuk padamkan ",
+        "YES": "Ya, Padamkan ",
+        "NO": "Tidak, simpankan "
+      }
+    }
+  }
+}

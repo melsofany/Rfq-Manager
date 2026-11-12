@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "正在取得對話",
+    "LOAD_MORE_CONVERSATIONS": "載入更多對話",
+    "EOF": "所有對話已載入 🎉",
+    "LIST": {
+      "404": "這個群組中沒有進行中的對話"
+    },
+    "FAILED_TO_SEND": "傳送失敗",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "對話",
+    "MENTION_HEADING": "被提及",
+    "UNATTENDED_HEADING": "無人處理",
+    "SEARCH": {
+      "INPUT": "搜尋人員、對話、預設回覆…"
+    },
+    "FILTER_ALL": "全部",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "我的",
+      "unassigned": "未指派",
+      "all": "全部"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "開啟"
+      },
+      "resolved": {
+        "TEXT": "已解決"
+      },
+      "pending": {
+        "TEXT": "待處理"
+      },
+      "snoozed": {
+        "TEXT": "已擱置"
+      },
+      "all": {
+        "TEXT": "全部"
+      }
+    },
+    "VIEW_FILTER": "檢視",
+    "SORT_TOOLTIP_LABEL": "排序對話",
+    "CHAT_SORT": {
+      "STATUS": "狀態",
+      "ORDER_BY": "排序方式"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "建立於："
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "最後活動："
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "最後活動：舊的在前"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "最後活動：新的在前"
+      },
+      "created_at_desc": {
+        "TEXT": "建立日期：新的在前"
+      },
+      "created_at_asc": {
+        "TEXT": "建立日期：舊的在前"
+      },
+      "priority_desc": {
+        "TEXT": "優先順序：高的在前"
+      },
+      "priority_asc": {
+        "TEXT": "優先順序：低的在前"
+      },
+      "waiting_since_asc": {
+        "TEXT": "等待回應：最久的在前"
+      },
+      "waiting_since_desc": {
+        "TEXT": "等待回應：最短的在前"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "優先順序：高的在前，建立日期：舊的在前"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "圖片訊息"
+      },
+      "audio": {
+        "CONTENT": "語音訊息"
+      },
+      "video": {
+        "CONTENT": "影片訊息"
+      },
+      "file": {
+        "CONTENT": "檔案附件"
+      },
+      "location": {
+        "CONTENT": "位置"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "分享了一個網址"
+      },
+      "contact": {
+        "CONTENT": "分享的聯絡人"
+      },
+      "embed": {
+        "CONTENT": "嵌入內容"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "排序對話",
+      "DROPDOWN_TITLE": "排序方式",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "最後活動時間",
+          "LABEL": "最後活動"
+        },
+        "CREATED_AT": {
+          "NAME": "建立時間",
+          "LABEL": "建立時間"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "最後使用者訊息時間",
+          "LABEL": "最後訊息"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "透過電子郵件接收",
+    "VIEW_TWEET_IN_TWITTER": "在 Twitter 上查看推文",
+    "REPLY_TO_TWEET": "回覆此推文",
+    "LINK_TO_STORY": "前往 Instagram 限時動態",
+    "SENT": "傳送成功",
+    "READ": "已讀",
+    "DELIVERED": "已送達",
+    "NO_MESSAGES": "沒有訊息",
+    "NO_CONTENT": "沒有可用內容",
+    "HIDE_QUOTED_TEXT": "隱藏引用文字",
+    "SHOW_QUOTED_TEXT": "顯示引用文字",
+    "MESSAGE_READ": "已讀",
+    "SENDING": "傳送中",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

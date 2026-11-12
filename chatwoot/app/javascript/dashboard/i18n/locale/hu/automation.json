@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Automatizáció",
+    "DESCRIPTION": "Automation can replace and streamline existing processes that require manual effort, such as adding labels and assigning conversations to the most suitable agent. This allows the team to focus on their strengths while reducing time spent on routine tasks.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "Automatizálási szabályok betöltése",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "Automatikus szabály hozzáadása",
+      "SUBMIT": "Létrehozás",
+      "CANCEL_BUTTON_TEXT": "Mégse",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Szabály neve",
+          "PLACEHOLDER": "Szabálynév megadása",
+          "ERROR": "Név kötelező"
+        },
+        "DESC": {
+          "LABEL": "Leírás",
+          "PLACEHOLDER": "Szabályleírás megadása",
+          "ERROR": "Leírás megadása kötelező"
+        },
+        "EVENT": {
+          "LABEL": "Esemény",
+          "PLACEHOLDER": "Kérlek, válassz egyet",
+          "ERROR": "Esemény megadása kötezelő"
+        },
+        "MONITOR": {
+          "LABEL": "Figyelő",
+          "PLACEHOLDER": "Válasszon egy aktív figyelőt",
+          "ERROR": "Válasszon egy aktív figyelőt",
+          "FETCH_FAILED": "A figyelők betöltése nem sikerült. Próbálja újra később.",
+          "API_UNAVAILABLE": "Ez a figyelő már nem érhető el. Válasszon egy aktív figyelőt, majd próbálja újra.",
+          "EMPTY": "Még nincsenek aktív figyelők. Az esemény használatához hozzon létre vagy folytasson egy figyelőt.",
+          "GO_TO_MONITORS": "Ugrás a figyelőkhöz",
+          "RETRY": "Újra",
+          "UNAVAILABLE": "Nem elérhető figyelő",
+          "UNAVAILABLE_HELP": "Ez a figyelő nem használható automatizáláshoz. A szabály aktiválásához válasszon aktív figyelőt.",
+          "HELP": "A szabály egyszer fut le, amikor a figyelő új élő tevékenység alapján először illeszkedik egy beszélgetésre. A korábbi adatok átvizsgálása nem indít műveleteket."
+        },
+        "RUN_TYPE": {
+          "LABEL": "Mikor fusson le ez a szabály?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Azonnali futtatás",
+              "DESCRIPTION": "Az esemény bekövetkezésekor azonnal lefut, ha a feltételek teljesülnek."
+            },
+            "WAIT": {
+              "LABEL": "Futtatás várakozás után",
+              "DESCRIPTION": "A megadott ideig vár, és csak akkor fut le, ha közben semmi sem változik. Ellenkező esetben a szabály kimarad."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Várakozási feltétel",
+          "WHEN_LABEL": "Mikor",
+          "STATUS_LABEL": "Az állapot",
+          "FOR_LABEL": "Ennyi ideig",
+          "INBOX_LABEL": "Fiók",
+          "ERROR": "A várakozásnak 10 perc és 30 nap közé kell esnie",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "A beszélgetés adott állapotban marad",
+            "CUSTOMER_UNRESPONSIVE": "Az ügyfél nem válaszolt",
+            "AGENT_UNRESPONSIVE": "Egy csapattag sem válaszolt"
+          },
+          "DURATION": {
+            "MINUTES": "{count} perc | {count} perc",
+            "HOURS": "{count} óra | {count} óra",
+            "DAYS": "{count} nap | {count} nap"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "Az időmérés akkor kezdődik, amikor a beszélgetés ebbe az állapotba kerül. Ha {duration} múlva is ebben az állapotban van, az alábbi műveletek lefutnak. Ha előtte megváltozik az állapota, nem történik semmi.",
+            "CUSTOMER_UNRESPONSIVE": "Az időmérés akkor kezdődik, amikor egy csapattag válaszol. Ha az ügyfél {duration} múlva sem válaszolt, az alábbi műveletek lefutnak. Ha közben válaszol, nem történik semmi, és a következő csapattagi válasz újraindítja az időmérést.",
+            "AGENT_UNRESPONSIVE": "Az időmérés akkor kezdődik, amikor az ügyfél üzenetet küld. Ha egy csapattag sem válaszol {duration} múlva, az alábbi műveletek lefutnak. Ha valaki előbb válaszol, nem történik semmi."
+          },
+          "FOOTNOTE": "Az időmérést csak az új tevékenység indítja el. Az ebben az állapotban már korábban lévő beszélgetések csak a következő eseménynél kerülnek feldolgozásra."
+        },
+        "CONDITIONS": {
+          "LABEL": "Feltételek"
+        },
+        "ACTIONS": {
+          "LABEL": "Műveletek"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Feltétel hozzáadása",
+      "ACTION_BUTTON_LABEL": "Akció hozzáadása",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatizált szabály sikeresen hozzáaadva",
+        "ERROR_MESSAGE": "Nem sikerült automatizált szabályt létrehozni. Kérjük, próbáld újra később"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Név",
+        "ACTIVE": "Aktív",
+        "CREATED_ON": "Létrehozva"
+      },
+      "404": "Nem található automatizált szabály",
+      "404_DELAYED": "Még egy szabály sem futott le várakozás után",
+      "TABS": {
+        "INSTANT": "Azonnal fut",
+        "DELAYED": "Várakozás után fut"
+      },
+      "DELAY_BADGE": "{delay} múlva fut",
+      "MONITOR_PAUSED": "A figyelő szünetel",
+      "MONITOR_DELETED": "A figyelőt törölték",
+      "MONITOR_UNAVAILABLE": "A figyelő funkció nem érhető el",
+      "DELAY_DISABLED_BANNER": "A fiókban ki van kapcsolva a késleltetett végrehajtás, ezért az alábbi, várakozás után futó szabályok szünetelnek, amíg újra be nem kapcsolja."
+    },
+    "DELETE": {
+      "TITLE": "Automatizált szabály törlése",
+      "SUBMIT": "Törlés",
+      "CANCEL_BUTTON_TEXT": "Mégse",
+      "CONFIRM": {
+        "TITLE": "Törlés megerősítése",
+        "MESSAGE": "Biztos abban, hogy törli ",
+        "YES": "Igen, Törlés ",
+        "NO": "Nem, Mégse "
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Automatizált szabály sikeresen törölve",
+        "ERROR_MESSAGE": "Nem sikerült automatizált szabályt törölni. Kérjük, próbáld újra később"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Automatizált szabály szerkesztése",
+      "SUBMIT": "Frissítés",
+      "CANCEL_BUTTON_TEXT": "Mégse",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatizált szabály sikeresen frissítve",
+        "ERROR_MESSAGE": "Nem sikerült automatizált szabályt frissíteni. Kérjük, próbáld újra később"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Duplikálás",
+      "API": {
+        "SUCCESS_MESSAGE": "Automatizálás sikeresen többszörözve",
+        "ERROR_MESSAGE": "Nem sikerült automatizált szabályt többszörözni. Kérjük, próbáld újra később"
+      }
+    },
+    "FORM": {
+      "EDIT": "Szerkesztés",
+      "CREATE": "Létrehozás",
+      "DELETE": "Törlés",
+      "CANCEL": "Mégse",
+      "RESET_MESSAGE": "Az eseménytípus módosítása visszaállítja az alább hozzáadott feltételeket és eseményeket\n"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Legalább egy feltételt meg kell adnod a mentéshez",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Kapcsolat az egyéni tulajdonságokkal",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Beszélgetés az egyéni tulajdonságokkal\n",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Adja meg, mit keressen, például: az ügyfél le szeretné mondani"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Legalább egy tevékenység szükséges a mentéshez",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Írd be az üzeneted ide",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Csapatok kiválasztása",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "A kapcsolat e-mail címének használata"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Automatizált szabályok aktivizálása",
+      "DEACTIVATION_TITLE": "Automatizált szabályok inaktivizálása",
+      "ACTIVATION_DESCRIPTION": "Ez a művelet aktiválja a „{automationName}” automatizálási szabályt. Biztosan folytatod?",
+      "DEACTIVATION_DESCRIPTION": "Ez a művelet deaktiválja a(z) „{automationName}” automatizálási szabályt. Biztosan folytatod?",
+      "ACTIVATION_SUCCESFUL": "Automatizált szabály sikeresen aktiválva",
+      "DEACTIVATION_SUCCESFUL": "Automatizált szabály sikeresen inaktiválva",
+      "ACTIVATION_ERROR": "Nem sikerült aktiválni az automatizálást. Kérjük, próbálja újra később",
+      "DEACTIVATION_ERROR": "Nem sikerült inaktiválni az automatizálást. Kérjük, próbálja újra később",
+      "CONFIRMATION_LABEL": "Igen",
+      "CANCEL_LABEL": "Nem"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Nem sikerült feltölteni a csatolmányt, kérlek, próbáld később",
+      "LABEL_IDLE": "Csatolmányok feltöltése",
+      "LABEL_UPLOADING": "Frissítés...",
+      "LABEL_UPLOADED": "Sikeres feltöltés",
+      "LABEL_UPLOAD_FAILED": "Sikertelen feltöltés"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Kötelező megadni",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Value must be between 1 and 998",
+      "ACTION_PARAMETERS_REQUIRED": "Action parameters are required",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Nincs",
+    "LAST_RESPONDING_AGENT": "Utoljára válaszoló ügynök",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Beszélgetés létrehozva",
+      "CONVERSATION_UPDATED": "Beszélgetés frissítve",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "A figyelő egyezést talált"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "Beszélgetés elnémítása",
+      "SNOOZE_CONVERSATION": "Beszélgetés alvómódba",
+      "RESOLVE_CONVERSATION": "Beszélgetés megoldása",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "Prioritás megváltoztatása",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Beszélgetés megnyitása",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Nincs",
+      "LOW": "Alacsony",
+      "MEDIUM": "Közepes",
+      "HIGH": "Magas",
+      "URGENT": "Sürgős"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "Privát üzenet",
+      "MESSAGE_CONTAINS": "Üzenet tartalma",
+      "EMAIL": "E-mail",
+      "INBOX": "Fiók",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "Telefonszám",
+      "STATUS": "Státusz",
+      "BROWSER_LANGUAGE": "Böngésző nyelve",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "Ország",
+      "COMPANY_NAME": "Cég",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Csapat",
+      "PRIORITY": "Prioritás",
+      "LABELS": "Cimkék",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

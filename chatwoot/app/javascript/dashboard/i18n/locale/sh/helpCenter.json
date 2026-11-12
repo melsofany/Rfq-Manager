@@ -1,0 +1,1119 @@
+{
+  "HELP_CENTER": {
+    "TITLE": "Centar za pomoć",
+    "NEW_PAGE": {
+      "DESCRIPTION": "Kreiraj portale za samopomoć korisnicima. Omogući im da brzo pronađu odgovore, bez čekanja. Pojednostavi upite, poboljšaj efikasnost agenata i unapredi korisničku podršku.",
+      "CREATE_PORTAL_BUTTON": "Kreiraj portal"
+    },
+    "HEADER": {
+      "FILTER": "Filtrovanje po",
+      "SORT": "Sortiraj po",
+      "LOCALE": "Jezik",
+      "SETTINGS_BUTTON": "Podešavanja",
+      "NEW_BUTTON": "Novi članak",
+      "DROPDOWN_OPTIONS": {
+        "PUBLISHED": "Objavljeno",
+        "DRAFT": "Nacrt",
+        "ARCHIVED": "Arhivirano"
+      },
+      "TITLES": {
+        "ALL_ARTICLES": "All Articles",
+        "MINE": "My Articles",
+        "DRAFT": "Draft Articles",
+        "ARCHIVED": "Archived Articles"
+      },
+      "LOCALE_SELECT": {
+        "TITLE": "Izaberi jezik",
+        "PLACEHOLDER": "Izaberi jezik",
+        "NO_RESULT": "Nije pronađen jezik",
+        "SEARCH_PLACEHOLDER": "Pretraži jezik"
+      }
+    },
+    "EDIT_HEADER": {
+      "ALL_ARTICLES": "All Articles",
+      "PUBLISH_BUTTON": "Objavi",
+      "MOVE_TO_ARCHIVE_BUTTON": "Premesti u arhivu",
+      "PREVIEW": "Pregled",
+      "ADD_TRANSLATION": "Dodaj prevod",
+      "OPEN_SIDEBAR": "Otvori bočnu traku",
+      "CLOSE_SIDEBAR": "Zatvori bočnu traku",
+      "SAVING": "Čuvanje...",
+      "SAVED": "Sačuvano"
+    },
+    "ARTICLE_EDITOR": {
+      "IMAGE_UPLOAD": {
+        "TITLE": "Otpremi sliku",
+        "UPLOADING": "Otpremanje...",
+        "SUCCESS": "Slika je uspešno otpremljena",
+        "UPLOAD_FAILED": "Upload failed",
+        "RATE_LIMITED": "Upload limit reached. Try again in a few minutes.",
+        "RETRY": "Retry",
+        "REMOVE": "Ukloni",
+        "CANCEL": "Cancel upload",
+        "ERROR_FILE_SIZE": "Image size should be less than {size}MB",
+        "ERROR_ATTACHMENT_FILE_SIZE": "File size should be less than {size}MB",
+        "ERROR_UNSUPPORTED_TYPE": "This file type is not supported",
+        "ERROR_FILE_FORMAT": "Format slike mora biti jpg, jpeg ili png",
+        "ERROR_FILE_DIMENSIONS": "Dimenzije slike moraju biti manje od 2000 x 2000"
+      }
+    },
+    "ARTICLE_SETTINGS": {
+      "TITLE": "Cilësimet e artikullit",
+      "FORM": {
+        "CATEGORY": {
+          "LABEL": "Kategorija",
+          "TITLE": "Izaberite kategoriju",
+          "PLACEHOLDER": "Izaberite kategoriju",
+          "NO_RESULT": "Kategorija nije pronađena",
+          "SEARCH_PLACEHOLDER": "Pretraži kategoriju"
+        },
+        "AUTHOR": {
+          "LABEL": "Autor",
+          "TITLE": "Izaberite autora",
+          "PLACEHOLDER": "Izaberite autora",
+          "NO_RESULT": "Nuk u gjetën autori",
+          "SEARCH_PLACEHOLDER": "Pretraži autora"
+        },
+        "META_TITLE": {
+          "LABEL": "Meta titulli",
+          "PLACEHOLDER": "Shto meta titull"
+        },
+        "META_DESCRIPTION": {
+          "LABEL": "Meta përshkrimi",
+          "PLACEHOLDER": "Shto përshkrimin tënd meta për rezultate më të mira SEO..."
+        },
+        "META_TAGS": {
+          "LABEL": "Meta etiketat",
+          "PLACEHOLDER": "Shto meta etiketat të ndara me presje..."
+        }
+      },
+      "BUTTONS": {
+        "ARCHIVE": "Arkivo artikullin",
+        "DELETE": "Fshi artikullin"
+      }
+    },
+    "ARTICLE_SEARCH_RESULT": {
+      "UNCATEGORIZED": "Nekategorizovano",
+      "SEARCH_RESULTS": "Search results for {query}",
+      "EMPTY_TEXT": "Pretražite članke za ubacivanje u odgovore.",
+      "SEARCH_LOADER": "Pretraga...",
+      "INSERT_ARTICLE": "Ubaci",
+      "NO_RESULT": "Nema pronađenih članaka",
+      "COPY_LINK": "Kopiraj link članka",
+      "OPEN_LINK": "Otvori članak u novoj kartici",
+      "PREVIEW_LINK": "Pregledaj članak"
+    },
+    "PORTAL": {
+      "HEADER": "Portale",
+      "DEFAULT": "Podrazumevano",
+      "NEW_BUTTON": "Portal i ri",
+      "ACTIVE_BADGE": "aktivan",
+      "CHOOSE_LOCALE_LABEL": "Izaberi lokalizaciju",
+      "LOADING_MESSAGE": "Učitavanje portala...",
+      "ARTICLES_LABEL": "članci",
+      "NO_PORTALS_MESSAGE": "Nema dostupnih portala",
+      "ADD_NEW_LOCALE": "Dodaj novu lokalizaciju",
+      "POPOVER": {
+        "TITLE": "Portali",
+        "PORTAL_SETTINGS": "Cilësimet e portalit",
+        "SUBTITLE": "Imate više portala i možete imati različite lokalizacije za svaki portal.",
+        "CANCEL_BUTTON_LABEL": "Otkaži",
+        "CHOOSE_LOCALE_BUTTON": "Izaberi lokalizaciju"
+      },
+      "PORTAL_SETTINGS": {
+        "LIST_ITEM": {
+          "HEADER": {
+            "COUNT_LABEL": "artikuj",
+            "ADD": "Shto gjuhë",
+            "VISIT": "Vizito faqen",
+            "SETTINGS": "Cilësimet",
+            "DELETE": "Obriši"
+          },
+          "PORTAL_CONFIG": {
+            "TITLE": "Konfigurimet e portalit",
+            "ITEMS": {
+              "NAME": "Emri",
+              "DOMAIN": "Domain i personalizuar",
+              "SLUG": "Slug",
+              "TITLE": "Titulli i portalit",
+              "THEME": "Ngjyra e temës",
+              "SUB_TEXT": "Nëntitulli i portalit"
+            }
+          },
+          "AVAILABLE_LOCALES": {
+            "TITLE": "Gjuhët në dispozicion",
+            "TABLE": {
+              "NAME": "Emri i gjuhës",
+              "CODE": "Kodi i gjuhës",
+              "ARTICLE_COUNT": "Numri i artikujve",
+              "CATEGORIES": "Numri i kategorive",
+              "SWAP": "Ndërrim",
+              "DELETE": "Fshi",
+              "DEFAULT_LOCALE": "Parazgjedhur"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "TITLE": "Obriši portal",
+          "MESSAGE": "Da li ste sigurni da želite da obrišete ovaj portal?",
+          "YES": "Da, obriši portal",
+          "NO": "Ne, zadrži portal",
+          "API": {
+            "DELETE_SUCCESS": "Portal je uspešno obrisan",
+            "DELETE_ERROR": "Greška pri brisanju portala"
+          }
+        },
+        "SEND_CNAME_INSTRUCTIONS": {
+          "API": {
+            "SUCCESS_MESSAGE": "CNAME instructions sent successfully",
+            "ERROR_MESSAGE": "Error while sending CNAME instructions"
+          }
+        }
+      },
+      "EDIT": {
+        "HEADER_TEXT": "Izmeni portal",
+        "TABS": {
+          "BASIC_SETTINGS": {
+            "TITLE": "Osnovne informacije"
+          },
+          "CUSTOMIZATION_SETTINGS": {
+            "TITLE": "Prilagođavanje portala"
+          },
+          "CATEGORY_SETTINGS": {
+            "TITLE": "Kategorije"
+          },
+          "LOCALE_SETTINGS": {
+            "TITLE": "Jezici"
+          }
+        },
+        "CATEGORIES": {
+          "TITLE": "Kategorije u",
+          "NEW_CATEGORY": "Nova kategorija",
+          "TABLE": {
+            "NAME": "Naziv",
+            "DESCRIPTION": "Opis",
+            "LOCALE": "Jezik",
+            "ARTICLE_COUNT": "Broj članaka",
+            "ACTION_BUTTON": {
+              "EDIT": "Izmeni kategoriju",
+              "DELETE": "Obriši kategoriju"
+            },
+            "EMPTY_TEXT": "Nema pronađenih kategorija"
+          }
+        },
+        "EDIT_BASIC_INFO": {
+          "BUTTON_TEXT": "Ažuriraj osnovna podešavanja"
+        }
+      },
+      "ADD": {
+        "CREATE_FLOW": {
+          "BASIC": {
+            "TITLE": "Informacije o centru za pomoć",
+            "BODY": "Osnovne informacije o portalu"
+          },
+          "CUSTOMIZATION": {
+            "TITLE": "Prilagođavanje centra za pomoć",
+            "BODY": "Prilagodi portal"
+          },
+          "FINISH": {
+            "TITLE": "Voila! 🎉",
+            "BODY": "Sve je spremno!"
+          }
+        },
+        "CREATE_FLOW_PAGE": {
+          "BACK_BUTTON": "Nazad",
+          "BASIC_SETTINGS_PAGE": {
+            "HEADER": "Kreiraj portal",
+            "TITLE": "Informacioni centar za pomoć",
+            "CREATE_BASIC_SETTING_BUTTON": "Kreiraj osnovna podešavanja portala"
+          },
+          "CUSTOMIZATION_PAGE": {
+            "HEADER": "Prilagođavanje portala",
+            "TITLE": "Prilagođavanje centra za pomoć",
+            "UPDATE_PORTAL_BUTTON": "Ažuriraj postavke portala"
+          },
+          "FINISH_PAGE": {
+            "TITLE": "Voila!🎉 Sve je spremno!",
+            "MESSAGE": "Sada možete videti ovaj kreirani portal na stranici svih portala.",
+            "FINISH": "Idi na stranicu svih portala"
+          }
+        },
+        "LOGO": {
+          "LABEL": "Logo",
+          "UPLOAD_BUTTON": "Otpremi logo",
+          "HELP_TEXT": "Ovaj logo će biti prikazan u zaglavlju portala.",
+          "IMAGE_UPLOAD_SUCCESS": "Logo uspešno otpremljen",
+          "IMAGE_UPLOAD_ERROR": "Logo uspešno obrisan",
+          "IMAGE_DELETE_ERROR": "Greška pri brisanju logotipa"
+        },
+        "NAME": {
+          "LABEL": "Emri",
+          "PLACEHOLDER": "Emri i portalit",
+          "HELP_TEXT": "Ime će se koristiti interno u javnom portalu.",
+          "ERROR": "Emri është i nevojshëm"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug portali për URL-të",
+          "ERROR": "Slug është i nevojshëm"
+        },
+        "DOMAIN": {
+          "LABEL": "Domain i personalizuar",
+          "PLACEHOLDER": "Domain i personalizuar i portalit",
+          "HELP_TEXT": "Add only If you want to use a custom domain for your portals. Eg: {exampleURL}",
+          "ERROR": "Unesite ispravan URL domena"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Lidhja e faqes kryesore",
+          "PLACEHOLDER": "Lidhja e faqes kryesore të portalit",
+          "HELP_TEXT": "The link used to return from the portal to the home page. Eg: {exampleURL}",
+          "ERROR": "Unesite ispravan URL početne stranice"
+        },
+        "THEME_COLOR": {
+          "LABEL": "Boja teme portala",
+          "HELP_TEXT": "Ova boja će biti prikazana kao tema portala."
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Titulli i faqes",
+          "PLACEHOLDER": "Titulli i faqes së portalit",
+          "HELP_TEXT": "Naslov stranice će biti prikazan na javnom portalu.",
+          "ERROR": "Titulli i faqes është i nevojshëm"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Teksti i kokës",
+          "PLACEHOLDER": "Teksti i kokës së portalit",
+          "HELP_TEXT": "Tekst zaglavlja portala će biti prikazan na javnom portalu.",
+          "ERROR": "Teksti i kokës së portalit është i nevojshëm"
+        },
+        "API": {
+          "SUCCESS_MESSAGE_FOR_BASIC": "Portal je uspešno kreiran.",
+          "ERROR_MESSAGE_FOR_BASIC": "Nije moguće kreirati portal. Pokušajte ponovo.",
+          "SUCCESS_MESSAGE_FOR_UPDATE": "Portal je uspešno ažuriran.",
+          "ERROR_MESSAGE_FOR_UPDATE": "Nije moguće ažurirati portal. Pokušajte ponovo."
+        }
+      },
+      "ADD_LOCALE": {
+        "TITLE": "Dodaj novu lokalizaciju",
+        "SUB_TITLE": "Ovim dodajete novu lokalizaciju na listu dostupnih prevoda.",
+        "PORTAL": "Portal",
+        "LOCALE": {
+          "LABEL": "Lokalizacija",
+          "PLACEHOLDER": "Izaberite lokalizaciju",
+          "ERROR": "Jezik je obavezan"
+        },
+        "BUTTONS": {
+          "CREATE": "Dodaj jezik",
+          "CANCEL": "Otkaži"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Jezik je uspešno dodat",
+          "ERROR_MESSAGE": "Ne može se dodati jezik. Pokušajte ponovo."
+        }
+      },
+      "CHANGE_DEFAULT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Podrazumevani jezik je uspešno ažuriran",
+          "ERROR_MESSAGE": "Ne može se ažurirati podrazumevani jezik. Pokušajte ponovo."
+        }
+      },
+      "DELETE_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Jezik je uspešno uklonjen sa portala",
+          "ERROR_MESSAGE": "Ne može se ukloniti jezik sa portala. Pokušajte ponovo."
+        }
+      },
+      "DRAFT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale moved to draft successfully",
+          "ERROR_MESSAGE": "Unable to move locale to draft. Try again."
+        }
+      },
+      "PUBLISH_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale published successfully",
+          "ERROR_MESSAGE": "Unable to publish locale. Try again."
+        }
+      }
+    },
+    "TABLE": {
+      "LOADING_MESSAGE": "Duke ngarkuar artikuj...",
+      "404": "Asnjë artikull nuk përputhet me kërkimin tuaj 🔍",
+      "NO_ARTICLES": "Nuk ka artikuj të disponueshëm",
+      "HEADERS": {
+        "TITLE": "Titulli",
+        "CATEGORY": "Kategorija",
+        "READ_COUNT": "Pregledi",
+        "STATUS": "Statusi",
+        "LAST_EDITED": "I redaktuar së fundmi"
+      },
+      "COLUMNS": {
+        "BY": "nga",
+        "AUTHOR_NOT_AVAILABLE": "Autor nije dostupan"
+      }
+    },
+    "EDIT_ARTICLE": {
+      "LOADING": "Učitavanje članka...",
+      "TITLE_PLACEHOLDER": "Titulli i artikullit shkruhet këtu",
+      "CONTENT_PLACEHOLDER": "Napišite svoj članak ovde",
+      "API": {
+        "ERROR": "Greška prilikom čuvanja članka"
+      }
+    },
+    "PUBLISH_ARTICLE": {
+      "API": {
+        "ERROR": "Greška pri objavljivanju članka",
+        "SUCCESS": "Članak je uspešno objavljen"
+      }
+    },
+    "ARCHIVE_ARTICLE": {
+      "API": {
+        "ERROR": "Greška pri arhiviranju članka",
+        "SUCCESS": "Članak uspešno arhiviran"
+      }
+    },
+    "DRAFT_ARTICLE": {
+      "API": {
+        "ERROR": "Greška pri kreiranju nacrta članka",
+        "SUCCESS": "Članak uspešno sačuvan kao nacrt"
+      }
+    },
+    "DELETE_ARTICLE": {
+      "MODAL": {
+        "CONFIRM": {
+          "TITLE": "Potvrdi brisanje",
+          "MESSAGE": "Da li ste sigurni da želite da obrišete članak?",
+          "YES": "Da, obriši",
+          "NO": "Ne, zadrži"
+        }
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Članak uspešno obrisan",
+        "ERROR_MESSAGE": "Greška pri brisanju članka"
+      }
+    },
+    "REORDER_ARTICLE": {
+      "API": {
+        "ERROR_MESSAGE": "Unable to reorder articles. Please try again."
+      }
+    },
+    "REORDER_CATEGORY": {
+      "API": {
+        "ERROR_MESSAGE": "Unable to reorder categories. Please try again."
+      }
+    },
+    "CREATE_ARTICLE": {
+      "ERROR_MESSAGE": "Dodajte naslov i sadržaj članka da biste mogli da ažurirate podešavanja."
+    },
+    "SIDEBAR": {
+      "SEARCH": {
+        "PLACEHOLDER": "Kërko për artikuj"
+      }
+    },
+    "BREADCRUMB": {
+      "ARTICLES": "Članci",
+      "CATEGORIES": "Kategorije",
+      "LOCALES": "Jezici",
+      "SETTINGS": "Postavke"
+    },
+    "CATEGORY": {
+      "ADD": {
+        "TITLE": "Kreiraj kategoriju",
+        "SUB_TITLE": "Kategorija će se koristiti na javnom portalu za kategorizaciju članaka.",
+        "PORTAL": "Portali",
+        "LOCALE": "Gjuha",
+        "NAME": {
+          "LABEL": "Emri",
+          "PLACEHOLDER": "Emri i kategorisë",
+          "HELP_TEXT": "Naziv i ikonica kategorije biće prikazani u javnom portalu za kategorizaciju članaka.",
+          "ERROR": "Emri është i nevojshëm"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug i kategorisë për url-të",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Slug është i nevojshëm"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Përshkrimi",
+          "PLACEHOLDER": "Jepni një përshkrim të shkurtër për kategorinë.",
+          "ERROR": "Përshkrimi është i nevojshëm"
+        },
+        "BUTTONS": {
+          "CREATE": "Kreiraj kategoriju",
+          "CANCEL": "Anulo"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Kategorija je uspešno kreirana",
+          "ERROR_MESSAGE": "Nije moguće kreirati kategoriju"
+        }
+      },
+      "EDIT": {
+        "TITLE": "Izmeni kategoriju",
+        "SUB_TITLE": "Izmena kategorije će ažurirati kategoriju na javnom portalu.",
+        "PORTAL": "Portal",
+        "LOCALE": "Jezik",
+        "NAME": {
+          "LABEL": "Naziv",
+          "PLACEHOLDER": "Naziv kategorije",
+          "HELP_TEXT": "Naziv i ikonica kategorije biće prikazani u javnom portalu za kategorizaciju članaka.",
+          "ERROR": "Naziv je obavezan"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug kategorije za URL",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Slug je obavezan"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Opis",
+          "PLACEHOLDER": "Unesite kratak opis kategorije.",
+          "ERROR": "Opis je obavezan"
+        },
+        "BUTTONS": {
+          "CREATE": "Ažuriraj kategoriju",
+          "CANCEL": "Otkaži"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Kategorija uspešno ažurirana",
+          "ERROR_MESSAGE": "Ne može se ažurirati kategorija"
+        }
+      },
+      "DELETE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Kategorija uspešno obrisana",
+          "ERROR_MESSAGE": "Ne može se obrisati kategorija"
+        }
+      }
+    },
+    "ARTICLE_SEARCH": {
+      "TITLE": "Pretraži članke",
+      "PLACEHOLDER": "Pretraži članke",
+      "NO_RESULT": "Nema pronađenih članaka",
+      "SEARCHING": "Pretraga...",
+      "SEARCH_BUTTON": "Pretraži",
+      "INSERT_ARTICLE": "Ubaci link",
+      "IFRAME_ERROR": "URL je prazan ili nevažeći. Nije moguće prikazati sadržaj.",
+      "OPEN_ARTICLE_SEARCH": "Ubaci članak iz Help Centra",
+      "SUCCESS_ARTICLE_INSERTED": "Članak uspešno dodat",
+      "PREVIEW_LINK": "Pregledaj članak",
+      "CANCEL": "Zatvori",
+      "BACK": "Nazad",
+      "BACK_RESULTS": "Nazad na rezultate"
+    },
+    "UPGRADE_PAGE": {
+      "TITLE": "Centar za pomoć",
+      "DESCRIPTION": "Kreirajte korisnički pristupačne portale za samopomoć. Omogućite korisnicima pristup člancima i podršci 24/7. Nadogradite pretplatu da biste omogućili ovu funkciju.",
+      "SELF_HOSTED_DESCRIPTION": "Kreirajte korisnički pristupačne portale za samopomoć. Omogućite korisnicima pristup člancima i podršci 24/7. Kontaktirajte administratora da biste omogućili ovu funkciju.",
+      "BUTTON": {
+        "LEARN_MORE": "Saznajte više",
+        "UPGRADE": "Nadogradite"
+      },
+      "FEATURES": {
+        "PORTALS": {
+          "TITLE": "Više portala",
+          "DESCRIPTION": "Kreirajte više help centar portala za različite proizvode koristeći isti nalog."
+        },
+        "LOCALES": {
+          "TITLE": "Puna podrška za jezike",
+          "DESCRIPTION": "Prilagodite portal na svom jeziku. Podržavamo sve jezike i omogućavamo prevod svakog članka."
+        },
+        "SEO": {
+          "TITLE": "SEO-prijatan dizajn",
+          "DESCRIPTION": "Prilagodite meta tagove i poboljšajte vidljivost na pretraživačima uz naše SEO-prijateljske stranice."
+        },
+        "API": {
+          "TITLE": "Puna API podrška",
+          "DESCRIPTION": "Koristite portal kao headless CMS sa eksternim front-end okvirima putem naših API-ja."
+        }
+      }
+    },
+    "LOADING": "Učitavanje...",
+    "ARTICLES_PAGE": {
+      "ARTICLE_CARD": {
+        "CARD": {
+          "VIEWS": "{count} view | {count} views",
+          "DROPDOWN_MENU": {
+            "PUBLISH": "Objavi",
+            "DRAFT": "Nacrt",
+            "ARCHIVE": "Arhiviraj",
+            "TRANSLATE": "Translate",
+            "DELETE": "Obriši"
+          },
+          "STATUS": {
+            "DRAFT": "Nacrt",
+            "PUBLISHED": "Objavljeno",
+            "ARCHIVED": "Arhivirano"
+          },
+          "PENDING_EDITS": "Unpublished edits",
+          "PENDING_EDITS_TOOLTIP": "This published article has unpublished edits",
+          "CATEGORY": {
+            "UNCATEGORISED": "Bez kategorije"
+          }
+        }
+      },
+      "ARTICLES_HEADER": {
+        "TABS": {
+          "ALL": "Svi članci",
+          "MINE": "Moji",
+          "DRAFT": "Nacrti",
+          "PUBLISHED": "Objavljeni",
+          "ARCHIVED": "Arhivirani"
+        },
+        "CATEGORY": {
+          "ALL": "Sve kategorije"
+        },
+        "LOCALE": {
+          "ALL": "Svi jezici"
+        },
+        "SEARCH_PLACEHOLDER": "Pretraži članke...",
+        "NEW_ARTICLE": "Novi članak"
+      },
+      "EMPTY_STATE": {
+        "ALL": {
+          "TITLE": "Napiši članak",
+          "SUBTITLE": "Napiši detaljan članak, hajde da počnemo!",
+          "BUTTON_LABEL": "Novi članak"
+        },
+        "MINE": {
+          "TITLE": "You haven't written any articles here",
+          "SUBTITLE": "All articles written by you show up here for quick access."
+        },
+        "DRAFT": {
+          "TITLE": "There are no articles in drafts",
+          "SUBTITLE": "Nacrti članaka će se pojaviti ovde"
+        },
+        "PUBLISHED": {
+          "TITLE": "There are no published articles",
+          "SUBTITLE": "Objavljeni članci će se pojaviti ovde"
+        },
+        "ARCHIVED": {
+          "TITLE": "There are no articles in the archive",
+          "SUBTITLE": "Archived articles don't show up on the portal, you can use it to mark deprecated or outdated pages"
+        },
+        "CATEGORY": {
+          "TITLE": "Nema članaka u ovoj kategoriji",
+          "SUBTITLE": "Članci iz ove kategorije će se pojaviti ovde"
+        },
+        "SEARCH": {
+          "TITLE": "No matching articles",
+          "SUBTITLE": "We couldn't find any articles matching your search. Try a different term."
+        }
+      },
+      "BULK_TRANSLATE": {
+        "TITLE": "Translate article | Translate {count} articles",
+        "DESCRIPTION": "Translate the selected article to another language. | Translate the selected articles to another language.",
+        "LOCALE_LABEL": "Target language",
+        "LOCALE_PLACEHOLDER": "Select a language",
+        "CATEGORY_LABEL": "Target category",
+        "CATEGORY_PLACEHOLDER": "Select a category",
+        "OPTIONAL": "(optional)",
+        "CONFIRM": "Translate",
+        "SELECT_ALL": "Odaberi sve ({count})",
+        "SELECTED_COUNT": "{count} odabrano",
+        "CLEAR_SELECTION": "Clear selection",
+        "TRANSLATE_BUTTON": "Translate",
+        "CONFIRM_OVERWRITE": "Overwrite and translate",
+        "DUPLICATE_WARNING": "A translation already exists for this article in the selected language. | Translations already exist for {count} articles in the selected language.",
+        "DUPLICATE_CONFIRM_HINT": "Click translate again to overwrite the existing translation.",
+        "API": {
+          "SUCCESS_MESSAGE": "Translation in progress. The article will appear as a draft once ready.",
+          "ERROR_MESSAGE": "Failed to start translation. Please try again."
+        }
+      },
+      "BULK_ACTIONS": {
+        "PUBLISH": "Objavi",
+        "DRAFT": "Nacrt",
+        "ARCHIVE": "Arhiviraj",
+        "TRANSLATE": "Translate",
+        "MOVE_TO_CATEGORY": "Category",
+        "DELETE": "Delete",
+        "STATUS_SUCCESS": "Articles updated successfully",
+        "STATUS_ERROR": "Failed to update articles",
+        "STATUS_SKIPPED": "1 article with unpublished edits was skipped — open it to publish or discard. | {count} articles with unpublished edits were skipped — open them to publish or discard.",
+        "STATUS_SKIPPED_ALL": "These articles have unpublished edits — open each to publish or discard.",
+        "CATEGORY_SUCCESS": "Articles moved successfully",
+        "CATEGORY_ERROR": "Failed to move articles",
+        "DELETE_CONFIRM_TITLE": "Delete article | Delete {count} articles",
+        "DELETE_CONFIRM_DESCRIPTION": "This will permanently delete the selected article. This action cannot be undone. | This will permanently delete {count} selected articles. This action cannot be undone.",
+        "DELETE_CONFIRM": "Delete",
+        "DELETE_SUCCESS": "Articles deleted successfully",
+        "DELETE_ERROR": "Failed to delete articles"
+      }
+    },
+    "CATEGORY_PAGE": {
+      "CATEGORY_HEADER": {
+        "NEW_CATEGORY": "Nova kategorija",
+        "EDIT_CATEGORY": "Izmeni kategoriju",
+        "SEARCH_PLACEHOLDER": "Search categories...",
+        "CATEGORIES_COUNT": "{n} category | {n} categories",
+        "BREADCRUMB": {
+          "CATEGORY_LOCALE": "Categories ({localeCode})",
+          "ACTIVE_CATEGORY": "{categoryName} ({categoryCount} articles) | {categoryName} ({categoryCount} article)"
+        }
+      },
+      "CATEGORY_EMPTY_STATE": {
+        "TITLE": "Nema pronađenih kategorija",
+        "SUBTITLE": "Kategorije će se pojaviti ovde. Možete dodati kategoriju klikom na dugme 'Nova kategorija'."
+      },
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching categories",
+        "SUBTITLE": "We couldn't find any categories matching your search. Try a different term."
+      },
+      "CATEGORY_CARD": {
+        "ARTICLES_COUNT": "{count} article | {count} articles"
+      },
+      "CATEGORY_DIALOG": {
+        "CREATE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Kategorija je uspešno kreirana",
+            "ERROR_MESSAGE": "Ne može se kreirati kategorija"
+          }
+        },
+        "EDIT": {
+          "API": {
+            "SUCCESS_MESSAGE": "Kategorija je uspešno izmenjena",
+            "ERROR_MESSAGE": "Ne može se izmeniti kategorija"
+          }
+        },
+        "DELETE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Kategorija uspešno obrisana",
+            "ERROR_MESSAGE": "Nije moguće obrisati kategoriju"
+          }
+        },
+        "HEADER": {
+          "CREATE": "Kreiraj kategoriju",
+          "EDIT": "Izmeni kategoriju",
+          "DESCRIPTION": "Izmena kategorije će ažurirati kategoriju na javnom portalu.",
+          "PORTAL": "Portal",
+          "LOCALE": "Jezik"
+        },
+        "FORM": {
+          "NAME": {
+            "LABEL": "Naziv",
+            "PLACEHOLDER": "Naziv kategorije",
+            "ERROR": "Naziv je obavezan"
+          },
+          "SLUG": {
+            "LABEL": "Slug",
+            "PLACEHOLDER": "Slug kategorije za URL-ove",
+            "ERROR": "Slug je obavezan",
+            "HELP_TEXT": "app.chatwoot.com/hc/{portalSlug}/{localeCode}/categories/{categorySlug}"
+          },
+          "DESCRIPTION": {
+            "LABEL": "Opis",
+            "PLACEHOLDER": "Unesite kratak opis kategorije.",
+            "ERROR": "Opis je obavezan"
+          }
+        },
+        "BUTTONS": {
+          "CREATE": "Kreiraj",
+          "EDIT": "Ažuriraj",
+          "CANCEL": "Otkaži"
+        }
+      }
+    },
+    "LOCALES_PAGE": {
+      "LOCALES_COUNT": "No locales available | {n} locale | {n} locales",
+      "NEW_LOCALE_BUTTON_TEXT": "Novi jezik",
+      "SEARCH_PLACEHOLDER": "Search locales...",
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching locales",
+        "SUBTITLE": "We couldn't find any locales matching your search. Try a different term."
+      },
+      "LOCALE_CARD": {
+        "ARTICLES_COUNT": "{count} article | {count} articles",
+        "CATEGORIES_COUNT": "{count} category | {count} categories",
+        "DEFAULT": "Podrazumevano",
+        "DRAFT": "Nacrt",
+        "DROPDOWN_MENU": {
+          "MAKE_DEFAULT": "Postavi kao podrazumevano",
+          "MOVE_TO_DRAFT": "Move to draft",
+          "PUBLISH_LOCALE": "Publish locale",
+          "CUSTOMIZE_CONTENT": "Localize content",
+          "SELECT_POPULAR_CONTENT": "Select recommended content",
+          "DELETE": "Obriši"
+        }
+      },
+      "POPULAR_CONTENT_DIALOG": {
+        "TITLE": "Recommended content",
+        "DESCRIPTION": "Pick up to 3 categories and 6 articles to feature on this locale's help center home page. Drag them into the order you want visitors to see.",
+        "SEARCH": "Search...",
+        "EMPTY": "No matching results",
+        "ADD_ANOTHER": "Add another...",
+        "SLOTS_LEFT": "{count} slots left",
+        "OVERRIDING_DEFAULTS": "Overriding defaults for this locale",
+        "CONFIRM": "Save recommendations",
+        "CATEGORIES": {
+          "LABEL": "Recommended categories",
+          "ARTICLES_COUNT": "No articles | {count} article | {count} articles"
+        },
+        "ARTICLES": {
+          "LABEL": "Recommended articles",
+          "IN_CATEGORY": "in {category}",
+          "UNCATEGORIZED": "Nekategorizovano"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Recommended content updated successfully",
+          "ERROR_MESSAGE": "Unable to update recommended content. Try again."
+        }
+      },
+      "CONTENT_DIALOG": {
+        "TITLE": "Localize content",
+        "DESCRIPTION": "Set values specific to this locale. Anything left blank falls back to the default locale.",
+        "NAME": {
+          "LABEL": "Name"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Naslov stranice"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Tekst zaglavlja"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Locale content updated successfully",
+          "ERROR_MESSAGE": "Unable to update locale content. Try again."
+        }
+      },
+      "ADD_LOCALE_DIALOG": {
+        "TITLE": "Dodaj novu lokalizaciju",
+        "DESCRIPTION": "Izaberite jezik na kojem će ovaj članak biti napisan. Ovo će biti dodato na vašu listu prevoda, a kasnije možete dodati još jezika.",
+        "COMBOBOX": {
+          "PLACEHOLDER": "Izaberite lokalizaciju..."
+        },
+        "STATUS": {
+          "LABEL": "Status",
+          "OPTIONS": {
+            "LIVE": "Objavljeno",
+            "DRAFT": "Nacrt"
+          }
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Lokalizacija uspešno dodata",
+          "ERROR_MESSAGE": "Ne može se dodati lokalizacija. Pokušajte ponovo."
+        }
+      }
+    },
+    "EDIT_ARTICLE_PAGE": {
+      "HEADER": {
+        "STATUS": {
+          "SAVING": "Čuvanje...",
+          "SAVED": "Sačuvano"
+        },
+        "PREVIEW": "Pregled",
+        "PUBLISH": "Objavi",
+        "PUBLISH_CHANGES": "Publish changes",
+        "PUBLISH_CHANGES_SUCCESS": "Changes published successfully",
+        "PUBLISH_CHANGES_ERROR": "Could not publish changes",
+        "SAVE_IN_PROGRESS": "Still saving your latest changes. Please try again in a moment.",
+        "UPLOAD_IN_PROGRESS": "A file upload is unfinished. Wait for it to finish or remove it first.",
+        "CREATE_IN_PROGRESS": "The article is still being created. Add files again in a moment.",
+        "DISCARD_CHANGES": "Discard changes",
+        "DISCARD_CHANGES_SUCCESS": "Changes discarded",
+        "DISCARD_CHANGES_ERROR": "Could not discard changes",
+        "PENDING_CHANGES": "Pending changes",
+        "VIEW_CHANGES": "View unpublished changes",
+        "DRAFT": "Nacrt",
+        "ARCHIVE": "Arhiviraj",
+        "BACK_TO_ARTICLES": "Nazad na članke"
+      },
+      "PENDING_CHANGES_POPOVER": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "This article has draft changes that aren't live yet. Apply them before changing the status, or discard them?",
+        "APPLY": "Apply changes",
+        "DISCARD": "Discard changes"
+      },
+      "DIFF_DIALOG": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "Compare your draft against the version that's currently live.",
+        "TITLE_LABEL": "Title"
+      },
+      "EDIT_ARTICLE": {
+        "MORE_PROPERTIES": "Više opcija",
+        "UNCATEGORIZED": "Bez kategorije",
+        "EDITOR_PLACEHOLDER": "Napišite nešto..."
+      },
+      "ARTICLE_PROPERTIES": {
+        "ARTICLE_PROPERTIES": "Svojstva članka",
+        "META_DESCRIPTION": "Meta opis",
+        "META_DESCRIPTION_PLACEHOLDER": "Add meta description",
+        "META_TITLE": "Meta naslov",
+        "META_TITLE_PLACEHOLDER": "Dodaj meta naslov",
+        "META_TAGS": "Meta oznake",
+        "META_TAGS_PLACEHOLDER": "Dodaj meta oznake",
+        "SLUG": "Slug",
+        "SLUG_PLACEHOLDER": "Add slug",
+        "SLUG_USE_TITLE": "Use title as slug",
+        "SLUG_WARNING": "The current URL will stop working, and existing links to it will break.",
+        "SLUG_UPDATE": "Ažuriraj",
+        "SLUG_UPDATED": "Slug updated. The article is now available at the new URL.",
+        "SLUG_OPEN": "Open URL"
+      },
+      "API": {
+        "ERROR": "Greška pri čuvanju članka"
+      }
+    },
+    "PORTAL_SWITCHER": {
+      "NEW_PORTAL": "Novi portal",
+      "PORTALS": "Portali",
+      "CREATE_PORTAL": "Kreiraj i upravljaj više portala",
+      "ARTICLES": "članci",
+      "DOMAIN": "domen",
+      "PORTAL_NAME": "Naziv portala"
+    },
+    "CREATE_PORTAL_DIALOG": {
+      "TITLE": "Kreiraj novi portal",
+      "DESCRIPTION": "Dajte portalu ime i kreirajte jednostavan URL. Oboje možete kasnije izmeniti u podešavanjima.",
+      "CONFIRM_BUTTON_LABEL": "Kreiraj",
+      "NAME": {
+        "LABEL": "Ime",
+        "PLACEHOLDER": "User Guide | Chatwoot",
+        "MESSAGE": "Izaberite ime za svoj portal.",
+        "ERROR": "Ime je obavezno"
+      },
+      "SLUG": {
+        "LABEL": "Slug",
+        "PLACEHOLDER": "user-guide",
+        "ERROR": "Slug je obavezan",
+        "FORMAT_ERROR": "Please enter a valid slug, for eg: user-guide"
+      }
+    },
+    "PORTAL_SETTINGS": {
+      "FORM": {
+        "AVATAR": {
+          "LABEL": "Logo",
+          "IMAGE_UPLOAD_ERROR": "Neuspešno otpremanje slike! Pokušajte ponovo",
+          "IMAGE_UPLOAD_SUCCESS": "Slika je uspešno dodata. Kliknite na sačuvaj izmene da biste sačuvali logo",
+          "IMAGE_DELETE_SUCCESS": "Logo je uspešno obrisan",
+          "IMAGE_DELETE_ERROR": "Nije moguće obrisati logo",
+          "IMAGE_UPLOAD_SIZE_ERROR": "Image size should be less than {size}MB"
+        },
+        "NAME": {
+          "LABEL": "Ime",
+          "PLACEHOLDER": "Naziv portala",
+          "ERROR": "Naziv je obavezan"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Tekst zaglavlja",
+          "PLACEHOLDER": "Tekst zaglavlja portala"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Naslov stranice",
+          "PLACEHOLDER": "Naslov stranice portala"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Link ka početnoj stranici",
+          "PLACEHOLDER": "Link ka početnoj stranici portala",
+          "ERROR": "Enter a valid URL. The Home page link must start with 'http://' or 'https://'."
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug portala"
+        },
+        "BRAND_COLOR": {
+          "LABEL": "Brand color"
+        },
+        "SAVE_CHANGES": "Save changes"
+      },
+      "CONFIGURATION_FORM": {
+        "CUSTOM_DOMAIN": {
+          "HEADER": "Custom domain",
+          "LABEL": "Custom domain:",
+          "DESCRIPTION": "You can host your portal on a custom domain. For instance, if your website is yourdomain.com and you want your portal available at docs.yourdomain.com, simply enter that in this field.",
+          "STATUS_DESCRIPTION": "Your custom portal will start working as soon as it is verified.",
+          "PLACEHOLDER": "Portal custom domain",
+          "EDIT_BUTTON": "Edit",
+          "ADD_BUTTON": "Add custom domain",
+          "STATUS": {
+            "LIVE": "Live",
+            "PENDING": "Awaiting verification",
+            "ERROR": "Verification failed"
+          },
+          "DIALOG": {
+            "ADD_HEADER": "Add custom domain",
+            "EDIT_HEADER": "Edit custom domain",
+            "ADD_CONFIRM_BUTTON_LABEL": "Add domain",
+            "EDIT_CONFIRM_BUTTON_LABEL": "Update domain",
+            "LABEL": "Custom domain",
+            "PLACEHOLDER": "Portal custom domain",
+            "ERROR": "Custom domain is required",
+            "FORMAT_ERROR": "Please enter a valid domain URL e.g. docs.yourdomain.com"
+          },
+          "DNS_CONFIGURATION_DIALOG": {
+            "HEADER": "DNS configuration",
+            "DESCRIPTION": "Log in to the account you have with your DNS provider, and add a CNAME record for subdomain pointing to chatwoot.help",
+            "COPY": "Successfully copied CNAME",
+            "SEND_INSTRUCTIONS": {
+              "HEADER": "Send instructions",
+              "DESCRIPTION": "If you would prefer to have someone from your development team to handle this step, you can enter email address below, and we will send them the required instructions.",
+              "PLACEHOLDER": "Enter their email",
+              "ERROR": "Enter a valid email address",
+              "SEND_BUTTON": "Send"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "BUTTON": "Delete {portalName}",
+          "HEADER": "Delete portal",
+          "DESCRIPTION": "Permanently delete this portal. This action is irreversible",
+          "DIALOG": {
+            "HEADER": "Sure you want to delete {portalName}?",
+            "DESCRIPTION": "This is a permanent action that cannot be reversed.",
+            "CONFIRM_BUTTON_LABEL": "Delete"
+          }
+        },
+        "EDIT_CONFIGURATION": "Edit configuration"
+      },
+      "LAYOUT_CONTENT": {
+        "HEADER": "Appearance",
+        "DESCRIPTION": "Pick the layout that fits how your visitors read.",
+        "LAYOUT": {
+          "CLASSIC": {
+            "TITLE": "Classic",
+            "DESCRIPTION": "A welcoming home page with search and featured topics."
+          },
+          "SIDEBAR": {
+            "TITLE": "Documentation",
+            "DESCRIPTION": "Side-by-side navigation that keeps every guide a click away."
+          }
+        },
+        "SOCIAL_LINKS": {
+          "HEADER": "Social links",
+          "DESCRIPTION": "Add the handle for each network and your help center builds the full link. Shown in the documentation layout footer.",
+          "PLACEHOLDER": "handle",
+          "ADD": "Add social link",
+          "REMOVE": "Ukloni"
+        },
+        "SAVE": "Save changes"
+      },
+      "INTEGRATIONS": {
+        "HEADER": "Integracije",
+        "DESCRIPTION": "Connect tools that extend what your help center can do.",
+        "LIVE_CHAT": {
+          "TITLE": "Live chat with Chatwoot",
+          "DESCRIPTION": "Show a live chat widget on your help center so visitors can reach you while they read.",
+          "PLACEHOLDER": "Select live chat widget",
+          "NONE_OPTION": "No widget"
+        },
+        "GTM": {
+          "TITLE": "Google Tag Manager",
+          "DESCRIPTION": "Add analytics and marketing tags by connecting your Tag Manager container.",
+          "PLACEHOLDER": "GTM-XXXXXXX",
+          "HELP": "Find this in your Google Tag Manager workspace. Leave empty to disable.",
+          "INVALID": "Enter a valid container ID, for example GTM-XXXXXXX."
+        },
+        "GA4": {
+          "TITLE": "Google Analytics 4",
+          "DESCRIPTION": "Measure traffic and visitor behavior on your help center with Google Analytics.",
+          "PLACEHOLDER": "G-XXXXXXXXXX",
+          "HELP": "Find the measurement ID under Admin → Data streams in Google Analytics. Leave empty to disable.",
+          "INVALID": "Enter a valid measurement ID, for example G-XXXXXXXXXX."
+        },
+        "HOTJAR": {
+          "TITLE": "Hotjar",
+          "DESCRIPTION": "Understand how visitors use your help center with heatmaps and session recordings.",
+          "PLACEHOLDER": "1234567",
+          "HELP": "Find your site ID under Sites & organizations in Hotjar. Leave empty to disable.",
+          "INVALID": "Enter a numeric Hotjar site ID."
+        },
+        "PLAUSIBLE": {
+          "TITLE": "Plausible",
+          "DESCRIPTION": "Track help center traffic with privacy-friendly Plausible Analytics.",
+          "PLACEHOLDER": "example.com",
+          "HELP": "Enter the domain configured in your Plausible site settings. Leave empty to disable.",
+          "INVALID": "Enter a valid domain, for example example.com."
+        },
+        "AMPLITUDE": {
+          "TITLE": "Amplitude",
+          "DESCRIPTION": "Analyze visitor behavior on your help center with Amplitude.",
+          "PLACEHOLDER": "0123456789abcdef0123456789abcdef",
+          "HELP": "Find the API key in your Amplitude project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Amplitude API key."
+        },
+        "CLARITY": {
+          "TITLE": "Microsoft Clarity",
+          "DESCRIPTION": "Capture heatmaps and session recordings with Microsoft Clarity.",
+          "PLACEHOLDER": "abcd1234ef",
+          "HELP": "Find the project ID in your Clarity project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Clarity project ID."
+        },
+        "META_PIXEL": {
+          "TITLE": "Meta Pixel",
+          "DESCRIPTION": "Measure ad conversions and build audiences from help center visits with Meta Pixel.",
+          "PLACEHOLDER": "123456789012345",
+          "HELP": "Find the pixel ID in Meta Events Manager. Leave empty to disable.",
+          "INVALID": "Enter a numeric pixel ID."
+        },
+        "SAVE": "Save changes"
+      },
+      "NAV": {
+        "GENERAL": "General",
+        "DOMAIN": "Domena",
+        "APPEARANCE": "Appearance",
+        "INTEGRATIONS": "Integracije"
+      },
+      "API": {
+        "CREATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Portal created successfully",
+          "ERROR_MESSAGE": "Unable to create portal"
+        },
+        "UPDATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Portal updated successfully",
+          "ERROR_MESSAGE": "Unable to update portal"
+        }
+      }
+    },
+    "PDF_UPLOAD": {
+      "TITLE": "Upload PDF Document",
+      "DESCRIPTION": "Upload a PDF document to automatically generate FAQs using AI",
+      "DRAG_DROP_TEXT": "Drag and drop your PDF file here, or click to select",
+      "SELECT_FILE": "Select PDF File",
+      "ADDITIONAL_CONTEXT_LABEL": "Additional Context (Optional)",
+      "ADDITIONAL_CONTEXT_PLACEHOLDER": "Provide any additional context or instructions for FAQ generation...",
+      "UPLOADING": "Uploading...",
+      "UPLOAD": "Upload & Process",
+      "CANCEL": "Cancel",
+      "ERROR_INVALID_TYPE": "Please select a valid PDF file",
+      "ERROR_FILE_TOO_LARGE": "File size must be less than 512MB",
+      "ERROR_UPLOAD_FAILED": "Failed to upload PDF. Please try again."
+    },
+    "PDF_DOCUMENTS": {
+      "TITLE": "PDF Documents",
+      "DESCRIPTION": "Manage uploaded PDF documents and generate FAQs from them",
+      "UPLOAD_PDF": "Upload PDF",
+      "UPLOAD_FIRST_PDF": "Upload your first PDF",
+      "UPLOADED_BY": "Uploaded by",
+      "GENERATE_FAQS": "Generate FAQs",
+      "GENERATING": "Generating...",
+      "CONFIRM_DELETE": "Are you sure you want to delete {filename}?",
+      "EMPTY_STATE": {
+        "TITLE": "No PDF documents yet",
+        "DESCRIPTION": "Upload PDF documents to automatically generate FAQs using AI"
+      },
+      "STATUS": {
+        "UPLOADED": "Ready",
+        "PROCESSING": "Processing",
+        "PROCESSED": "Completed",
+        "FAILED": "Failed"
+      }
+    },
+    "CONTENT_GENERATION": {
+      "TITLE": "Content Generation",
+      "DESCRIPTION": "Upload PDF documents to automatically generate FAQ content using AI",
+      "UPLOAD_TITLE": "Upload PDF Document",
+      "DRAG_DROP": "Drag and drop your PDF file here, or click to select",
+      "SELECT_FILE": "Select PDF File",
+      "UPLOADING": "Processing document...",
+      "UPLOAD_SUCCESS": "Document processed successfully!",
+      "UPLOAD_ERROR": "Failed to upload document. Please try again.",
+      "INVALID_FILE_TYPE": "Please select a valid PDF file",
+      "FILE_TOO_LARGE": "File size must be less than 512MB",
+      "GENERATED_CONTENT": "Generated FAQ Content",
+      "PUBLISH_SELECTED": "Publish Selected",
+      "PUBLISHING": "Publishing...",
+      "FROM_DOCUMENT": "From document",
+      "NO_CONTENT": "No generated content available. Upload a PDF document to get started.",
+      "LOADING": "Loading generated content..."
+    }
+  }
+}

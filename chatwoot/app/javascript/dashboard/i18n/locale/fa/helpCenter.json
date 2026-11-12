@@ -1,0 +1,1119 @@
+{
+  "HELP_CENTER": {
+    "TITLE": "مرکز راهنما",
+    "NEW_PAGE": {
+      "DESCRIPTION": "Create self-service help center portals for your customers. Help them find answers quickly, without waiting. Streamline inquiries, boost agent efficiency, and elevate customer support.",
+      "CREATE_PORTAL_BUTTON": "ایجاد پورتال"
+    },
+    "HEADER": {
+      "FILTER": "فیلتر براساس",
+      "SORT": "مرتب‌سازی براساس",
+      "LOCALE": "محلی",
+      "SETTINGS_BUTTON": "تنظیمات",
+      "NEW_BUTTON": "مقاله جدید",
+      "DROPDOWN_OPTIONS": {
+        "PUBLISHED": "منتشر شد",
+        "DRAFT": "پیش‌نویس",
+        "ARCHIVED": "بایگانی شد"
+      },
+      "TITLES": {
+        "ALL_ARTICLES": "همه مقالات",
+        "MINE": "مقالات من",
+        "DRAFT": "پیش نویس مقالات",
+        "ARCHIVED": "مقالات آرشیو شده"
+      },
+      "LOCALE_SELECT": {
+        "TITLE": "انتخاب زبان",
+        "PLACEHOLDER": "انتخاب زبان",
+        "NO_RESULT": "هیچ زبانی یافت نشد",
+        "SEARCH_PLACEHOLDER": "جستجوی زبان"
+      }
+    },
+    "EDIT_HEADER": {
+      "ALL_ARTICLES": "همه مقالات",
+      "PUBLISH_BUTTON": "انتشار",
+      "MOVE_TO_ARCHIVE_BUTTON": "به بایگانی انتقال داده شد",
+      "PREVIEW": "پیش‌نمایش",
+      "ADD_TRANSLATION": "افزودن ترجمه",
+      "OPEN_SIDEBAR": "نوار کناری را باز کنید",
+      "CLOSE_SIDEBAR": "نوار کناری را ببندید",
+      "SAVING": "در حال ذخیره...",
+      "SAVED": "ذخیره شد"
+    },
+    "ARTICLE_EDITOR": {
+      "IMAGE_UPLOAD": {
+        "TITLE": "آپلود عکس",
+        "UPLOADING": "در حال آپلود...",
+        "SUCCESS": "تصویر با موفقیت آپلود شد",
+        "UPLOAD_FAILED": "Upload failed",
+        "RATE_LIMITED": "Upload limit reached. Try again in a few minutes.",
+        "RETRY": "Retry",
+        "REMOVE": "حذف",
+        "CANCEL": "Cancel upload",
+        "ERROR_FILE_SIZE": "اندازه تصویر باید کمتر از {size} مگابایت باشد",
+        "ERROR_ATTACHMENT_FILE_SIZE": "File size should be less than {size}MB",
+        "ERROR_UNSUPPORTED_TYPE": "This file type is not supported",
+        "ERROR_FILE_FORMAT": "فرمت تصویر باید jpg، jpeg یا png باشد",
+        "ERROR_FILE_DIMENSIONS": "ابعاد تصویر باید کمتر از 2000*2000 باشد"
+      }
+    },
+    "ARTICLE_SETTINGS": {
+      "TITLE": "تنظیمات مقاله",
+      "FORM": {
+        "CATEGORY": {
+          "LABEL": "دسته‌بندی",
+          "TITLE": "انتخاب دسته‌بندی",
+          "PLACEHOLDER": "انتخاب دسته‌بندی",
+          "NO_RESULT": "هیچ دسته‌بندی‌ای یافت نشد",
+          "SEARCH_PLACEHOLDER": "جستجوی دسته‌بندی"
+        },
+        "AUTHOR": {
+          "LABEL": "نویسنده",
+          "TITLE": "انتخاب نویسنده",
+          "PLACEHOLDER": "انتخاب نویسنده",
+          "NO_RESULT": "هیچ نویسنده‌ای پیدا نشد",
+          "SEARCH_PLACEHOLDER": "جستجوی نویسنده"
+        },
+        "META_TITLE": {
+          "LABEL": "عنوان متا",
+          "PLACEHOLDER": "افزودن عنوان متا"
+        },
+        "META_DESCRIPTION": {
+          "LABEL": "توضیحات متا",
+          "PLACEHOLDER": "توضیحات متا خود را برای نتایج بهتر سئو اضافه کنید..."
+        },
+        "META_TAGS": {
+          "LABEL": "برچسب‌های متا",
+          "PLACEHOLDER": "اضافه کردن برچسب‌های متا، با کاما جدا شود..."
+        }
+      },
+      "BUTTONS": {
+        "ARCHIVE": "بایگانی مقاله",
+        "DELETE": "حذف مقاله"
+      }
+    },
+    "ARTICLE_SEARCH_RESULT": {
+      "UNCATEGORIZED": "دسته بندی نشده",
+      "SEARCH_RESULTS": "جستجو بر اساس {query}",
+      "EMPTY_TEXT": "جستجو در مقالات برای درج در پاسخ.",
+      "SEARCH_LOADER": "در حال جستجو...",
+      "INSERT_ARTICLE": "درج",
+      "NO_RESULT": "هیچ مقاله ای یافت نشد",
+      "COPY_LINK": "کپی آدرس مقاله در کلیپ برد",
+      "OPEN_LINK": "باز کردن مقاله در صفحه جدید",
+      "PREVIEW_LINK": "پیش نمایش مقاله"
+    },
+    "PORTAL": {
+      "HEADER": "پورتال ها",
+      "DEFAULT": "پیش‌فرض",
+      "NEW_BUTTON": "پورتال جدید",
+      "ACTIVE_BADGE": "فعال",
+      "CHOOSE_LOCALE_LABEL": "محلی را انتخاب کنید",
+      "LOADING_MESSAGE": "در حال بارگیری پورتال...",
+      "ARTICLES_LABEL": "مقالات",
+      "NO_PORTALS_MESSAGE": "هیچ پورتالی در دسترس وجود ندارد",
+      "ADD_NEW_LOCALE": "یک محل جدید اضافه کنید",
+      "POPOVER": {
+        "TITLE": "پورتال ها",
+        "PORTAL_SETTINGS": "تنظیمات پورتال",
+        "SUBTITLE": "شما چندین پورتال دارید و می‌توانید برای هر پورتال مکان‌های متفاوتی داشته باشید.",
+        "CANCEL_BUTTON_LABEL": "انصراف",
+        "CHOOSE_LOCALE_BUTTON": "Locale را انتخاب کنید"
+      },
+      "PORTAL_SETTINGS": {
+        "LIST_ITEM": {
+          "HEADER": {
+            "COUNT_LABEL": "مقالات",
+            "ADD": "افزودن منطقه",
+            "VISIT": "به سایت مراجعه کنید",
+            "SETTINGS": "تنظیمات",
+            "DELETE": "حذف"
+          },
+          "PORTAL_CONFIG": {
+            "TITLE": "تنظیمات پورتال",
+            "ITEMS": {
+              "NAME": "نام",
+              "DOMAIN": "دامنه سفارشی",
+              "SLUG": "Slug",
+              "TITLE": "عنوان پورتال",
+              "THEME": "رنگ تم",
+              "SUB_TEXT": "متن فرعی پورتال"
+            }
+          },
+          "AVAILABLE_LOCALES": {
+            "TITLE": "مناطق موجود",
+            "TABLE": {
+              "NAME": "نام محلی",
+              "CODE": "کد محلی",
+              "ARTICLE_COUNT": "تعداد مقالات",
+              "CATEGORIES": "تعداد دسته ها",
+              "SWAP": "تعویض کنید",
+              "DELETE": "حذف",
+              "DEFAULT_LOCALE": "پیش‌فرض"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "TITLE": "حذف پورتال",
+          "MESSAGE": "آیا مطمئن هستید که می‌خواهید این پورتال را حذف کنید؟",
+          "YES": "بله، پورتال حذف شود",
+          "NO": "خیر، پورتال را نگه‌دار",
+          "API": {
+            "DELETE_SUCCESS": "پورتال با موفقیت حذف شد",
+            "DELETE_ERROR": "خطا هنگام حذف پورتال"
+          }
+        },
+        "SEND_CNAME_INSTRUCTIONS": {
+          "API": {
+            "SUCCESS_MESSAGE": "CNAME instructions sent successfully",
+            "ERROR_MESSAGE": "Error while sending CNAME instructions"
+          }
+        }
+      },
+      "EDIT": {
+        "HEADER_TEXT": "ویرایش پورتال",
+        "TABS": {
+          "BASIC_SETTINGS": {
+            "TITLE": "اطلاعات اولیه"
+          },
+          "CUSTOMIZATION_SETTINGS": {
+            "TITLE": "سفارشی سازی پورتال"
+          },
+          "CATEGORY_SETTINGS": {
+            "TITLE": "دسته‌بندی‌ها"
+          },
+          "LOCALE_SETTINGS": {
+            "TITLE": "زبان‌های محلی"
+          }
+        },
+        "CATEGORIES": {
+          "TITLE": "دسته‌بندی‌ها در",
+          "NEW_CATEGORY": "دسته‌بندی جدید",
+          "TABLE": {
+            "NAME": "نام",
+            "DESCRIPTION": "توضیحات",
+            "LOCALE": "محلی",
+            "ARTICLE_COUNT": "تعداد مقالات",
+            "ACTION_BUTTON": {
+              "EDIT": "ویرایش دسته‌بندی",
+              "DELETE": "حذف دسته‌بندی"
+            },
+            "EMPTY_TEXT": "هیچ دسته‌بندی‌ای یافت نشد"
+          }
+        },
+        "EDIT_BASIC_INFO": {
+          "BUTTON_TEXT": "به‌روزرسانی تنظیمات اولیه‌"
+        }
+      },
+      "ADD": {
+        "CREATE_FLOW": {
+          "BASIC": {
+            "TITLE": "اطلاعات مرکز راهنما",
+            "BODY": "اطلاعات اولیه در مورد پورتال"
+          },
+          "CUSTOMIZATION": {
+            "TITLE": "سفارشی سازی مرکز راهنما",
+            "BODY": "سفارشی کردن پورتال"
+          },
+          "FINISH": {
+            "TITLE": "هوراا ! 🎉",
+            "BODY": "شما آماده‌اید!"
+          }
+        },
+        "CREATE_FLOW_PAGE": {
+          "BACK_BUTTON": "بازگشت",
+          "BASIC_SETTINGS_PAGE": {
+            "HEADER": "ایجاد پورتال",
+            "TITLE": "اطلاعات مرکز راهنما",
+            "CREATE_BASIC_SETTING_BUTTON": "ایجاد تنظیمات اولیه پورتال"
+          },
+          "CUSTOMIZATION_PAGE": {
+            "HEADER": "سفارشی سازی پورتال",
+            "TITLE": "سفارشی سازی مرکز راهنما",
+            "UPDATE_PORTAL_BUTTON": "به‌روزرسانی تنظیمات پورتال"
+          },
+          "FINISH_PAGE": {
+            "TITLE": "هوراا !🎉 شما آماده‌اید!",
+            "MESSAGE": "اکنون می توانید این پورتال ایجاد شده را در صفحه همه پورتال های خود مشاهده کنید.",
+            "FINISH": "برو به صفحه همه پورتال‌ها"
+          }
+        },
+        "LOGO": {
+          "LABEL": "آرم",
+          "UPLOAD_BUTTON": "بارگذاری آرم",
+          "HELP_TEXT": "این لوگو در هدر پورتال نمایش داده می شود.",
+          "IMAGE_UPLOAD_SUCCESS": "تصویر با موفقیت آپلود شد",
+          "IMAGE_UPLOAD_ERROR": "تصویر با موفقیت حذف شد",
+          "IMAGE_DELETE_ERROR": "خطا هنگام حذف تصویر"
+        },
+        "NAME": {
+          "LABEL": "نام",
+          "PLACEHOLDER": "نام پورتال",
+          "HELP_TEXT": "این نام به صورت داخلی در پورتال عمومی استفاده خواهد شد.",
+          "ERROR": "نام الزامی است"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "اسلاگ پورتال برای آدرس‌های اینترنتی",
+          "ERROR": "Slug مورد نیاز است"
+        },
+        "DOMAIN": {
+          "LABEL": "دامنه سفارشی",
+          "PLACEHOLDER": "دامنه سفارشی پورتال",
+          "HELP_TEXT": "Add only If you want to use a custom domain for your portals. Eg: {exampleURL}",
+          "ERROR": "یک نشانی دامنه معتبر وارد کنید"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "پیوند صفحه اصلی",
+          "PLACEHOLDER": "پیوند صفحه اصلی پورتال",
+          "HELP_TEXT": "The link used to return from the portal to the home page. Eg: {exampleURL}",
+          "ERROR": "یک نشانی صفحه اصلی معتبر وارد کنید"
+        },
+        "THEME_COLOR": {
+          "LABEL": "رنگ پوسته پورتال",
+          "HELP_TEXT": "این رنگ به عنوان رنگ پوسته برای پورتال نشان داده می‌شود."
+        },
+        "PAGE_TITLE": {
+          "LABEL": "عنوان صفحه",
+          "PLACEHOLDER": "عنوان صفحه پورتال",
+          "HELP_TEXT": "عنوان صفحه در پرتال عمومی استفاده خواهد شد.",
+          "ERROR": "عنوان صفحه الزامی است"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "متن سرصفحه",
+          "PLACEHOLDER": "متن سرصفحه پورتال",
+          "HELP_TEXT": "متن سرصفحه پورتال در پرتال عمومی استفاده خواهد شد.",
+          "ERROR": "متن سرصفحه پورتال الزامی است"
+        },
+        "API": {
+          "SUCCESS_MESSAGE_FOR_BASIC": "پورتال با موفقیت ایجاد شد.",
+          "ERROR_MESSAGE_FOR_BASIC": "پورتال ایجاد نشد. دوباره امتحان کنید.",
+          "SUCCESS_MESSAGE_FOR_UPDATE": "پورتال با موفقیت به‌روز شد.",
+          "ERROR_MESSAGE_FOR_UPDATE": "پورتال به روز رسانی نشد. دوباره امتحان کنید."
+        }
+      },
+      "ADD_LOCALE": {
+        "TITLE": "یک محل جدید اضافه کنید",
+        "SUB_TITLE": "این یک زبان محلی جدید به فهرست ترجمه موجود شما اضافه می‌کند.",
+        "PORTAL": "پورتال",
+        "LOCALE": {
+          "LABEL": "محلی",
+          "PLACEHOLDER": "محلی را انتخاب کنید",
+          "ERROR": "زبان محلی الزامی است"
+        },
+        "BUTTONS": {
+          "CREATE": "ایجاد زبان محلی",
+          "CANCEL": "انصراف"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "زبان محلی با موفقیت اضافه شد",
+          "ERROR_MESSAGE": "امکان افزودن زبان محلی وجود ندارد. دوباره امتحان کنید."
+        }
+      },
+      "CHANGE_DEFAULT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "زبان محلی پیش‌فرض با موفقیت به‌روز شد",
+          "ERROR_MESSAGE": "به‌روزرسانی زبان محلی پیش‌فرض ممکن نیست. دوباره امتحان کنید."
+        }
+      },
+      "DELETE_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "زبان محلی با موفقیت از پورتال حذف شد",
+          "ERROR_MESSAGE": "حذف زبان محلی از پورتال ممکن نیست. دوباره امتحان کنید."
+        }
+      },
+      "DRAFT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale moved to draft successfully",
+          "ERROR_MESSAGE": "Unable to move locale to draft. Try again."
+        }
+      },
+      "PUBLISH_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale published successfully",
+          "ERROR_MESSAGE": "Unable to publish locale. Try again."
+        }
+      }
+    },
+    "TABLE": {
+      "LOADING_MESSAGE": "در حال بارگیری مقالات...",
+      "404": "هیچ مقاله ای با جستجوی شما مطابقت ندارد 🔍",
+      "NO_ARTICLES": "هیچ مقاله ای موجود نیست",
+      "HEADERS": {
+        "TITLE": "عنوان",
+        "CATEGORY": "دسته‌بندی",
+        "READ_COUNT": "نمایش‌ها",
+        "STATUS": "وضعیت",
+        "LAST_EDITED": "آخرین ویرایش"
+      },
+      "COLUMNS": {
+        "BY": "توسط",
+        "AUTHOR_NOT_AVAILABLE": "نویسنده در دسترس نیست"
+      }
+    },
+    "EDIT_ARTICLE": {
+      "LOADING": "در حال بارگیری مقاله...",
+      "TITLE_PLACEHOLDER": "عنوان مقاله اینجاست",
+      "CONTENT_PLACEHOLDER": "مقاله خود را اینجا بنویسید",
+      "API": {
+        "ERROR": "خطا در هنگام ذخیره مقاله"
+      }
+    },
+    "PUBLISH_ARTICLE": {
+      "API": {
+        "ERROR": "خطا هنگام انتشار مقاله",
+        "SUCCESS": "مقاله با موفقیت منتشر شد"
+      }
+    },
+    "ARCHIVE_ARTICLE": {
+      "API": {
+        "ERROR": "خطا هنگام بایگانی مقاله",
+        "SUCCESS": "مقاله با موفقیت بایگانی شد"
+      }
+    },
+    "DRAFT_ARTICLE": {
+      "API": {
+        "ERROR": "Error while drafting article",
+        "SUCCESS": "Article drafted successfully"
+      }
+    },
+    "DELETE_ARTICLE": {
+      "MODAL": {
+        "CONFIRM": {
+          "TITLE": "تاییدیه حذف",
+          "MESSAGE": "آیا مطمئن هستید که مقاله حذف شود؟",
+          "YES": "بله، حذف شود",
+          "NO": "خیر، بماند"
+        }
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "مقاله با موفقیت حذف شد",
+        "ERROR_MESSAGE": "خطا هنگام حذف مقاله"
+      }
+    },
+    "REORDER_ARTICLE": {
+      "API": {
+        "ERROR_MESSAGE": "Unable to reorder articles. Please try again."
+      }
+    },
+    "REORDER_CATEGORY": {
+      "API": {
+        "ERROR_MESSAGE": "Unable to reorder categories. Please try again."
+      }
+    },
+    "CREATE_ARTICLE": {
+      "ERROR_MESSAGE": "لطفا عنوان و محتوای مقاله را اضافه کنید و فقط شما می‌توانید تنظیمات را به‌روز کنید"
+    },
+    "SIDEBAR": {
+      "SEARCH": {
+        "PLACEHOLDER": "جستجو برای مقالات"
+      }
+    },
+    "BREADCRUMB": {
+      "ARTICLES": "Articles",
+      "CATEGORIES": "دسته‌بندی‌ها",
+      "LOCALES": "زبان‌های محلی",
+      "SETTINGS": "تنظیمات"
+    },
+    "CATEGORY": {
+      "ADD": {
+        "TITLE": "ایجاد دسته‌بندی",
+        "SUB_TITLE": "این دسته در پرتال عمومی برای دسته بندی مقالات استفاده خواهد شد.",
+        "PORTAL": "پورتال",
+        "LOCALE": "محلی",
+        "NAME": {
+          "LABEL": "نام",
+          "PLACEHOLDER": "نام دسته‌بندی",
+          "HELP_TEXT": "از نام و نماد دسته بندی در پرتال عمومی برای دسته بندی مقالات استفاده می شود.",
+          "ERROR": "نام الزامی است"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug دسته برای آدرس ها",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Slug مورد نیاز است"
+        },
+        "DESCRIPTION": {
+          "LABEL": "توضیحات",
+          "PLACEHOLDER": "یک توضیح کوتاه در مورد دسته ارائه دهید.",
+          "ERROR": "توضیحات الزامی است"
+        },
+        "BUTTONS": {
+          "CREATE": "ایجاد دسته‌بندی",
+          "CANCEL": "انصراف"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت ایجاد شد",
+          "ERROR_MESSAGE": "امکان ایجاد دسته‌بندی وجود ندارد"
+        }
+      },
+      "EDIT": {
+        "TITLE": "ویرایش دسته‌بندی",
+        "SUB_TITLE": "ویرایش یک دسته‌بندی، اون را در پورتال عمومی به‌روز می‌کند.",
+        "PORTAL": "پورتال",
+        "LOCALE": "محلی",
+        "NAME": {
+          "LABEL": "نام",
+          "PLACEHOLDER": "نام دسته‌بندی",
+          "HELP_TEXT": "از نام و نماد دسته بندی در پرتال عمومی برای دسته بندی مقالات استفاده می شود.",
+          "ERROR": "نام الزامی است"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug دسته برای آدرس ها",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Slug مورد نیاز است"
+        },
+        "DESCRIPTION": {
+          "LABEL": "توضیحات",
+          "PLACEHOLDER": "یک توضیح کوتاه در مورد دسته ارائه دهید.",
+          "ERROR": "توضیحات الزامی است"
+        },
+        "BUTTONS": {
+          "CREATE": "به‌روزرسانی دسته‌بندی",
+          "CANCEL": "انصراف"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت به‌روز شد",
+          "ERROR_MESSAGE": "دسته‌بندی به‌روزرسانی نمی‌شود"
+        }
+      },
+      "DELETE": {
+        "API": {
+          "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت حذف شد",
+          "ERROR_MESSAGE": "حذف دسته‌بندی ممکن نیست"
+        }
+      }
+    },
+    "ARTICLE_SEARCH": {
+      "TITLE": "جستجو مقالات",
+      "PLACEHOLDER": "جستجو مقالات",
+      "NO_RESULT": "هیچ مقاله ای یافت نشد",
+      "SEARCHING": "در حال جستجو...",
+      "SEARCH_BUTTON": "جستجو",
+      "INSERT_ARTICLE": "درج آدرس",
+      "IFRAME_ERROR": "آدرس URL خالی یا نامعتبر است. امکان نمایش محتوا وجود ندارد.",
+      "OPEN_ARTICLE_SEARCH": "درج مقاله از مرکز راهنما",
+      "SUCCESS_ARTICLE_INSERTED": "مقاله با موفقیت درج شد",
+      "PREVIEW_LINK": "پیش نمایش مقاله",
+      "CANCEL": "بستن",
+      "BACK": "بازگشت",
+      "BACK_RESULTS": "بازگشت به نتایج"
+    },
+    "UPGRADE_PAGE": {
+      "TITLE": "مرکز راهنما",
+      "DESCRIPTION": "پورتال های سلف سرویس کاربر پسند ایجاد کنید. به کاربران خود کمک کنید تا به مقالات دسترسی پیدا کنند و پشتیبانی دریافت کنند.",
+      "SELF_HOSTED_DESCRIPTION": "پورتال های سلف سرویس کاربر پسند ایجاد کنید. به کاربران خود کمک کنید تا به مقالات دسترسی پیدا کنند و پشتیبانی دریافت کنند. لطفا با ادمین برای فعال سازی این قابلیت تماس بگیرید.",
+      "BUTTON": {
+        "LEARN_MORE": "بیشتر بدانید",
+        "UPGRADE": "ارتقا"
+      },
+      "FEATURES": {
+        "PORTALS": {
+          "TITLE": "چندین پرتال",
+          "DESCRIPTION": "با استفاده از یک حساب، چندین پورتال مرکز راهنمایی برای محصولات مختلف ایجاد کنید."
+        },
+        "LOCALES": {
+          "TITLE": "پشتیبانی کامل از چند زبانه",
+          "DESCRIPTION": "پورتال را به زبان خود بومی سازی کنید. ما از همه زبان‌ها پشتیبانی می‌کنیم و اجازه ترجمه برای هر مقاله را می‌دهیم."
+        },
+        "SEO": {
+          "TITLE": "طراحی مناسب SEO",
+          "DESCRIPTION": "متا تگ های خود را سفارشی کنید تا بهتر در موتورهای جستجو دیده شوید."
+        },
+        "API": {
+          "TITLE": "پشتیبانی کامل از API",
+          "DESCRIPTION": "از پرتال به عنوان یک CMS می توانید استفاده کنید که از طریق Front آدرس های API را فراخوانی می کنید."
+        }
+      }
+    },
+    "LOADING": "Loading...",
+    "ARTICLES_PAGE": {
+      "ARTICLE_CARD": {
+        "CARD": {
+          "VIEWS": "{count} view | {count} views",
+          "DROPDOWN_MENU": {
+            "PUBLISH": "انتشار",
+            "DRAFT": "پیش‌نویس",
+            "ARCHIVE": "Archive",
+            "TRANSLATE": "ترجمه",
+            "DELETE": "حذف"
+          },
+          "STATUS": {
+            "DRAFT": "پیش‌نویس",
+            "PUBLISHED": "منتشر شد",
+            "ARCHIVED": "بایگانی شد"
+          },
+          "PENDING_EDITS": "Unpublished edits",
+          "PENDING_EDITS_TOOLTIP": "This published article has unpublished edits",
+          "CATEGORY": {
+            "UNCATEGORISED": "Uncategorised"
+          }
+        }
+      },
+      "ARTICLES_HEADER": {
+        "TABS": {
+          "ALL": "All articles",
+          "MINE": "من",
+          "DRAFT": "پیش‌نویس",
+          "PUBLISHED": "منتشر شد",
+          "ARCHIVED": "بایگانی شد"
+        },
+        "CATEGORY": {
+          "ALL": "All categories"
+        },
+        "LOCALE": {
+          "ALL": "All locales"
+        },
+        "SEARCH_PLACEHOLDER": "جستجو مقالات...",
+        "NEW_ARTICLE": "New article"
+      },
+      "EMPTY_STATE": {
+        "ALL": {
+          "TITLE": "Write an article",
+          "SUBTITLE": "Write a rich article, let’s get started!",
+          "BUTTON_LABEL": "New article"
+        },
+        "MINE": {
+          "TITLE": "You haven't written any articles here",
+          "SUBTITLE": "All articles written by you show up here for quick access."
+        },
+        "DRAFT": {
+          "TITLE": "There are no articles in drafts",
+          "SUBTITLE": "Draft articles will appear here"
+        },
+        "PUBLISHED": {
+          "TITLE": "There are no published articles",
+          "SUBTITLE": "Published articles will appear here"
+        },
+        "ARCHIVED": {
+          "TITLE": "There are no articles in the archive",
+          "SUBTITLE": "Archived articles don't show up on the portal, you can use it to mark deprecated or outdated pages"
+        },
+        "CATEGORY": {
+          "TITLE": "There are no articles in this category",
+          "SUBTITLE": "Articles in this category will appear here"
+        },
+        "SEARCH": {
+          "TITLE": "No matching articles",
+          "SUBTITLE": "We couldn't find any articles matching your search. Try a different term."
+        }
+      },
+      "BULK_TRANSLATE": {
+        "TITLE": "Translate article | Translate {count} articles",
+        "DESCRIPTION": "Translate the selected article to another language. | Translate the selected articles to another language.",
+        "LOCALE_LABEL": "Target language",
+        "LOCALE_PLACEHOLDER": "Select a language",
+        "CATEGORY_LABEL": "Target category",
+        "CATEGORY_PLACEHOLDER": "Select a category",
+        "OPTIONAL": "(optional)",
+        "CONFIRM": "ترجمه",
+        "SELECT_ALL": "Select all ({count})",
+        "SELECTED_COUNT": "{count} selected",
+        "CLEAR_SELECTION": "Clear selection",
+        "TRANSLATE_BUTTON": "ترجمه",
+        "CONFIRM_OVERWRITE": "Overwrite and translate",
+        "DUPLICATE_WARNING": "A translation already exists for this article in the selected language. | Translations already exist for {count} articles in the selected language.",
+        "DUPLICATE_CONFIRM_HINT": "Click translate again to overwrite the existing translation.",
+        "API": {
+          "SUCCESS_MESSAGE": "Translation in progress. The article will appear as a draft once ready.",
+          "ERROR_MESSAGE": "Failed to start translation. Please try again."
+        }
+      },
+      "BULK_ACTIONS": {
+        "PUBLISH": "انتشار",
+        "DRAFT": "پیش‌نویس",
+        "ARCHIVE": "Archive",
+        "TRANSLATE": "ترجمه",
+        "MOVE_TO_CATEGORY": "دسته‌بندی",
+        "DELETE": "حذف",
+        "STATUS_SUCCESS": "Articles updated successfully",
+        "STATUS_ERROR": "Failed to update articles",
+        "STATUS_SKIPPED": "1 article with unpublished edits was skipped — open it to publish or discard. | {count} articles with unpublished edits were skipped — open them to publish or discard.",
+        "STATUS_SKIPPED_ALL": "These articles have unpublished edits — open each to publish or discard.",
+        "CATEGORY_SUCCESS": "Articles moved successfully",
+        "CATEGORY_ERROR": "Failed to move articles",
+        "DELETE_CONFIRM_TITLE": "Delete article | Delete {count} articles",
+        "DELETE_CONFIRM_DESCRIPTION": "This will permanently delete the selected article. This action cannot be undone. | This will permanently delete {count} selected articles. This action cannot be undone.",
+        "DELETE_CONFIRM": "حذف",
+        "DELETE_SUCCESS": "Articles deleted successfully",
+        "DELETE_ERROR": "Failed to delete articles"
+      }
+    },
+    "CATEGORY_PAGE": {
+      "CATEGORY_HEADER": {
+        "NEW_CATEGORY": "دسته‌بندی جدید",
+        "EDIT_CATEGORY": "ویرایش دسته‌بندی",
+        "SEARCH_PLACEHOLDER": "Search categories...",
+        "CATEGORIES_COUNT": "{n} category | {n} categories",
+        "BREADCRUMB": {
+          "CATEGORY_LOCALE": "Categories ({localeCode})",
+          "ACTIVE_CATEGORY": "{categoryName} ({categoryCount} articles) | {categoryName} ({categoryCount} article)"
+        }
+      },
+      "CATEGORY_EMPTY_STATE": {
+        "TITLE": "هیچ دسته‌بندی‌ای یافت نشد",
+        "SUBTITLE": "Categories will appear here. You can add a category by clicking the 'New Category' button."
+      },
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching categories",
+        "SUBTITLE": "We couldn't find any categories matching your search. Try a different term."
+      },
+      "CATEGORY_CARD": {
+        "ARTICLES_COUNT": "{count} article | {count} articles"
+      },
+      "CATEGORY_DIALOG": {
+        "CREATE": {
+          "API": {
+            "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت ایجاد شد",
+            "ERROR_MESSAGE": "امکان ایجاد دسته‌بندی وجود ندارد"
+          }
+        },
+        "EDIT": {
+          "API": {
+            "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت به‌روز شد",
+            "ERROR_MESSAGE": "دسته‌بندی به‌روزرسانی نمی‌شود"
+          }
+        },
+        "DELETE": {
+          "API": {
+            "SUCCESS_MESSAGE": "دسته‌بندی با موفقیت حذف شد",
+            "ERROR_MESSAGE": "حذف دسته‌بندی ممکن نیست"
+          }
+        },
+        "HEADER": {
+          "CREATE": "ایجاد دسته‌بندی",
+          "EDIT": "ویرایش دسته‌بندی",
+          "DESCRIPTION": "ویرایش یک دسته‌بندی، اون را در پورتال عمومی به‌روز می‌کند.",
+          "PORTAL": "پورتال",
+          "LOCALE": "محلی"
+        },
+        "FORM": {
+          "NAME": {
+            "LABEL": "نام",
+            "PLACEHOLDER": "نام دسته‌بندی",
+            "ERROR": "نام الزامی است"
+          },
+          "SLUG": {
+            "LABEL": "Slug",
+            "PLACEHOLDER": "Slug دسته برای آدرس ها",
+            "ERROR": "Slug مورد نیاز است",
+            "HELP_TEXT": "app.chatwoot.com/hc/{portalSlug}/{localeCode}/categories/{categorySlug}"
+          },
+          "DESCRIPTION": {
+            "LABEL": "توضیحات",
+            "PLACEHOLDER": "یک توضیح کوتاه در مورد دسته ارائه دهید.",
+            "ERROR": "توضیحات الزامی است"
+          }
+        },
+        "BUTTONS": {
+          "CREATE": "ايجاد كردن",
+          "EDIT": "اعمال شود",
+          "CANCEL": "انصراف"
+        }
+      }
+    },
+    "LOCALES_PAGE": {
+      "LOCALES_COUNT": "No locales available | {n} locale | {n} locales",
+      "NEW_LOCALE_BUTTON_TEXT": "New locale",
+      "SEARCH_PLACEHOLDER": "Search locales...",
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching locales",
+        "SUBTITLE": "We couldn't find any locales matching your search. Try a different term."
+      },
+      "LOCALE_CARD": {
+        "ARTICLES_COUNT": "{count} article | {count} articles",
+        "CATEGORIES_COUNT": "{count} category | {count} categories",
+        "DEFAULT": "پیش‌فرض",
+        "DRAFT": "پیش‌نویس",
+        "DROPDOWN_MENU": {
+          "MAKE_DEFAULT": "Make default",
+          "MOVE_TO_DRAFT": "Move to draft",
+          "PUBLISH_LOCALE": "Publish locale",
+          "CUSTOMIZE_CONTENT": "Localize content",
+          "SELECT_POPULAR_CONTENT": "Select recommended content",
+          "DELETE": "حذف"
+        }
+      },
+      "POPULAR_CONTENT_DIALOG": {
+        "TITLE": "Recommended content",
+        "DESCRIPTION": "Pick up to 3 categories and 6 articles to feature on this locale's help center home page. Drag them into the order you want visitors to see.",
+        "SEARCH": "Search...",
+        "EMPTY": "No matching results",
+        "ADD_ANOTHER": "Add another...",
+        "SLOTS_LEFT": "{count} slots left",
+        "OVERRIDING_DEFAULTS": "Overriding defaults for this locale",
+        "CONFIRM": "Save recommendations",
+        "CATEGORIES": {
+          "LABEL": "Recommended categories",
+          "ARTICLES_COUNT": "No articles | {count} article | {count} articles"
+        },
+        "ARTICLES": {
+          "LABEL": "Recommended articles",
+          "IN_CATEGORY": "in {category}",
+          "UNCATEGORIZED": "دسته بندی نشده"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Recommended content updated successfully",
+          "ERROR_MESSAGE": "Unable to update recommended content. Try again."
+        }
+      },
+      "CONTENT_DIALOG": {
+        "TITLE": "Localize content",
+        "DESCRIPTION": "Set values specific to this locale. Anything left blank falls back to the default locale.",
+        "NAME": {
+          "LABEL": "نام"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Page title"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Header text"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Locale content updated successfully",
+          "ERROR_MESSAGE": "Unable to update locale content. Try again."
+        }
+      },
+      "ADD_LOCALE_DIALOG": {
+        "TITLE": "یک محل جدید اضافه کنید",
+        "DESCRIPTION": "Select the language in which this article will be written. This will be added to your list of translations, and you can add more later.",
+        "COMBOBOX": {
+          "PLACEHOLDER": "انتخاب زبان..."
+        },
+        "STATUS": {
+          "LABEL": "وضعیت",
+          "OPTIONS": {
+            "LIVE": "منتشر شد",
+            "DRAFT": "پیش‌نویس"
+          }
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "زبان محلی با موفقیت اضافه شد",
+          "ERROR_MESSAGE": "امکان افزودن زبان محلی وجود ندارد. دوباره امتحان کنید."
+        }
+      }
+    },
+    "EDIT_ARTICLE_PAGE": {
+      "HEADER": {
+        "STATUS": {
+          "SAVING": "در حال ذخیره...",
+          "SAVED": "ذخیره شد"
+        },
+        "PREVIEW": "پیش‌نمایش",
+        "PUBLISH": "انتشار",
+        "PUBLISH_CHANGES": "Publish changes",
+        "PUBLISH_CHANGES_SUCCESS": "Changes published successfully",
+        "PUBLISH_CHANGES_ERROR": "Could not publish changes",
+        "SAVE_IN_PROGRESS": "Still saving your latest changes. Please try again in a moment.",
+        "UPLOAD_IN_PROGRESS": "A file upload is unfinished. Wait for it to finish or remove it first.",
+        "CREATE_IN_PROGRESS": "The article is still being created. Add files again in a moment.",
+        "DISCARD_CHANGES": "Discard changes",
+        "DISCARD_CHANGES_SUCCESS": "Changes discarded",
+        "DISCARD_CHANGES_ERROR": "Could not discard changes",
+        "PENDING_CHANGES": "Pending changes",
+        "VIEW_CHANGES": "View unpublished changes",
+        "DRAFT": "پیش‌نویس",
+        "ARCHIVE": "Archive",
+        "BACK_TO_ARTICLES": "Back to articles"
+      },
+      "PENDING_CHANGES_POPOVER": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "This article has draft changes that aren't live yet. Apply them before changing the status, or discard them?",
+        "APPLY": "Apply changes",
+        "DISCARD": "Discard changes"
+      },
+      "DIFF_DIALOG": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "Compare your draft against the version that's currently live.",
+        "TITLE_LABEL": "عنوان"
+      },
+      "EDIT_ARTICLE": {
+        "MORE_PROPERTIES": "More properties",
+        "UNCATEGORIZED": "دسته بندی نشده",
+        "EDITOR_PLACEHOLDER": "Write your content here. Type '/' for formatting options."
+      },
+      "ARTICLE_PROPERTIES": {
+        "ARTICLE_PROPERTIES": "Article properties",
+        "META_DESCRIPTION": "توضیحات متا",
+        "META_DESCRIPTION_PLACEHOLDER": "Add meta description",
+        "META_TITLE": "عنوان متا",
+        "META_TITLE_PLACEHOLDER": "Add meta title",
+        "META_TAGS": "برچسب‌های متا",
+        "META_TAGS_PLACEHOLDER": "Add meta tags",
+        "SLUG": "Slug",
+        "SLUG_PLACEHOLDER": "Add slug",
+        "SLUG_USE_TITLE": "Use title as slug",
+        "SLUG_WARNING": "The current URL will stop working, and existing links to it will break.",
+        "SLUG_UPDATE": "اعمال شود",
+        "SLUG_UPDATED": "Slug updated. The article is now available at the new URL.",
+        "SLUG_OPEN": "Open URL"
+      },
+      "API": {
+        "ERROR": "خطا در هنگام ذخیره مقاله"
+      }
+    },
+    "PORTAL_SWITCHER": {
+      "NEW_PORTAL": "New portal",
+      "PORTALS": "پورتال ها",
+      "CREATE_PORTAL": "Create and manage multiple portals",
+      "ARTICLES": "مقالات",
+      "DOMAIN": "دامنه",
+      "PORTAL_NAME": "نام پورتال"
+    },
+    "CREATE_PORTAL_DIALOG": {
+      "TITLE": "Create new portal",
+      "DESCRIPTION": "Give your portal a name and create a user-friendly URL slug. You can modify both later in the settings.",
+      "CONFIRM_BUTTON_LABEL": "ايجاد كردن",
+      "NAME": {
+        "LABEL": "نام",
+        "PLACEHOLDER": "User Guide | Chatwoot",
+        "MESSAGE": "Choose an name for your portal.",
+        "ERROR": "نام الزامی است"
+      },
+      "SLUG": {
+        "LABEL": "Slug",
+        "PLACEHOLDER": "user-guide",
+        "ERROR": "Slug مورد نیاز است",
+        "FORMAT_ERROR": "Please enter a valid slug, for eg: user-guide"
+      }
+    },
+    "PORTAL_SETTINGS": {
+      "FORM": {
+        "AVATAR": {
+          "LABEL": "آرم",
+          "IMAGE_UPLOAD_ERROR": "تصویر ارسال نشد! دوباره امتحان کنید",
+          "IMAGE_UPLOAD_SUCCESS": "Image added successfully. Please click on save changes to save the logo",
+          "IMAGE_DELETE_SUCCESS": "تصویر با موفقیت حذف شد",
+          "IMAGE_DELETE_ERROR": "Unable to delete logo",
+          "IMAGE_UPLOAD_SIZE_ERROR": "اندازه تصویر باید کمتر از {size} مگابایت باشد"
+        },
+        "NAME": {
+          "LABEL": "نام",
+          "PLACEHOLDER": "نام پورتال",
+          "ERROR": "نام الزامی است"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Header text",
+          "PLACEHOLDER": "متن سرصفحه پورتال"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Page title",
+          "PLACEHOLDER": "عنوان صفحه پورتال"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Home page link",
+          "PLACEHOLDER": "پیوند صفحه اصلی پورتال",
+          "ERROR": "Enter a valid URL. The Home page link must start with 'http://' or 'https://'."
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Portal slug"
+        },
+        "BRAND_COLOR": {
+          "LABEL": "Brand color"
+        },
+        "SAVE_CHANGES": "Save changes"
+      },
+      "CONFIGURATION_FORM": {
+        "CUSTOM_DOMAIN": {
+          "HEADER": "دامنه سفارشی",
+          "LABEL": "دامنه سفارشی:",
+          "DESCRIPTION": "You can host your portal on a custom domain. For instance, if your website is yourdomain.com and you want your portal available at docs.yourdomain.com, simply enter that in this field.",
+          "STATUS_DESCRIPTION": "Your custom portal will start working as soon as it is verified.",
+          "PLACEHOLDER": "دامنه سفارشی پورتال",
+          "EDIT_BUTTON": "ویرایش",
+          "ADD_BUTTON": "Add custom domain",
+          "STATUS": {
+            "LIVE": "زنده",
+            "PENDING": "Awaiting verification",
+            "ERROR": "Verification failed"
+          },
+          "DIALOG": {
+            "ADD_HEADER": "Add custom domain",
+            "EDIT_HEADER": "Edit custom domain",
+            "ADD_CONFIRM_BUTTON_LABEL": "Add domain",
+            "EDIT_CONFIRM_BUTTON_LABEL": "Update domain",
+            "LABEL": "دامنه سفارشی",
+            "PLACEHOLDER": "دامنه سفارشی پورتال",
+            "ERROR": "Custom domain is required",
+            "FORMAT_ERROR": "Please enter a valid domain URL e.g. docs.yourdomain.com"
+          },
+          "DNS_CONFIGURATION_DIALOG": {
+            "HEADER": "DNS configuration",
+            "DESCRIPTION": "Log in to the account you have with your DNS provider, and add a CNAME record for subdomain pointing to chatwoot.help",
+            "COPY": "Successfully copied CNAME",
+            "SEND_INSTRUCTIONS": {
+              "HEADER": "Send instructions",
+              "DESCRIPTION": "If you would prefer to have someone from your development team to handle this step, you can enter email address below, and we will send them the required instructions.",
+              "PLACEHOLDER": "Enter their email",
+              "ERROR": "Enter a valid email address",
+              "SEND_BUTTON": "ارسال"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "BUTTON": "Delete {portalName}",
+          "HEADER": "حذف پورتال",
+          "DESCRIPTION": "Permanently delete this portal. This action is irreversible",
+          "DIALOG": {
+            "HEADER": "Sure you want to delete {portalName}?",
+            "DESCRIPTION": "This is a permanent action that cannot be reversed.",
+            "CONFIRM_BUTTON_LABEL": "حذف"
+          }
+        },
+        "EDIT_CONFIGURATION": "Edit configuration"
+      },
+      "LAYOUT_CONTENT": {
+        "HEADER": "ظاهری",
+        "DESCRIPTION": "Pick the layout that fits how your visitors read.",
+        "LAYOUT": {
+          "CLASSIC": {
+            "TITLE": "Classic",
+            "DESCRIPTION": "A welcoming home page with search and featured topics."
+          },
+          "SIDEBAR": {
+            "TITLE": "Documentation",
+            "DESCRIPTION": "Side-by-side navigation that keeps every guide a click away."
+          }
+        },
+        "SOCIAL_LINKS": {
+          "HEADER": "Social links",
+          "DESCRIPTION": "Add the handle for each network and your help center builds the full link. Shown in the documentation layout footer.",
+          "PLACEHOLDER": "handle",
+          "ADD": "Add social link",
+          "REMOVE": "حذف"
+        },
+        "SAVE": "Save changes"
+      },
+      "INTEGRATIONS": {
+        "HEADER": "برنامه‌های تلفیق شده",
+        "DESCRIPTION": "Connect tools that extend what your help center can do.",
+        "LIVE_CHAT": {
+          "TITLE": "Live chat with Chatwoot",
+          "DESCRIPTION": "Show a live chat widget on your help center so visitors can reach you while they read.",
+          "PLACEHOLDER": "Select live chat widget",
+          "NONE_OPTION": "No widget"
+        },
+        "GTM": {
+          "TITLE": "Google Tag Manager",
+          "DESCRIPTION": "Add analytics and marketing tags by connecting your Tag Manager container.",
+          "PLACEHOLDER": "GTM-XXXXXXX",
+          "HELP": "Find this in your Google Tag Manager workspace. Leave empty to disable.",
+          "INVALID": "Enter a valid container ID, for example GTM-XXXXXXX."
+        },
+        "GA4": {
+          "TITLE": "Google Analytics 4",
+          "DESCRIPTION": "Measure traffic and visitor behavior on your help center with Google Analytics.",
+          "PLACEHOLDER": "G-XXXXXXXXXX",
+          "HELP": "Find the measurement ID under Admin → Data streams in Google Analytics. Leave empty to disable.",
+          "INVALID": "Enter a valid measurement ID, for example G-XXXXXXXXXX."
+        },
+        "HOTJAR": {
+          "TITLE": "Hotjar",
+          "DESCRIPTION": "Understand how visitors use your help center with heatmaps and session recordings.",
+          "PLACEHOLDER": "1234567",
+          "HELP": "Find your site ID under Sites & organizations in Hotjar. Leave empty to disable.",
+          "INVALID": "Enter a numeric Hotjar site ID."
+        },
+        "PLAUSIBLE": {
+          "TITLE": "Plausible",
+          "DESCRIPTION": "Track help center traffic with privacy-friendly Plausible Analytics.",
+          "PLACEHOLDER": "example.com",
+          "HELP": "Enter the domain configured in your Plausible site settings. Leave empty to disable.",
+          "INVALID": "Enter a valid domain, for example example.com."
+        },
+        "AMPLITUDE": {
+          "TITLE": "Amplitude",
+          "DESCRIPTION": "Analyze visitor behavior on your help center with Amplitude.",
+          "PLACEHOLDER": "0123456789abcdef0123456789abcdef",
+          "HELP": "Find the API key in your Amplitude project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Amplitude API key."
+        },
+        "CLARITY": {
+          "TITLE": "Microsoft Clarity",
+          "DESCRIPTION": "Capture heatmaps and session recordings with Microsoft Clarity.",
+          "PLACEHOLDER": "abcd1234ef",
+          "HELP": "Find the project ID in your Clarity project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Clarity project ID."
+        },
+        "META_PIXEL": {
+          "TITLE": "Meta Pixel",
+          "DESCRIPTION": "Measure ad conversions and build audiences from help center visits with Meta Pixel.",
+          "PLACEHOLDER": "123456789012345",
+          "HELP": "Find the pixel ID in Meta Events Manager. Leave empty to disable.",
+          "INVALID": "Enter a numeric pixel ID."
+        },
+        "SAVE": "Save changes"
+      },
+      "NAV": {
+        "GENERAL": "عمومی",
+        "DOMAIN": "دامنه",
+        "APPEARANCE": "ظاهری",
+        "INTEGRATIONS": "برنامه‌های تلفیق شده"
+      },
+      "API": {
+        "CREATE_PORTAL": {
+          "SUCCESS_MESSAGE": "پورتال با موفقیت ایجاد شد",
+          "ERROR_MESSAGE": "Unable to create portal"
+        },
+        "UPDATE_PORTAL": {
+          "SUCCESS_MESSAGE": "پورتال با موفقیت به‌روز شد",
+          "ERROR_MESSAGE": "Unable to update portal"
+        }
+      }
+    },
+    "PDF_UPLOAD": {
+      "TITLE": "Upload PDF Document",
+      "DESCRIPTION": "Upload a PDF document to automatically generate FAQs using AI",
+      "DRAG_DROP_TEXT": "Drag and drop your PDF file here, or click to select",
+      "SELECT_FILE": "Select PDF File",
+      "ADDITIONAL_CONTEXT_LABEL": "Additional Context (Optional)",
+      "ADDITIONAL_CONTEXT_PLACEHOLDER": "Provide any additional context or instructions for FAQ generation...",
+      "UPLOADING": "در حال آپلود...",
+      "UPLOAD": "Upload & Process",
+      "CANCEL": "انصراف",
+      "ERROR_INVALID_TYPE": "Please select a valid PDF file",
+      "ERROR_FILE_TOO_LARGE": "File size must be less than 512MB",
+      "ERROR_UPLOAD_FAILED": "Failed to upload PDF. Please try again."
+    },
+    "PDF_DOCUMENTS": {
+      "TITLE": "PDF Documents",
+      "DESCRIPTION": "Manage uploaded PDF documents and generate FAQs from them",
+      "UPLOAD_PDF": "Upload PDF",
+      "UPLOAD_FIRST_PDF": "Upload your first PDF",
+      "UPLOADED_BY": "Uploaded by",
+      "GENERATE_FAQS": "Generate FAQs",
+      "GENERATING": "در حال تولید...",
+      "CONFIRM_DELETE": "Are you sure you want to delete {filename}?",
+      "EMPTY_STATE": {
+        "TITLE": "No PDF documents yet",
+        "DESCRIPTION": "Upload PDF documents to automatically generate FAQs using AI"
+      },
+      "STATUS": {
+        "UPLOADED": "Ready",
+        "PROCESSING": "Processing",
+        "PROCESSED": "تکمیل شد",
+        "FAILED": "Failed"
+      }
+    },
+    "CONTENT_GENERATION": {
+      "TITLE": "Content Generation",
+      "DESCRIPTION": "Upload PDF documents to automatically generate FAQ content using AI",
+      "UPLOAD_TITLE": "Upload PDF Document",
+      "DRAG_DROP": "Drag and drop your PDF file here, or click to select",
+      "SELECT_FILE": "Select PDF File",
+      "UPLOADING": "Processing document...",
+      "UPLOAD_SUCCESS": "Document processed successfully!",
+      "UPLOAD_ERROR": "Failed to upload document. Please try again.",
+      "INVALID_FILE_TYPE": "Please select a valid PDF file",
+      "FILE_TOO_LARGE": "File size must be less than 512MB",
+      "GENERATED_CONTENT": "Generated FAQ Content",
+      "PUBLISH_SELECTED": "Publish Selected",
+      "PUBLISHING": "Publishing...",
+      "FROM_DOCUMENT": "From document",
+      "NO_CONTENT": "No generated content available. Upload a PDF document to get started.",
+      "LOADING": "Loading generated content..."
+    }
+  }
+}

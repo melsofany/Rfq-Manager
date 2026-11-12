@@ -1,0 +1,112 @@
+{
+  "AUDIT_LOGS": {
+    "HEADER": "Audit logok",
+    "HEADER_BTN_TXT": "Audit logok hozzáadása",
+    "LOADING": "Audit logok betöltése",
+    "DESCRIPTION": "Audit Logs maintain a record of activities in your account, allowing you to track and audit your account, team, or services.",
+    "LEARN_MORE": "Learn more about audit logs",
+    "SEARCH_404": "Nincs megfelelő elem",
+    "SIDEBAR_TXT": "<p><b>Auditnaplók</b> </p><p> Az auditnaplók a Chatwoot rendszer eseményeinek és műveleteinek nyomvonalai. </p>",
+    "COUNT": "{n} esemény | {n} esemény",
+    "FILTERS": {
+      "SEARCH_PLACEHOLDER": "Keresés név vagy e-mail alapján",
+      "ALL_EVENTS": "Összes esemény",
+      "DATE_RANGE": "Dátumtartomány",
+      "CLEAR_ALL": "Szűrők törlése",
+      "EVENT_TYPE_GROUPS": {
+        "ACCESS": "Hozzáférés",
+        "AGENTS_TEAMS": "Ügynökök és csapatok",
+        "CONFIGURATION": "Beállítások",
+        "CONVERSATIONS": "Beszélgetések"
+      },
+      "EVENT_TYPES": {
+        "SIGN_IN_OUT": "Bejelentkezés / kijelentkezés",
+        "AGENTS": "Ügynökök",
+        "TEAMS": "Csapatok",
+        "TEAM_MEMBERS": "Csapattagok",
+        "INBOX_MEMBERS": "Beérkező postaláda közreműködői",
+        "ACCOUNT": "Fiókbeállítások",
+        "INBOXES": "Fiókok",
+        "WEBHOOKS": "Webhook",
+        "AUTOMATION_RULES": "Automatizálási szabályok",
+        "MACROS": "Makrók",
+        "CONVERSATION_DELETIONS": "Beszélgetések törlése",
+        "MESSAGE_DELETIONS": "Üzenettörlések"
+      },
+      "SORT": {
+        "NEWEST": "Legújabb elöl",
+        "OLDEST": "Legrégebbi elöl"
+      }
+    },
+    "LIST": {
+      "404": "Nincsen elérthető Auditnapló ebben a fiókban.",
+      "TITLE": "Audit logok menedzselése",
+      "DESC": "Az Auditnaplók a Chatwoot rendszer eseményeinek és műveleteinek nyomvonalai.",
+      "TABLE_HEADER": {
+        "ACTIVITY": "User",
+        "TIME": "Action",
+        "IP_ADDRESS": "IP cím",
+        "LOCATION": "Hely"
+      }
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Auditnapló sikeresen lekérve",
+      "ERROR_MESSAGE": "Nem sikerült csatlakozni a Woot szerverhez, kérjük próbáld később"
+    },
+    "DEFAULT_USER": "Rendszer",
+    "AUTOMATION_RULE": {
+      "ADD": "{agentName} created a new automation rule (#{id})",
+      "EDIT": "{agentName} updated an automation rule (#{id})",
+      "DELETE": "{agentName} deleted an automation rule (#{id})"
+    },
+    "ACCOUNT_USER": {
+      "ADD": "{agentName} meghívta {invitee} a fiókba, mint {role}",
+      "EDIT": {
+        "SELF": "{agentName} megváltoztatta az {attributes} -aikat {values} - ra",
+        "OTHER": "{agentName} megváltoztatta {attributes}  {user}  {values} -ra",
+        "DELETED": "{agentName} changed {attributes} of a deleted user to {values}"
+      }
+    },
+    "INBOX": {
+      "ADD": "{agentName} created a new inbox (#{id})",
+      "EDIT": "{agentName} updated an inbox (#{id})",
+      "DELETE": "{agentName} deleted an inbox (#{id})"
+    },
+    "WEBHOOK": {
+      "ADD": "{agentName} created a new webhook (#{id})",
+      "EDIT": "{agentName} updated a webhook (#{id})",
+      "DELETE": "{agentName} deleted a webhook (#{id})"
+    },
+    "USER_ACTION": {
+      "SIGN_IN": "{agentName} aláírta",
+      "SIGN_OUT": "{agentName} kijelentkezett"
+    },
+    "TEAM": {
+      "ADD": "{agentName} created a new team (#{id})",
+      "EDIT": "{agentName} updated a team (#{id})",
+      "DELETE": "{agentName} deleted a team (#{id})"
+    },
+    "MACRO": {
+      "ADD": "{agentName} created a new macro (#{id})",
+      "EDIT": "{agentName} updated a macro (#{id})",
+      "DELETE": "{agentName} deleted a macro (#{id})"
+    },
+    "INBOX_MEMBER": {
+      "ADD": "{agentName} added {user} to the inbox(#{inbox_id})",
+      "REMOVE": "{agentName} removed {user} from the inbox(#{inbox_id})"
+    },
+    "TEAM_MEMBER": {
+      "ADD": "{agentName} added {user} to the team(#{team_id})",
+      "REMOVE": "{agentName} removed {user} from the team(#{team_id})"
+    },
+    "ACCOUNT": {
+      "EDIT": "{agentName} updated the account configuration (#{id})"
+    },
+    "CONVERSATION": {
+      "DELETE": "{agentName} deleted conversation #{id}"
+    },
+    "MESSAGE": {
+      "DELETE": "#{conversationId} azonosítójú beszélgetésben {agentName} törölt egy üzenetet"
+    }
+  }
+}

@@ -623,6 +623,56 @@ export async function initDb(): Promise<void> {
     await client.query(`
         ALTER TABLE whatsapp_media ADD COLUMN IF NOT EXISTS filename TEXT;
       `);
+
+    // Chatwoot console bridge: maps (phone, rfq) to its Chatwoot
+    // contact/conversation. Keyed per REQUEST, not per phone — a supplier
+    // routinely has several open pricing requests at once, each sent by a
+    // different employee, and each must be its own conversation.
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS chatwoot_links (
+          id SERIAL PRIMARY KEY,
+          phone TEXT NOT NULL,
+          rfq_id INTEGER NOT NULL DEFAULT 0,
+          contact_id INTEGER,
+          conversation_id INTEGER,
+          display_name TEXT,
+          supplier_id INTEGER,
+          employee_id INTEGER,
+          employee_name TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+    // CREATE TABLE IF NOT EXISTS is a NO-OP on an existing table, so an older
+    // phone-only shape needs these columns added explicitly.
+    await client.query(`
+        ALTER TABLE chatwoot_links ADD COLUMN IF NOT EXISTS id SERIAL;
+        ALTER TABLE chatwoot_links ADD COLUMN IF NOT EXISTS rfq_id INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE chatwoot_links ADD COLUMN IF NOT EXISTS employee_id INTEGER;
+        ALTER TABLE chatwoot_links ADD COLUMN IF NOT EXISTS employee_name TEXT;
+      `);
+    // Move the primary key from phone alone to the surrogate id, but only when
+    // it is still on the old shape — otherwise this would fight the new table.
+    await client.query(`
+        DO $$
+        DECLARE pk_cols TEXT;
+        BEGIN
+          SELECT string_agg(kcu.column_name, ',') INTO pk_cols
+          FROM information_schema.table_constraints tc
+          JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+           AND tc.table_name = kcu.table_name
+          WHERE tc.table_name = 'chatwoot_links' AND tc.constraint_type = 'PRIMARY KEY';
+          IF pk_cols IS NOT NULL AND pk_cols <> 'id' THEN
+            ALTER TABLE chatwoot_links DROP CONSTRAINT chatwoot_links_pkey;
+            ALTER TABLE chatwoot_links ADD PRIMARY KEY (id);
+          END IF;
+        END $$;
+      `);
+    await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS chatwoot_links_phone_rfq_uq
+          ON chatwoot_links (phone, rfq_id);
+      `);
     // Migrate old RFQ status values to new unified status workflow (idempotent)
     await client.query(`
         UPDATE rfq SET status = 'DRAFT' WHERE status = 'draft';

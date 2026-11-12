@@ -1,0 +1,166 @@
+import { validateRouteAccess, isOnOnboardingView } from '../RouteHelper';
+import { clearBrowserSessionCookies } from 'dashboard/store/utils/api';
+import { replaceRouteWithReload } from '../CommonHelper';
+import Cookies from 'js-cookie';
+
+const next = vi.fn();
+vi.mock('dashboard/store/utils/api', () => ({
+  clearBrowserSessionCookies: vi.fn(),
+}));
+vi.mock('../CommonHelper', () => ({ replaceRouteWithReload: vi.fn() }));
+
+describe('#validateRouteAccess', () => {
+  beforeEach(() => {
+    vi.spyOn(Cookies, 'set');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reset cookies and continues to the login page if the SSO parameters are present', () => {
+    validateRouteAccess(
+      {
+        name: 'login',
+        query: { sso_auth_token: 'random_token', email: 'random@email.com' },
+      },
+      next
+    );
+    expect(clearBrowserSessionCookies).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignore session and continue to the page if the ignoreSession is present in route definition', () => {
+    validateRouteAccess(
+      {
+        name: 'login',
+        meta: { ignoreSession: true },
+      },
+      next
+    );
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('redirects to dashboard if auth cookie is present', () => {
+    vi.spyOn(Cookies, 'get').mockReturnValueOnce(true);
+
+    validateRouteAccess({ name: 'login' }, next);
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(replaceRouteWithReload).toHaveBeenCalledWith('/app/');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('preserves the session and opens the workspace picker for Shopify signup', () => {
+    vi.spyOn(Cookies, 'get').mockReturnValueOnce(true);
+
+    validateRouteAccess(
+      {
+        name: 'auth_signup',
+        query: { shopify_pending_install: 'a'.repeat(32) },
+      },
+      next
+    );
+
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(replaceRouteWithReload).toHaveBeenCalledWith(
+      `/app/shopify/select-account?shopify_pending_install=${'a'.repeat(32)}`
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it.each(['login', 'auth_signup'])(
+    'does not clear a session for malformed Shopify tokens on %s',
+    name => {
+      vi.spyOn(Cookies, 'get').mockReturnValueOnce(true);
+
+      validateRouteAccess(
+        {
+          name,
+          query: { shopify_pending_install: 'untrusted-token' },
+        },
+        next
+      );
+
+      expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+      expect(replaceRouteWithReload).toHaveBeenCalledWith('/app/');
+      expect(next).not.toHaveBeenCalled();
+    }
+  );
+
+  it('preserves a Shopify pricing return for an authenticated user', () => {
+    vi.spyOn(Cookies, 'get').mockReturnValueOnce(true);
+
+    validateRouteAccess(
+      {
+        name: 'login',
+        query: {
+          plan_handle: 'growth',
+          shop: 'store.myshopify.com',
+        },
+      },
+      next
+    );
+
+    expect(replaceRouteWithReload).toHaveBeenCalledWith(
+      '/app/?redirect_url=settings%2Fbilling%3Fplan_handle%3Dgrowth%26shop%3Dstore.myshopify.com'
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('redirects to login if route is empty', () => {
+    validateRouteAccess({}, next);
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith('/app/login');
+  });
+
+  it('redirects to login if signup is disabled', () => {
+    validateRouteAccess({ meta: { requireSignupEnabled: true } }, next, {
+      signupEnabled: 'true',
+    });
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith('/app/login');
+  });
+
+  it('continues to a pending Shopify signup when general signup is disabled', () => {
+    validateRouteAccess(
+      {
+        name: 'auth_signup',
+        query: { shopify_pending_install: 'a'.repeat(32) },
+        meta: { requireSignupEnabled: true },
+      },
+      next,
+      { signupEnabled: 'false' }
+    );
+
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+  });
+
+  it('continues to the route in every other case', () => {
+    validateRouteAccess({ name: 'reset_password' }, next);
+    expect(clearBrowserSessionCookies).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith();
+  });
+});
+
+describe('isOnOnboardingView', () => {
+  test('returns true for a route with onboarding name', () => {
+    const route = { name: 'onboarding_welcome' };
+    expect(isOnOnboardingView(route)).toBe(true);
+  });
+
+  test('returns false for a route without onboarding name', () => {
+    const route = { name: 'home' };
+    expect(isOnOnboardingView(route)).toBe(false);
+  });
+
+  test('returns false for a route with null name', () => {
+    const route = { name: null };
+    expect(isOnOnboardingView(route)).toBe(false);
+  });
+
+  test('returns false for an  undefined route object', () => {
+    expect(isOnOnboardingView()).toBe(false);
+  });
+});
