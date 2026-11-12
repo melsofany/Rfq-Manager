@@ -4,7 +4,7 @@
 # image, pinned to the SAME release that is vendored in ../chatwoot (see
 # ../chatwoot/UPSTREAM.md). This image only adds our integration files, so an
 # upstream bump is a one-line change of the tag below.
-FROM chatwoot/chatwoot:v4.19.1
+FROM chatwoot/chatwoot:v4.19.1-ce
 
 # Our overlay: one initializer (console configuration) + the service objects it
 # loads. Nothing in /app is modified, so the upstream tree stays untouched and

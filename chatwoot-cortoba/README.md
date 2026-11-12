@@ -11,6 +11,22 @@ WhatsApp (Meta) ──► api-server  /webhook/whatsapp  ──► Chatwoot (thi
                             (bridge.ts, REST API)
 ```
 
+## Edition: Community (CE)
+
+The image is **`chatwoot/chatwoot:v4.19.1-ce`** — the Community build. Upstream
+publishes two tags per release: `vX.Y.Z` (which ships the `enterprise/` tree) and
+`vX.Y.Z-ce` (which strips it). Verified in the images rather than assumed:
+
+```
+chatwoot/chatwoot:v4.19.1     -> enterprise/ PRESENT
+chatwoot/chatwoot:v4.19.1-ce  -> enterprise/ ABSENT (stripped CE build)
+```
+
+`-ce` is the tag to keep: the licence-gated features are not ours to run, and the
+whole stack (110 tables, health 200, the overlay selftest's 8 checks) was verified
+on the CE image. Bumping Chatwoot means changing this tag and the vendored commit
+in `../chatwoot/UPSTREAM.md` together.
+
 ## What is where
 
 | Path | What it is | Edited by us? |
