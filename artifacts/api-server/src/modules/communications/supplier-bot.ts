@@ -580,6 +580,8 @@ export interface ConfirmResult {
   offerId?: number;
   savedItems?: number;
   reason?: string;
+  /** Approved lines whose price the supplier restated, so the approval was released. */
+  approvalsCleared?: number;
 }
 
 /**
@@ -639,7 +641,6 @@ export async function confirmDrafts(
             employeeId: opts.employeeId ?? log?.employeeId ?? existing.employeeId ?? null,
           })
           .where(eq(offersTable.id, existing.id));
-        await tx.delete(offerItemsTable).where(eq(offerItemsTable.offerId, existing.id));
         offerId = existing.id;
       } else {
         const [created] = await tx
@@ -656,6 +657,30 @@ export async function confirmDrafts(
         offerId = created.id;
       }
 
+      // Existing lines are matched and UPDATED in place; only genuinely new
+      // items are inserted, and NOTHING is deleted.
+      //
+      // This used to `DELETE FROM offer_items WHERE offer_id = ...` and re-insert
+      // every line. That silently destroyed two things an employee owns:
+      //   * `is_approved` — the approved supplier price, which is the reference
+      //     cost the customer-rfq margin check and the RFQ KPIs read;
+      //   * `purchase_order_items.offer_item_id`, which is `ON DELETE SET NULL`,
+      //     so every PO line raised from this offer lost its link to it.
+      // A supplier restating their own prices is not entitled to un-approve a
+      // price or to detach a purchase order. Same rule as `customer_rfq_items`
+      // and `customer_po_items`: never delete-and-reinsert a referenced row.
+      const priorItems = await tx
+        .select({
+          id: offerItemsTable.id,
+          rfqItemId: offerItemsTable.rfqItemId,
+          price: offerItemsTable.price,
+          isApproved: offerItemsTable.isApproved,
+        })
+        .from(offerItemsTable)
+        .where(eq(offerItemsTable.offerId, offerId));
+      const priorByItem = new Map(priorItems.map((r) => [r.rfqItemId, r]));
+
+      let approvalCleared = 0;
       for (const a of priced) {
         const d = drafts.get(a.rfqItemId);
         const notes = [
@@ -666,14 +691,37 @@ export async function confirmDrafts(
         ]
           .filter(Boolean)
           .join(" | ");
-        await tx.insert(offerItemsTable).values({
-          offerId,
-          rfqItemId: a.rfqItemId,
-          price: String(a.price),
-          taxIncluded: false,
-          deliveryDays: d?.deliveryDays ?? null,
-          notes: notes || null,
-        });
+        const price = String(a.price);
+        const prior = priorByItem.get(a.rfqItemId);
+
+        if (prior) {
+          // An approval is an approval OF A PRICE. If the supplier restates the
+          // price, the approval no longer describes the quoted figure and must
+          // not stay behind as a silently-wrong reference cost — the employee
+          // re-approves. An unchanged price keeps its approval untouched.
+          const priceChanged = Number(prior.price) !== Number(price);
+          const clearApproval = priceChanged && prior.isApproved;
+          if (clearApproval) approvalCleared += 1;
+          await tx
+            .update(offerItemsTable)
+            .set({
+              price,
+              taxIncluded: false,
+              deliveryDays: d?.deliveryDays ?? null,
+              notes: notes || null,
+              ...(clearApproval ? { isApproved: false } : {}),
+            })
+            .where(eq(offerItemsTable.id, prior.id));
+        } else {
+          await tx.insert(offerItemsTable).values({
+            offerId,
+            rfqItemId: a.rfqItemId,
+            price,
+            taxIncluded: false,
+            deliveryDays: d?.deliveryDays ?? null,
+            notes: notes || null,
+          });
+        }
       }
 
       await tx
@@ -690,10 +738,15 @@ export async function confirmDrafts(
         await tx.update(rfqTable).set({ status: "QUOTED" }).where(eq(rfqTable.id, rfqId));
       }
 
-      return { offerId, savedItems: priced.length };
+      return { offerId, savedItems: priced.length, approvalCleared };
     });
 
-    return { ok: true, offerId: result.offerId, savedItems: result.savedItems };
+    return {
+      ok: true,
+      offerId: result.offerId,
+      savedItems: result.savedItems,
+      approvalsCleared: result.approvalCleared,
+    };
   } catch (err) {
     logger.error({ err, supplierId, rfqId }, "Supplier bot: confirm failed");
     return { ok: false, reason: "write_failed" };

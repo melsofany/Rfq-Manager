@@ -49,6 +49,7 @@ function chainable(resolveWith: () => unknown) {
 const draftsStore = new Map<string, Record<string, unknown>>();
 const insertCalls: Array<{ table: unknown; values: unknown }> = [];
 const updateCalls: Array<{ table: unknown; set: unknown }> = [];
+const deleteCalls: Array<{ table: unknown }> = [];
 
 vi.mock("@workspace/db", () => {
   const rfqTable = {
@@ -150,7 +151,12 @@ vi.mock("@workspace/db", () => {
         return { where: () => Promise.resolve() };
       },
     }),
-    delete: () => ({ where: () => Promise.resolve() }),
+    delete: (table: unknown) => ({
+      where: () => {
+        deleteCalls.push({ table });
+        return Promise.resolve();
+      },
+    }),
   };
 
   return {
@@ -163,7 +169,12 @@ vi.mock("@workspace/db", () => {
           return { where: () => Promise.resolve() };
         },
       }),
-      delete: () => ({ where: () => Promise.resolve() }),
+      delete: (table: unknown) => ({
+        where: () => {
+          deleteCalls.push({ table });
+          return Promise.resolve();
+        },
+      }),
       transaction: async (fn: (t: unknown) => unknown) => fn(tx),
     },
     rfqTable,
@@ -200,6 +211,7 @@ const bot = await import("../../modules/communications/supplier-bot");
 beforeEach(() => {
   selectCalls.length = 0;
   insertCalls.length = 0;
+  deleteCalls.length = 0;
   updateCalls.length = 0;
   draftsStore.clear();
   selectQueue = [];
@@ -418,6 +430,7 @@ describe("confirmDrafts", () => {
       // inside the transaction:
       [{ id: 1, employeeId: 9 }], // sent log
       [], // existing offer
+      [], // its prior offer_items (none)
       [{ status: "SENT" }], // rfq status
     ];
     const r = await bot.confirmDrafts(1, 2);
@@ -462,6 +475,7 @@ describe("confirmDrafts", () => {
       ],
       [{ id: 1, employeeId: 9 }],
       [],
+      [], // prior offer_items
       [{ status: "SENT" }],
     ];
     await bot.confirmDrafts(1, 2);
@@ -473,6 +487,125 @@ describe("confirmDrafts", () => {
     expect(notes).toContain("ألمانيا");
     expect(notes).toContain("Siemens");
     expect(notes).toContain("USD");
+  });
+
+  it("does NOT delete the offer's existing items — that would wipe an employee's approval", async () => {
+    // `is_approved` marks the approved supplier price, which is the reference
+    // cost the customer-rfq margin check and the RFQ KPIs read. Re-confirming
+    // from WhatsApp used to DELETE every offer_item and re-insert them, silently
+    // discarding an approval an employee had already made. The supplier is
+    // restating their own prices; they are not entitled to un-approve them.
+    selectQueue = [
+      [{ id: 1 }],
+      [{ id: 10, rfqId: 2, lineItem: null, partNo: "A", description: "a", uom: "pc", qty: "1" }],
+      [
+        {
+          rfqItemId: 10,
+          supplierId: 1,
+          rfqId: 2,
+          availability: "available",
+          unitPrice: "120",
+          currency: "EGP",
+          deliveryDays: 5,
+          originCountry: null,
+          brand: null,
+          notes: null,
+        },
+      ],
+      [{ id: 1, employeeId: 9 }], // sent log
+      [{ id: 77, employeeId: 9 }], // an EXISTING offer
+      [], // its prior offer_items (none yet)
+      [{ status: "SENT" }],
+    ];
+    const r = await bot.confirmDrafts(1, 2);
+    expect(r.ok).toBe(true);
+    expect(r.offerId).toBe(77);
+
+    // The offer row is updated in place (its `set` carries totalPrice)...
+    const offerUpdate = updateCalls.find(
+      (c) => (c.set as { totalPrice?: unknown })?.totalPrice !== undefined,
+    );
+    expect(offerUpdate).toBeTruthy();
+    // ...and its items are NOT wiped.
+    expect(deleteCalls).toEqual([]);
+  });
+
+  it("keeps an approval when the price is unchanged, and updates the line in place", async () => {
+    selectQueue = [
+      [{ id: 1 }],
+      [{ id: 10, rfqId: 2, lineItem: null, partNo: "A", description: "a", uom: "pc", qty: "1" }],
+      [
+        {
+          rfqItemId: 10,
+          supplierId: 1,
+          rfqId: 2,
+          availability: "available",
+          unitPrice: "120",
+          currency: null,
+          deliveryDays: 5,
+          originCountry: null,
+          brand: null,
+          notes: null,
+        },
+      ],
+      [{ id: 1, employeeId: 9 }],
+      [{ id: 77, employeeId: 9 }],
+      [{ id: 900, rfqItemId: 10, price: "120", isApproved: true }], // same price, approved
+      [{ status: "SENT" }],
+    ];
+    const r = await bot.confirmDrafts(1, 2);
+    expect(r.ok).toBe(true);
+    expect(r.approvalsCleared).toBe(0);
+    expect(deleteCalls).toEqual([]);
+    // The line is UPDATED (its `set` carries a price), not re-inserted.
+    expect(updateCalls.some((c) => (c.set as { price?: unknown })?.price === "120")).toBe(true);
+    // ...and the approval is not touched.
+    const approvalUpdate = updateCalls.find(
+      (c) => (c.set as { isApproved?: unknown })?.isApproved !== undefined,
+    );
+    expect(approvalUpdate).toBeUndefined();
+    // No new offer_item row was inserted for an item that already had one.
+    const itemInsert = insertCalls.find((c) => {
+      const v = c.values as { offerId?: unknown; price?: unknown };
+      return v && "offerId" in v && "price" in v;
+    });
+    expect(itemInsert).toBeUndefined();
+  });
+
+  it("releases an approval when the supplier RESTATES the price", async () => {
+    // An approval is an approval OF A PRICE. Leaving it set after the price moves
+    // would make `is_approved` a reference cost that no longer matches the quoted
+    // figure — a silently-wrong number the margin check and KPIs would trust.
+    selectQueue = [
+      [{ id: 1 }],
+      [{ id: 10, rfqId: 2, lineItem: null, partNo: "A", description: "a", uom: "pc", qty: "1" }],
+      [
+        {
+          rfqItemId: 10,
+          supplierId: 1,
+          rfqId: 2,
+          availability: "available",
+          unitPrice: "150", // the supplier restated it
+          currency: null,
+          deliveryDays: 5,
+          originCountry: null,
+          brand: null,
+          notes: null,
+        },
+      ],
+      [{ id: 1, employeeId: 9 }],
+      [{ id: 77, employeeId: 9 }],
+      [{ id: 900, rfqItemId: 10, price: "120", isApproved: true }], // was 120, approved
+      [{ status: "SENT" }],
+    ];
+    const r = await bot.confirmDrafts(1, 2);
+    expect(r.ok).toBe(true);
+    expect(r.approvalsCleared).toBe(1);
+    expect(deleteCalls).toEqual([]);
+    const approvalUpdate = updateCalls.find(
+      (c) => (c.set as { isApproved?: unknown })?.isApproved === false,
+    );
+    expect(approvalUpdate).toBeTruthy();
   });
 
   it("writes the SAME items the confirmation screen showed", async () => {

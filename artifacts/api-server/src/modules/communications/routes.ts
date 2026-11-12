@@ -1323,7 +1323,12 @@ async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Prom
         );
         // Tell the responsible employee. Best-effort: the offer is already
         // saved, and a notification failure must not look like a failed reply.
-        void notifyResponsibleEmployee(supplier.id, session.rfqId, result.savedItems ?? 0);
+        void notifyResponsibleEmployee(
+          supplier.id,
+          session.rfqId,
+          result.savedItems ?? 0,
+          result.approvalsCleared ?? 0,
+        );
         await clearSession(phone);
         return true;
       }
@@ -1532,6 +1537,7 @@ async function notifyResponsibleEmployee(
   supplierId: number,
   rfqId: number,
   pricedCount: number,
+  approvalsCleared = 0,
 ): Promise<void> {
   try {
     const open = await openPricingRequestsForSupplier(supplierId);
@@ -1554,6 +1560,7 @@ async function notifyResponsibleEmployee(
       supplierName: supplier?.name ?? "مورد",
       pricedCount,
       totalCount: items.length,
+      approvalsCleared,
     });
   } catch (err) {
     logger.warn({ err, rfqId }, "Supplier reply notification failed");

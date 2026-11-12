@@ -1840,15 +1840,24 @@ export async function notifyEmployeeOfSupplierReply(
     supplierName: string;
     pricedCount: number;
     totalCount: number;
+    /** Approved lines whose price the supplier restated, so the approval was released. */
+    approvalsCleared?: number;
   },
 ): Promise<string | null> {
   requireConfigured();
   const who = opts.employeeName ? `${opts.employeeName}\n` : "";
+  // A released approval is said OUT LOUD. The supplier restating a price drops
+  // the endorsement on that line, and an approval that vanishes silently is the
+  // one thing the employee must not discover later from a margin report.
+  const cleared =
+    (opts.approvalsCleared ?? 0) > 0
+      ? `\n⚠️ تغيّر سعر ${opts.approvalsCleared} بند كنت معتمداً سعره — أُلغيت الموافقة، يلزم إعادة الاعتماد.`
+      : "";
   return sendWhatsAppText(
     phone,
     `${who}📥 رد مورد جديد على طلب التسعير ${opts.rfqNo}\n` +
       `المورد: ${opts.supplierName}\n` +
-      `عدد البنود المسعّرة: ${opts.pricedCount} من ${opts.totalCount}\n\n` +
+      `عدد البنود المسعّرة: ${opts.pricedCount} من ${opts.totalCount}${cleared}\n\n` +
       `راجع الرد واعتمده من شاشة طلب التسعير في النظام.`,
   );
 }
