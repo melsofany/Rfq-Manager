@@ -18,6 +18,15 @@ export const whatsappChatsTable = pgTable("whatsapp_chats", {
   filename: text("filename"), // for documents
   replyToMessageId: text("reply_to_message_id"), // WA message ID of the replied-to message (nullable)
   isRead: boolean("is_read").notNull().default(false),
+  /**
+   * When this message was replayed into the Chatwoot console.
+   *
+   * A COLUMN rather than a per-message API lookup, because the lookup only sees
+   * the newest page: a message already in the console looked absent, was
+   * re-inserted as a duplicate, and pinned the backfill cursor so a resumed run
+   * could never reach the rest of the history. Null = never replayed.
+   */
+  chatwootSyncedAt: timestamp("chatwoot_synced_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

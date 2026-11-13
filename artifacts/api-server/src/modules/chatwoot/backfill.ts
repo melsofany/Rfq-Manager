@@ -12,7 +12,7 @@ import {
   createConversation,
   createMessage,
   findContactByPhone,
-  findMessageBySourceId,
+  listMessageSourceIds,
   isChatwootConfigured,
 } from "./client";
 
@@ -102,6 +102,23 @@ async function rfqIdForPhone(phone: string): Promise<number | null> {
 }
 
 /**
+ * Record that a message has been replayed.
+ *
+ * Best-effort: a failure here costs one redundant lookup on the next run, which
+ * is far better than failing the batch and re-reading the window.
+ */
+async function markChatSynced(id: number): Promise<void> {
+  try {
+    await db
+      .update(whatsappChatsTable)
+      .set({ chatwootSyncedAt: new Date() })
+      .where(eq(whatsappChatsTable.id, id));
+  } catch (err) {
+    logger.warn({ err, id }, "Chatwoot backfill: could not mark a message as replayed");
+  }
+}
+
+/**
  * Replay one phone number's history.
  *
  * Exported for the tests, which drive it against a stubbed client and a real
@@ -165,6 +182,9 @@ export async function backfillPhone(
       direction: whatsappChatsTable.direction,
       createdAt: whatsappChatsTable.createdAt,
       waMessageId: whatsappChatsTable.waMessageId,
+      // Read on every row: a replayed message must never be re-scanned, or the
+      // batch cursor below can never advance past it.
+      chatwootSyncedAt: whatsappChatsTable.chatwootSyncedAt,
     })
     .from(whatsappChatsTable)
     .where(
@@ -176,6 +196,11 @@ export async function backfillPhone(
     .orderBy(asc(whatsappChatsTable.id))
     .limit(opts.limit);
 
+  // Read the conversation's existing ids ONCE. Per-message lookups only see the
+  // newest page, so an earlier partial run's oldest messages would look absent
+  // and be inserted a second time.
+  const alreadyInConsole = await listMessageSourceIds(conversationId);
+
   let created = 0;
   let skipped = 0;
   let errors = 0;
@@ -183,15 +208,27 @@ export async function backfillPhone(
 
   for (const row of rows) {
     lastId = row.id;
+
+    // Already replayed in an earlier run. Skipping by a COLUMN rather than by
+    // asking Chatwoot is what lets the cursor move forward: a message that was
+    // re-scanned on every run pinned `lastId` at the same value forever, so a
+    // resumed backfill re-read the same window and never reached the other 409
+    // numbers.
+    if (row.chatwootSyncedAt) {
+      skipped += 1;
+      continue;
+    }
+
     const sourceId = row.waMessageId
       ? `wa:${row.waMessageId}`
       : `cortoba:chat:${row.id}`;
 
     // Ask BEFORE inserting. `source_id` is indexed but not unique in Chatwoot,
     // so the database would accept a duplicate and the second backfill would
-    // double the thread.
-    const already = await findMessageBySourceId(conversationId, sourceId);
-    if (already) {
+    // double the thread. A row that IS already there is marked, so it is not
+    // re-checked on every later run.
+    if (alreadyInConsole.has(sourceId)) {
+      await markChatSynced(row.id);
       skipped += 1;
       continue;
     }
@@ -199,7 +236,9 @@ export async function backfillPhone(
     const body = (row.body ?? "").trim();
     if (!body) {
       // A media-only message has no text. Chatwoot renders an empty bubble
-      // poorly, so say what it was instead of sending nothing.
+      // poorly, so say what it was instead of sending nothing. Marked too:
+      // there is nothing to retry, and leaving it unmarked stalls the cursor.
+      await markChatSynced(row.id);
       skipped += 1;
       continue;
     }
@@ -213,8 +252,15 @@ export async function backfillPhone(
         sourceId,
       },
     );
-    if (msg) created += 1;
-    else errors += 1;
+    if (msg) {
+      // Mark only AFTER Chatwoot accepted it: marking first would drop a
+      // message that the API then refused.
+      await markChatSynced(row.id);
+      alreadyInConsole.add(sourceId);
+      created += 1;
+    } else {
+      errors += 1;
+    }
   }
 
   return { created, skipped, errors, lastId };

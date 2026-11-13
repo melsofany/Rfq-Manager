@@ -48,9 +48,10 @@ vi.mock("../../modules/chatwoot/client", () => ({
       return { id: h.created.length, source_id: meta.sourceId };
     },
   ),
-  findMessageBySourceId: vi.fn(async (_c: number, sourceId: string) =>
-    h.seenSourceIds.has(sourceId) ? { id: 1, source_id: sourceId } : undefined,
-  ),
+  // Read ONCE per conversation. A per-message lookup only sees the newest page,
+  // so an earlier partial run's oldest messages look absent and get re-inserted
+  // as duplicates.
+  listMessageSourceIds: vi.fn(async () => new Set(h.seenSourceIds)),
 }));
 
 /**
@@ -69,6 +70,9 @@ function builder(rows: Array<Record<string, unknown>>) {
 
 vi.mock("@workspace/db", () => ({
   db: {
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({ where: vi.fn(async () => undefined) })),
+    })),
     select: vi.fn((arg?: Record<string, unknown>) => {
       // The phone list groups whatsapp_chats; supplier lookup selects a name.
       if (arg && "oldest" in arg) {
@@ -91,6 +95,7 @@ vi.mock("@workspace/db", () => ({
     direction: "direction",
     createdAt: "created_at",
     waMessageId: "wa_message_id",
+    chatwootSyncedAt: "chatwoot_synced_at",
   },
   suppliersTable: { id: "id", name: "name", phone: "phone" },
   chatwootLinksTable: {
@@ -193,6 +198,39 @@ describe("history replay into the console", () => {
     // Same history again, same process — nothing new may be written.
     await backfillPhone("201001234567", { limit: 50 });
     expect(h.created).toHaveLength(1);
+  });
+
+  it("skips a message already replayed, so the cursor can move past it", async () => {
+    // The defect this guards: re-scanning an already-replayed message pinned
+    // the cursor at the same id, so a resumed run re-read the same window
+    // forever and never reached the rest of the history (409 numbers were left
+    // unreplayed in production).
+    h.chatRows = [
+      {
+        id: 11,
+        phone: "201001234567",
+        body: "قديمة",
+        direction: "inbound",
+        createdAt: new Date("2026-06-01T09:00:00Z"),
+        waMessageId: "w1",
+        chatwootSyncedAt: new Date("2026-06-02T00:00:00Z"),
+      },
+      {
+        id: 12,
+        phone: "201001234567",
+        body: "جديدة",
+        direction: "inbound",
+        createdAt: new Date("2026-06-03T09:00:00Z"),
+        waMessageId: "w2",
+        chatwootSyncedAt: null,
+      },
+    ];
+    const res = await backfillPhone("201001234567", { limit: 50 });
+    expect(h.created).toHaveLength(1);
+    expect(h.created[0].content).toBe("جديدة");
+    expect(res.skipped).toBe(1);
+    // The cursor must point at the LAST row examined, not the last row written.
+    expect(res.lastId).toBe(12);
   });
 
   it("records the conversation it created, so a re-run does not make a second one", async () => {
