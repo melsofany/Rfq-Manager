@@ -11,6 +11,7 @@
  *   POST /chatwoot/webhook      — يستقبل رسائل الوكلاء من Chatwoot ويُرسلها واتساب
  */
 import { Router, type IRouter } from "express";
+import { randomInt, randomBytes } from "node:crypto";
 import { db, employeesTable, whatsappChatsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -49,24 +50,119 @@ async function chatwootFetch(path: string, init: RequestInit = {}): Promise<Resp
   });
 }
 
-/** Find a Chatwoot platform user by email. Returns undefined if not found. */
-async function findChatwootUserByEmail(email: string): Promise<ChatwootUser | undefined> {
-  // List account users (each row carries the platform user id + email).
-  const res = await chatwootFetch(`/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`);
+/**
+ * Find-or-create the Chatwoot user for an email, in ONE idempotent call.
+ *
+ * `POST /platform/api/v1/users` is an upsert — the controller does
+ * `User.from_email(params[:email]) || User.new(params)` — and it follows with
+ * `platform_app_permissibles.find_or_create_by!`. So this single call:
+ *
+ *   - resolves the EXISTING user for a known email (verified live: the same
+ *     address returned the same id twice, never a duplicate), and
+ *   - creates the permission row that the SSO login endpoint requires.
+ *
+ * That second effect is why this replaced a separate "find by email" helper:
+ * the previous lookup read `u.email` off
+ * `GET /accounts/:id/account_users`, but that endpoint renders the raw
+ * `account_users` rows, which carry `user_id` and NO email — measured live, the
+ * payload is `{id, account_id, user_id, role, inviter_id, ...}` with no `email`
+ * and no nested `user`. The lookup was therefore ALWAYS undefined, every
+ * employee was treated as brand new, and users that already existed never got
+ * the permission row — so their SSO link answered
+ * `401 {"error":"Non permissible resource"}`.
+ *
+ * The password is only consumed when the user is genuinely new: for an existing
+ * record `User.from_email` wins and `params` is ignored, so this can never reset
+ * a live password.
+ */
+async function ensureChatwootUser(name: string, email: string): Promise<ChatwootUser | undefined> {
+  const res = await chatwootFetch(`/platform/api/v1/users`, {
+    method: "POST",
+    body: JSON.stringify({ name: name || email, email, password: generateChatwootPassword() }),
+  });
   if (!res.ok) {
-    logger.warn({ status: res.status }, "Chatwoot: list account users failed");
+    logger.warn(
+      { status: res.status, body: await res.text() },
+      "Chatwoot: ensure user failed",
+    );
     return undefined;
   }
-  const data = (await res.json()) as Array<{
-    user_id: number;
-    email?: string;
-    user?: { id: number; email: string; name?: string };
-  }>;
-  const match = data.find((u) => (u.email ?? u.user?.email)?.toLowerCase() === email.toLowerCase());
-  if (match) {
-    return { id: match.user_id ?? match.user?.id, email, name: match.user?.name };
+  const user = (await res.json()) as { id?: number; email?: string; name?: string };
+  if (!user.id) return undefined;
+  return { id: user.id, email: user.email ?? email, name: user.name };
+}
+
+/**
+ * Attach a user to our account WITHOUT touching an existing role.
+ *
+ * `POST /accounts/:id/account_users` is `find_or_initialize_by(user_id:)` followed
+ * by `update!(params)`, and `role` is a permitted param — so calling it for an
+ * existing member REWRITES their role. Measured live: an `administrator` became
+ * `agent` after one such call. Since the bridge called this on every create, any
+ * employee whose Cortoba role was not admin would demote every administrator in
+ * the console merely by opening the conversations page.
+ *
+ * A role is therefore sent ONLY when the user is not already a member. For an
+ * existing member the call is skipped entirely — there is nothing to attach.
+ */
+async function attachToAccount(userId: number, role: string): Promise<void> {
+  const listRes = await chatwootFetch(
+    `/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`,
+  );
+  if (listRes.ok) {
+    const members = (await listRes.json()) as Array<{ user_id?: number }>;
+    if (members.some((m) => m.user_id === userId)) return; // Already a member — never rewrite the role.
+  } else {
+    logger.warn(
+      { status: listRes.status, userId },
+      "Chatwoot: could not list account users; skipping attach to avoid a role rewrite",
+    );
+    return;
   }
-  return undefined;
+
+  const cwRole = role === "admin" ? "administrator" : "agent";
+  const res = await chatwootFetch(
+    `/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`,
+    { method: "POST", body: JSON.stringify({ user_id: userId, role: cwRole }) },
+  );
+  if (!res.ok) {
+    logger.warn({ status: res.status, userId }, "Chatwoot: attach to account failed");
+  }
+}
+
+/**
+ * Generate a password that satisfies Chatwoot's password policy.
+ *
+ * The SSO flow never shows this password — the user authenticates through the
+ * one-time link — but it is still VALIDATED on creation, and Chatwoot requires
+ * at least one special character
+ * (`config.password_required_special_character_count = 1`).
+ *
+ * The previous generator was `Math.random().toString(36)`, which yields only
+ * `[a-z0-9]`. Measured against the live console:
+ *
+ *   POST /platform/api/v1/users -> 422
+ *   "Password must contain at least 1 special character ( !@#$%^&*()_+-=[]{}|...)"
+ *
+ * So EVERY new employee failed to be created, and `createChatwootUser` returns
+ * undefined on a non-OK response — which surfaces to the agent as
+ * "تعذّر إنشاء/إيجاد مستخدم Chatwoot" with no hint that a password rule caused
+ * it. `crypto.randomBytes` also removes the (small) collision risk of two users
+ * drawing the same password.
+ *
+ * The special character is drawn from the same set the policy lists, and is
+ * inserted rather than appended so a truncated value can never lose it.
+ */
+function generateChatwootPassword(): string {
+  // Avoid characters the policy text does not list, and avoid backslash/quote
+  // so the value can never need escaping in a JSON body.
+  const specials = "!@#$%^&*()_+-=[]{}|.,:;?~";
+  const pick = (chars: string) => chars[randomInt(chars.length)];
+  const body =
+    randomBytes(18).toString("base64url").replace(/[^A-Za-z0-9]/g, "").slice(0, 20) ||
+    "CortobaAgent";
+  // Guarantee each required class explicitly rather than hoping for it.
+  return `${pick(specials)}${body}${pick("ABCDEFGHJKLMNPQRSTUVWXYZ")}${pick("23456789")}`;
 }
 
 /** Create a Chatwoot user + add them to the account, then return the user. */
@@ -75,28 +171,10 @@ async function createChatwootUser(
   email: string,
   role: string,
 ): Promise<ChatwootUser | undefined> {
-  // Generate a strong random password (the user logs in via SSO, never the password).
-  const password = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  const res = await chatwootFetch(`/platform/api/v1/users`, {
-    method: "POST",
-    body: JSON.stringify({ name, email, password }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    logger.warn({ status: res.status, body }, "Chatwoot: create user failed");
-    return undefined;
-  }
-  const created = (await res.json()) as { id: number; email: string };
-  if (!created.id) return undefined;
-
-  // Attach the new user to our account as agent (admins promoted manually in Chatwoot).
-  const cwRole = role === "admin" ? "administrator" : "agent";
-  await chatwootFetch(`/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`, {
-    method: "POST",
-    body: JSON.stringify({ user_id: created.id, role: cwRole }),
-  });
-
-  return { id: created.id, email: created.email };
+  const user = await ensureChatwootUser(name, email);
+  if (!user) return undefined;
+  await attachToAccount(user.id, role);
+  return user;
 }
 
 /** Mint a one-time SSO login URL for a Chatwoot user. */
@@ -144,18 +222,20 @@ router.get("/chatwoot/sso", requireAuth, async (req, res): Promise<void> => {
   }
 
   try {
-    let cwUser = await findChatwootUserByEmail(employee.email);
-    if (!cwUser) {
-      cwUser = await createChatwootUser(
-        employee.name || employee.email,
-        employee.email,
-        employee.role,
-      );
-    }
+    // ONE idempotent call resolves an existing user (same id, never a duplicate)
+    // AND grants the platform permission the SSO login endpoint requires.
+    const cwUser = await ensureChatwootUser(
+      employee.name || employee.email,
+      employee.email,
+    );
     if (!cwUser) {
       res.status(502).json({ error: "تعذّر إنشاء/إيجاد مستخدم Chatwoot" });
       return;
     }
+
+    // Only a user who is NOT yet a member gets a role; an existing member's role
+    // is never rewritten (that call is an `update!` and would demote an admin).
+    await attachToAccount(cwUser.id, employee.role);
 
     const ssoUrl = await getChatwootSsoLink(cwUser.id);
     if (!ssoUrl) {
