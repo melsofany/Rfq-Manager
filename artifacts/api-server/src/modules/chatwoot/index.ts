@@ -213,9 +213,8 @@ router.post(
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const limit = Number(req.body?.limit ?? 0) || undefined;
-    const cursor = Number(req.body?.cursor ?? 0) || undefined;
     try {
-      const result = await backfillHistory({ limit, cursor });
+      const result = await backfillHistory({ limit });
       res.json(result);
     } catch (err) {
       logger.error({ err }, "Chatwoot history backfill failed");
