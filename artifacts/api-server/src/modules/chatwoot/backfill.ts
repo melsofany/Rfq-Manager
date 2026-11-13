@@ -12,6 +12,7 @@ import {
   createConversation,
   createMessage,
   findContactByPhone,
+  getConversationContactPhone,
   listMessageSourceIds,
   isChatwootConfigured,
 } from "./client";
@@ -180,6 +181,33 @@ export async function backfillPhone(
         employeeId: null,
         employeeName: null,
       });
+    }
+  }
+  // A stored link can point at a conversation that no longer exists in Chatwoot
+  // (the console's database was reset while our link rows survived). Chatwoot
+  // then answers 404 for every message, so NOTHING is ever marked as replayed
+  // and the same window is re-read on every batch — the replay spins forever on
+  // 20 numbers. Verify the conversation, and make a fresh one when it is gone.
+  if (conversationId && (await getConversationContactPhone(conversationId)) === null) {
+    logger.warn(
+      { phone, conversationId },
+      "Chatwoot: stored conversation is gone; creating a replacement",
+    );
+    const fresh = await createConversation(contact.id, `cortoba-backfill-${canonicalPhone(phone)}`);
+    if (fresh?.id) {
+      conversationId = fresh.id;
+      await saveLink({
+        phone,
+        rfqId,
+        contactId: contact.id ?? null,
+        conversationId,
+        displayName: supplier?.name ?? null,
+        supplierId: supplier?.id ?? null,
+        employeeId: null,
+        employeeName: null,
+      });
+    } else {
+      conversationId = null;
     }
   }
   if (!conversationId) return { created: 0, skipped: 0, errors: 1, lastId: null };
