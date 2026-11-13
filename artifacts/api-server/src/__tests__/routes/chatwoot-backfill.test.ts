@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 
 const h = vi.hoisted(() => ({
   created: [] as Array<Record<string, unknown>>,
+  contactArgs: { name: "", phone: "" },
   seenSourceIds: new Set<string>(),
   chatRows: [] as Array<Record<string, unknown>>,
   supplierRows: [] as Array<Record<string, unknown>>,
@@ -32,7 +33,10 @@ const h = vi.hoisted(() => ({
 vi.mock("../../modules/chatwoot/client", () => ({
   isChatwootConfigured: true,
   findContactByPhone: vi.fn(async () => h.contact),
-  createContact: vi.fn(async () => h.contact),
+  createContact: vi.fn(async (name: string, phone: string) => {
+    h.contactArgs = { name, phone };
+    return h.contact;
+  }),
   createConversation: vi.fn(async () => {
     h.conversationsCreated += 1;
     return h.conversation;
@@ -140,6 +144,7 @@ beforeEach(() => {
   h.conversation = { id: 7 };
   h.conversationsCreated = 0;
   h.links = [];
+  h.contactArgs = { name: "", phone: "" };
 });
 
 describe("history replay into the console", () => {
@@ -232,6 +237,36 @@ describe("history replay into the console", () => {
     expect(res.skipped).toBe(1);
     // The cursor must point at the LAST row examined, not the last row written.
     expect(res.lastId).toBe(12);
+  });
+
+  it("creates the contact with (name, phone), never the swap", async () => {
+    // THE DEFECT THAT KILLED THE LIVE RUN. createContact takes (name, phone) —
+    // two adjacent strings, so the compiler cannot see a swap — and the backfill
+    // passed (phone, name). Chatwoot then received the SUPPLIER NAME as the phone
+    // number and answered «Phone number should be in e164 format» for every
+    // contact, so all 409 numbers errored and nothing was replayed.
+    h.chatRows = [
+      {
+        id: 5,
+        phone: "201001234567",
+        body: "مرحبا",
+        direction: "inbound",
+        createdAt: new Date("2026-06-01T09:00:00Z"),
+        waMessageId: "w9",
+        chatwootSyncedAt: null,
+      },
+    ];
+    // No existing contact, or the code reuses it and never calls createContact.
+    h.contact = undefined;
+    // A REAL supplier name, so the two arguments differ and the swap is visible.
+    // With no supplier the fallback makes both arguments the phone number, and
+    // the guard would pass against the swapped code.
+    h.supplierRows = [{ id: 3, name: "شركة ساجدة ستور", phone: "201001234567" }];
+    await backfillPhone("201001234567", { limit: 10 });
+    // The second argument must be the NUMBER. Swapped, it is a name or the phone
+    // is a name — either way this fails.
+    expect(h.contactArgs.phone).toMatch(/^\+?\d+$/);
+    expect(h.contactArgs.phone).toBe("201001234567");
   });
 
   it("does not skip a number's early messages when another number advances", async () => {
