@@ -163,21 +163,31 @@ export function chatwootProxyMount(): string {
  * actually serves; anything not listed falls through to the app's own API and
  * SPA.
  *
- * Derived from Chatwoot's routes and its `public/` directory rather than
- * guessed: `/app` is the dashboard SPA, `/api/v1` and `/platform` are its APIs,
- * `/cable` and `/rails` are its websockets, `/vite` and `/packs` are its assets,
- * `/enterprise` is its paid surface, and the named files are the icons and
- * manifests the dashboard and its login page load from the root.
+ * Derived from Chatwoot's `config/routes.rb` and its `public/` directory rather
+ * than guessed: `/app` is the dashboard SPA (and its catch-all), `/api/v1` and
+ * `/platform` are its APIs, `/cable` and `/rails` are its websockets, `/vite`
+ * and `/packs` are its assets, `/super_admin` is the super-admin console the
+ * dashboard's own profile menu links to, and the named files are the icons and
+ * manifests the dashboard loads from the root.
  *
  * A NEW top-level path in Chatwoot must be added here, or that one feature will
  * 404 while the rest of the console keeps working — which is exactly the failure
  * this function exists to prevent, so keep it complete rather than minimal.
+ *
+ * Deliberately NOT claimed, because nothing links to them from the dashboard
+ * and each widens the exposed surface for no operational gain:
+ *   `/monitoring`  Sidekiq's dashboard. Useful when diagnosing a stuck job, so
+ *                  add it temporarily rather than leaving it open permanently.
+ *   `/bot`         Facebook Messenger's webhook. This deployment uses WhatsApp.
+ *   `/api`         Chatwoot's bare index. It would ALSO collide with the app's
+ *                  own `/api/*`, which must keep reaching the app's router.
+ *   `/survey`, `/integrations`   unused here.
  */
 const CHATWOOT_ROOT_PREFIXES = [
   "/app",
   "/api/v1",
   "/platform",
-  "/enterprise",
+  "/super_admin",
   "/cable",
   "/rails",
   "/vite",
@@ -186,6 +196,7 @@ const CHATWOOT_ROOT_PREFIXES = [
   "/sw.js",
   "/manifest.json",
   "/robots.txt",
+  "/favicon.ico",
   "/favicon",
   "/apple-icon",
   "/android-icon",
