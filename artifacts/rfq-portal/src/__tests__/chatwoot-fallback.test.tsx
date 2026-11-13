@@ -78,7 +78,7 @@ describe("Chatwoot console page — fallback", () => {
     // on the Public Suffix List, so a frame pointed at the Chatwoot service is a
     // third-party frame and the browser refuses its session cookie — the agent
     // would be logged out inside it forever. Same-origin hosting (served by the
-    // gateway's proxy at /whatsapp/console) is what makes the console usable.
+    // gateway's own origin) is what makes the console usable.
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.includes("/api/chatwoot/status")) return jsonResponse({ configured: true });
@@ -93,7 +93,7 @@ describe("Chatwoot console page — fallback", () => {
       const frame = document.querySelector("iframe");
       expect(frame).not.toBeNull();
       const src = frame?.getAttribute("src") ?? "";
-      expect(src).toBe("/whatsapp/console/app/login");
+      expect(src).toBe("/app/login");
       expect(src).not.toContain("onrender.com");
     });
     expect(screen.queryByTestId("builtin-chat")).toBeNull();
@@ -145,6 +145,6 @@ describe("Chatwoot console page — fallback", () => {
     expect(opened[0]).toContain("SECOND");
     expect(opened[0]).not.toContain("FIRST");
     expect(opened[0]).not.toContain("onrender.com");
-    expect(opened[0]).toContain("/whatsapp/console/app/login");
+    expect(opened[0]).toContain("/app/login");
   });
 });

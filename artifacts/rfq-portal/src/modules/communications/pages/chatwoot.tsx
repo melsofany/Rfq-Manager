@@ -27,8 +27,27 @@ import WhatsAppPage from "./index";
  * outage never leaves the agent with nowhere to answer suppliers.
  */
 
-/** Where the server mounts the proxied console, e.g. `/whatsapp/console`. */
-const CONSOLE_PREFIX = "/whatsapp/console";
+/**
+ * The console's own path space on the gateway.
+ *
+ * The server mounts Chatwoot at the ROOT (see `chatwootProxyMount`) because
+ * Chatwoot reads its account id from the URL's POSITION — a sub-path shifts the
+ * indices and every request 404s. So these are Chatwoot's real paths, not a
+ * prefix of ours.
+ */
+const CONSOLE_API = "/api/v1";
+const CONSOLE_APP = "/app";
+
+/**
+ * Where the frame is pointed.
+ *
+ * `/app`, never `/`. Loading `/` would fetch our own SPA into the frame — the
+ * SPA's catch-all serves `index.html` for any path it does not know — and the
+ * console would render an infinite copy of this page inside itself. `/app` is
+ * a path only Chatwoot serves, and it redirects to the account dashboard once
+ * the session cookie is present.
+ */
+const CONSOLE_ENTRY = `${CONSOLE_APP}/`;
 
 export default function ChatwootInboxPage() {
   const { t } = useLanguage();
@@ -67,7 +86,7 @@ export default function ChatwootInboxPage() {
         // would frame a console that can never sign in — a dead end with no
         // way out, because no SSO link would be minted to fix it.
         if (await hasLiveConsoleSession()) {
-          setConsoleSrc(`${CONSOLE_PREFIX}/`);
+          setConsoleSrc(CONSOLE_ENTRY);
           setError(null);
           return;
         }
@@ -254,7 +273,7 @@ export async function hasLiveConsoleSession(): Promise<boolean> {
   const creds = readConsoleCredentials();
   if (!creds) return false;
   try {
-    const res = await fetch(`${CONSOLE_PREFIX}/api/v1/profile`, {
+    const res = await fetch(`${CONSOLE_API}/profile`, {
       credentials: "include",
       headers: {
         "access-token": creds["access-token"],
@@ -270,18 +289,19 @@ export async function hasLiveConsoleSession(): Promise<boolean> {
 }
 
 /**
- * Re-point a Chatwoot SSO URL at our own origin's console path.
+ * Re-point a Chatwoot SSO URL at our own origin.
  *
  * Chatwoot mints the link from its OWN host, so following it verbatim would
  * navigate the frame off the gateway — a different site whose session cookie is
- * refused. Only the path is kept, because the proxy serves the console here.
+ * refused. Only the path and query are kept, because the proxy serves the
+ * console here at the root.
  * An unparseable link is returned unchanged: a malformed value must degrade to
  * "the upstream link" rather than to an empty frame.
  */
 export function sameOriginConsolePath(url: string): string {
   try {
     const parsed = new URL(url, window.location.origin);
-    return `${CONSOLE_PREFIX}${parsed.pathname}${parsed.search}`;
+    return `${parsed.pathname}${parsed.search}`;
   } catch {
     return url;
   }
