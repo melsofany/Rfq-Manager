@@ -139,7 +139,11 @@ export async function backfillPhone(
   // Contact first: a conversation cannot exist without one.
   let contact = await findContactByPhone(phone);
   if (!contact) {
-    contact = await createContact(phone, supplier?.name ?? phone);
+    // (name, phone) — NOT (phone, name). Two adjacent string parameters, so the
+    // compiler cannot catch a swap: the live run sent the SUPPLIER NAME as the
+    // phone number and Chatwoot answered «Phone number should be in e164
+    // format» for every single contact, which is why all 409 numbers failed.
+    contact = await createContact(supplier?.name ?? phone, phone);
   }
   if (!contact?.id) return { created: 0, skipped: 0, errors: 1, lastId: null };
 
