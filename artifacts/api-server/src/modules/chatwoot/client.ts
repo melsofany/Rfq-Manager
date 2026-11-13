@@ -217,12 +217,42 @@ export type ConversationStatus = "open" | "pending" | "resolved";
  * ask before it inserts. Without this a second run of the backfill duplicates
  * every message — and a duplicate is invisible in the UI until someone counts.
  */
+/**
+ * Every `source_id` already present in a conversation.
+ *
+ * WHY A SET AND NOT A PER-MESSAGE LOOKUP. The message list is paginated at ~20
+ * rows and returns NEWEST first, while a replay inserts OLDEST first — so a
+ * single-page check misses exactly the messages an earlier partial run wrote,
+ * and the next run re-inserts them as duplicates. Reading the whole set once
+ * also removes one API call per message, which is what made a 300-message batch
+ * take long enough to hit the platform's request timeout.
+ *
+ * Bounded on purpose: a conversation with thousands of rows costs a fixed
+ * number of pages, not an unbounded walk. The cap is well above any real
+ * supplier thread (the largest here holds 397 messages).
+ */
+export async function listMessageSourceIds(
+  conversationId: number,
+  maxPages = 40,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (let page = 1; page <= maxPages; page += 1) {
+    const res = await cw(`/conversations/${conversationId}/messages?page=${page}`);
+    if (!res.ok) break;
+    const data = (await res.json()) as { payload?: ChatwootMessage[] };
+    const rows = data.payload ?? [];
+    if (!rows.length) break;
+    for (const m of rows) if (m.source_id) ids.add(m.source_id);
+    if (rows.length < 20) break;
+  }
+  return ids;
+}
+
+/** Kept for callers that want a single answer; pages only as far as needed. */
 export async function findMessageBySourceId(
   conversationId: number,
   sourceId: string,
 ): Promise<ChatwootMessage | undefined> {
-  // The list endpoint is newest-first and paginated; a backfill inserts
-  // chronologically, so the rows it cares about are the most recent ones.
   const res = await cw(`/conversations/${conversationId}/messages?page=1`);
   if (!res.ok) return undefined;
   const data = (await res.json()) as { payload?: ChatwootMessage[] };
