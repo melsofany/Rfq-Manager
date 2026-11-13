@@ -615,6 +615,22 @@ export async function initDb(): Promise<void> {
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS reply_to_message_id TEXT;
       `);
 
+    // Historical rows written by the old fallback carry our own diagnostic token
+    // as the message body — «[رسالة من نوع: system]» — which reached the operator
+    // as literal enum text and prompted «الرساله مش واضحه؟». The type is still in
+    // the text, so the mapping is exact; rewriting makes the old rows readable
+    // instead of leaving 24 unreadable messages in the inbox forever.
+    await client.query(`
+      UPDATE whatsapp_chats
+         SET body = CASE
+           WHEN body LIKE '%: system]%' THEN 'ℹ️ رسالة نظام من واتساب'
+           WHEN body LIKE '%: reaction]%' THEN '↩️ تفاعل على رسالة'
+           WHEN body LIKE '%: unsupported]%' THEN '⚠️ نوع رسالة غير مدعوم من واتساب (لم يُقرأ محتواها)'
+           ELSE '⚠️ رسالة غير مفهومة — أرسل نصًا أو مرفقًا'
+         END
+       WHERE body LIKE '[رسالة من نوع: %]';
+    `);
+
     // Add the WhatsApp profile name column (safe migration — skipped if present)
     await client.query(`
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS contact_name TEXT;
