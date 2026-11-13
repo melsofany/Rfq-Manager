@@ -99,7 +99,9 @@ describe("Chatwoot calls carry the gateway header", () => {
     const app = express();
     const { chatwootProxyMount, chatwootProxyTarget } =
       await import("../../modules/chatwoot/proxy");
-    expect(chatwootProxyMount()).toBe("/whatsapp/console");
+    // The console is mounted at the ROOT: Chatwoot reads its account id from
+    // the URL position, so a sub-path makes every request 404.
+    expect(chatwootProxyMount()).toBe("/");
     expect(chatwootProxyTarget()).toBe("https://cortoba-chatwoot.onrender.com");
     const res = await request(app).get("/__nonexistent__");
     expect(res.status).toBe(404);

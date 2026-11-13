@@ -100,7 +100,12 @@ const HOP_BY_HOP = new Set([
 export interface ProxyConfig {
   /** Upstream origin, e.g. "https://cortoba-chatwoot.onrender.com". */
   target: string;
-  /** Path prefix on OUR origin, e.g. "/whatsapp". */
+  /**
+   * Path prefix to strip before forwarding. EMPTY for the normal deployment,
+   * where the console is mounted at the root and the path must pass through
+   * untouched. Only non-empty when the caller deliberately serves the console
+   * under a sub-path.
+   */
   prefix: string;
 }
 
@@ -115,24 +120,83 @@ export function chatwootProxyTarget(): string | null {
   }
 }
 
-/** Path prefix the console is published under. Must be a single safe segment. */
-export function chatwootProxyPrefix(): string {
-  return normalisePrefix(process.env.CHATWOOT_PROXY_PREFIX || "/whatsapp");
+/**
+ * Where the console is mounted on the gateway.
+ *
+ * **The root, and it cannot be a sub-path.** Chatwoot derives its account id
+ * from the POSITION of the segment in the URL:
+ *
+ *     // app/javascript/dashboard/api/ApiClient.js
+ *     if (pathname.includes('/app/accounts')) return pathname.split('/')[3];
+ *
+ * On its own host the path is `/app/accounts/3/...`, so index 3 is the account.
+ * Serving it under `/whatsapp/console` shifts every index by two, index 3
+ * becomes the literal `app`, and every console request goes to
+ * `/api/v1/accounts/app/...` — a 404. Measured live: **167 consecutive 404s**,
+ * which the console renders as an empty conversation list with no error.
+ *
+ * Chatwoot has no sub-path support to configure instead: the dashboard router
+ * is `createWebHistory()` with no base, and nothing reads a base-path setting.
+ * Four call sites read the same positional index (`ApiClient.js`,
+ * `uploadHelper.js` twice, `useWhatsappCallSession.js`, `Contact.vue`), so
+ * patching the client is not an option either — and editing the vendored tree
+ * would be lost on the next Chatwoot upgrade.
+ *
+ * Mounting at the root is therefore the only correct arrangement. It is safe
+ * because nothing in this app uses Chatwoot's path space: the API lives under
+ * `/api`, `/iclock` is the ZKTeco firmware path, and the SPA routes (`/login`,
+ * `/whatsapp`, `/dashboard`, …) do not collide with `/app`, `/api/v1`,
+ * `/platform`, `/cable`, `/rails`, `/vite` or `/packs`.
+ *
+ * The mount is ordered BEFORE `express.static` and the SPA catch-all, so the
+ * console owns its paths and the SPA keeps everything else.
+ */
+export function chatwootProxyMount(): string {
+  return chatwootProxyTarget() ? "/" : "";
 }
 
 /**
- * Where the console is mounted on the gateway: `<prefix>/console`.
+ * Does this request path belong to the Chatwoot console?
  *
- * A sub-path rather than the prefix itself so the SPA keeps `/whatsapp` as its
- * own route (the sidebar link, the browser history entry, and the address the
- * operator types all stay `/whatsapp`). The console is then framed from
- * `/whatsapp/console`, which is a path on the SAME origin — first-party — and
- * reaches nothing else on the deployment.
+ * The console is mounted at the root, so the proxy would otherwise answer for
+ * the whole deployment. This is the ONE description of the path space Chatwoot
+ * actually serves; anything not listed falls through to the app's own API and
+ * SPA.
+ *
+ * Derived from Chatwoot's routes and its `public/` directory rather than
+ * guessed: `/app` is the dashboard SPA, `/api/v1` and `/platform` are its APIs,
+ * `/cable` and `/rails` are its websockets, `/vite` and `/packs` are its assets,
+ * `/enterprise` is its paid surface, and the named files are the icons and
+ * manifests the dashboard and its login page load from the root.
+ *
+ * A NEW top-level path in Chatwoot must be added here, or that one feature will
+ * 404 while the rest of the console keeps working — which is exactly the failure
+ * this function exists to prevent, so keep it complete rather than minimal.
  */
-export function chatwootProxyMount(): string {
-  const prefix = chatwootProxyPrefix();
-  if (!prefix) return "";
-  return `${prefix}/console`;
+const CHATWOOT_ROOT_PREFIXES = [
+  "/app",
+  "/api/v1",
+  "/platform",
+  "/enterprise",
+  "/cable",
+  "/rails",
+  "/vite",
+  "/packs",
+  "/audio",
+  "/sw.js",
+  "/manifest.json",
+  "/robots.txt",
+  "/favicon",
+  "/apple-icon",
+  "/android-icon",
+  "/ms-icon",
+  "/browserconfig.xml",
+];
+
+export function chatwootOwnsPath(path: string): boolean {
+  return CHATWOOT_ROOT_PREFIXES.some(
+    (p) => path === p || path.startsWith(`${p}/`),
+  );
 }
 
 /**
@@ -228,16 +292,20 @@ function upstreamRequest(
 }
 
 /**
- * Rewrite `Set-Cookie` so the console's session is scoped to the console path.
+ * Force a Set-Cookie path, but only when the console lives under a sub-path.
  *
- * Without a `Path`, a browser gives the cookie the DIRECTORY of the request —
- * the login is served at `/whatsapp/app/login`, which would make it
- * `/whatsapp/app` and drop it on the console's own root. Pinning `/whatsapp`
- * keeps it for the whole console and, more importantly, stops a supplier-facing
- * API call from ever carrying a console cookie.
+ * Chatwoot sets its cookies at `Path=/`, which is exactly right now that the
+ * console is mounted at the ROOT — and re-scoping them to a sub-path would hide
+ * them from the dashboard's own pages and break the login it just performed.
+ *
+ * The narrowing is kept for the one case that still wants it: when a caller
+ * passes a non-empty prefix, the console is served under that sub-path, and
+ * without an explicit `Path` a browser would scope a cookie set at
+ * `/whatsapp/app/login` to the DIRECTORY `/whatsapp/app` — which the console's
+ * own root then never sees.
  */
 export function scopeSetCookie(value: string, prefix: string): string {
-  if (!prefix) return value;
+  if (!prefix || prefix === "/") return value;
   const withoutOldPath = value.replace(/;\s*Path=[^;]*/gi, "");
   return `${withoutOldPath}; Path=${prefix}`;
 }

@@ -121,7 +121,7 @@ describe("the console page reuses a session instead of minting on every load", (
 
     await waitFor(() => {
       const frame = document.querySelector("iframe");
-      expect(frame?.getAttribute("src")).toBe("/whatsapp/console/");
+      expect(frame?.getAttribute("src")).toBe("/app/");
     });
     // The mint is the thing that exhausts the cap — it must not be called.
     const minted = fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/chatwoot/sso"));

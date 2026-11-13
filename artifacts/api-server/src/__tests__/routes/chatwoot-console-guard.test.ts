@@ -117,10 +117,33 @@ describe("the console proxy requires an authenticated, permitted employee", () =
     // A guard that works but is not wired protects nothing, and a test that
     // builds its own app cannot tell the difference — that is exactly how the
     // open door survived review the first time. This reads the real mount.
+    //
+    // Asserted on BEHAVIOUR (the guard is constructed and invoked before the
+    // proxy), not on one exact call shape: the mount gained an ownership filter
+    // when the console moved to the root, and a regex pinned to the old shape
+    // would fail while the guard was in fact still wired.
     const { readFile } = await import("node:fs/promises");
     const source = await readFile(new URL("../../app.ts", import.meta.url), "utf8");
-    const mount = source.match(/app\.use\(\s*chatwootConsoleBase,\s*([^,]+),\s*\(req, res, next\)/);
-    expect(mount, "the console mount must pass a middleware before the proxy").not.toBeNull();
-    expect(mount?.[1]).toContain("chatwootConsoleGuard()");
+    const mountIndex = source.indexOf("app.use(chatwootConsoleBase");
+    expect(mountIndex, "the console mount must exist in app.ts").toBeGreaterThan(-1);
+    const before = source.slice(0, mountIndex);
+    expect(before, "the guard must be constructed before the mount").toContain(
+      "chatwootConsoleGuard()",
+    );
+    // The guard is invoked through the `gate` middleware (it also filters by
+    // path ownership), so the assertion is that the gate is what the mount
+    // uses AND that the gate calls the guard — not that `guard(` appears in the
+    // mount call itself.
+    const mountLine = source.slice(mountIndex, source.indexOf("\n", mountIndex));
+    expect(mountLine, "the mount must use the gate middleware").toMatch(
+      /app\.use\(chatwootConsoleBase,\s*gate\)/,
+    );
+    const gateIndex = source.indexOf("const gate = (req");
+    expect(gateIndex, "the gate middleware must be defined").toBeGreaterThan(-1);
+    const gateBlock = source.slice(gateIndex, gateIndex + 300);
+    expect(gateBlock, "the gate must invoke the guard").toMatch(/guard\(req, res/);
+    expect(gateBlock, "the gate must only claim Chatwoot's paths").toMatch(
+      /chatwootOwnsPath\(req\.path\)/,
+    );
   });
 });

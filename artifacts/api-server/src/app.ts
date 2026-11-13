@@ -11,10 +11,10 @@ import router from "./routes";
 import admsRouter from "./modules/hr/adms";
 import {
   proxyChatwootRequest,
-  chatwootProxyPrefix,
   chatwootProxyTarget,
   chatwootProxyMount,
   chatwootConsoleGuard,
+  chatwootOwnsPath,
 } from "./modules/chatwoot/proxy";
 import { logger } from "./shared/logger";
 
@@ -124,15 +124,21 @@ app.use(
 const chatwootConsoleBase = chatwootProxyMount();
 const chatwootTarget = chatwootProxyTarget();
 if (chatwootTarget && chatwootConsoleBase) {
-  app.use(chatwootConsoleBase, chatwootConsoleGuard(), (req, res, next) => {
-    // Express strips the mount path from `req.url` but keeps `req.originalUrl`;
-    // the proxy reads originalUrl, so the upstream still sees `/api/v1`,
-    // `/cable` and `/vite/assets` exactly as it does standalone.
+  // At the root, `app.use("/")` would match EVERY request, so the console is
+  // filtered to its own path space and everything else falls through to the API
+  // and the SPA. `chatwootOwnsPath` is the single description of that space.
+  const handler = (req: Request, res: Response, next: NextFunction): void => {
     proxyChatwootRequest(req, res, {
       target: chatwootTarget,
       prefix: chatwootConsoleBase,
     }).catch(next);
-  });
+  };
+  const guard = chatwootConsoleGuard();
+  const gate = (req: Request, res: Response, next: NextFunction): void => {
+    if (!chatwootOwnsPath(req.path)) return next();
+    guard(req, res, () => handler(req, res, next));
+  };
+  app.use(chatwootConsoleBase, gate);
   logger.info(
     { target: chatwootTarget, at: chatwootConsoleBase },
     "Chatwoot console proxy mounted",

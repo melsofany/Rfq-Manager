@@ -10,6 +10,7 @@ import {
   stripGatewayCookies,
   chatwootProxyMount,
   chatwootProxyTarget,
+  chatwootOwnsPath,
 } from "../../modules/chatwoot/proxy";
 
 /**
@@ -24,14 +25,14 @@ import {
 
 /** Upstream stub that echoes what it received, and can answer any route. */
 function upstreamHandler(req: http.IncomingMessage, res: http.ServerResponse) {
-  if (req.url === "/html") {
+  if (req.url === "/app/html") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(
       `<html><head><title>Chatwoot</title></head><body>` +
         `<script>window.chatwootConfig = { hostURL: 'https://upstream.example' }</script>` +
         `<script src="/vite/assets/dashboard.js"></script></body></html>`,
     );
-  } else if (req.url === "/set-cookie") {
+  } else if (req.url === "/api/v1/set-cookie") {
     res.writeHead(200, {
       "content-type": "application/json",
       "set-cookie": "_chatwoot_session=abc; path=/app; HttpOnly; Secure",
@@ -40,7 +41,7 @@ function upstreamHandler(req: http.IncomingMessage, res: http.ServerResponse) {
   } else if (req.url === "/cable") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ path: req.url, host: req.headers.host }));
-  } else if (req.url === "/echo") {
+  } else if (req.url === "/app/echo") {
     // Reflect method + body so a POST body can be proven forwarded intact.
     let body = "";
     req.on("data", (c) => (body += c));
@@ -74,12 +75,18 @@ beforeAll(async () => {
 
   const app = express();
   const mount = chatwootProxyMount();
+  // Mirrors `app.ts`: the console is at the ROOT, so the proxy is filtered to
+  // Chatwoot's own path space and everything else falls through to the SPA.
   app.use(mount, (req, res, next) => {
+    if (!chatwootOwnsPath(req.path)) return next();
     proxyChatwootRequest(req, res, { target: upstreamUrl, prefix: mount }).catch(next);
   });
   // A same-path SPA fallback must lose to the proxy: this is the guard that
   // catches a proxy mounted AFTER the fallback (which would serve index.html).
   app.use(express.static("."));
+  // Anything the console does NOT own answers as the SPA would, so a request
+  // the proxy wrongly claimed is visible as the wrong body rather than a 404.
+  app.use((_req, res) => res.status(200).type("html").send("<html>SPA</html>"));
   appServer = http.createServer(app);
   await new Promise<void>((r) => appServer.listen(0, "127.0.0.1", r));
   gatewayUrl = `http://127.0.0.1:${(appServer.address() as AddressInfo).port}`;
@@ -91,38 +98,86 @@ afterAll(async () => {
 });
 
 describe("path handling", () => {
-  it("strips the mount prefix so the upstream sees its own root paths", () => {
-    // The console asks for `/api/v1/...` RELATIVE to the document base; the
-    // upstream must still receive `/api/v1/...`, not `/whatsapp/console/api/v1`.
+  it("passes a root-mounted path through untouched", () => {
+    // At the root the upstream must receive the SAME path. A strip here would
+    // be the bug, not the fix: Chatwoot reads its account id from the URL's
+    // POSITION (`pathname.split('/')[3]`), so `/app/accounts/3` must arrive
+    // unchanged or every console request 404s.
+    expect(relativePathFor("/api/v1/accounts/3/conversations", "")).toBe(
+      "/api/v1/accounts/3/conversations",
+    );
+    expect(relativePathFor("/app/accounts/3/dashboard", "")).toBe("/app/accounts/3/dashboard");
+    expect(relativePathFor("/", "")).toBe("/");
+  });
+
+  it("still strips when a prefix IS configured", () => {
+    // A caller CAN still pass a prefix (`ProxyConfig.prefix`), so the strip
+    // logic must not be removed along with the root default.
     expect(relativePathFor("/whatsapp/console/api/v1/accounts", "/whatsapp/console")).toBe(
       "/api/v1/accounts",
     );
-    expect(relativePathFor("/whatsapp/console/vite/assets/a.js", "/whatsapp/console")).toBe(
-      "/vite/assets/a.js",
-    );
-    // The mount itself is the document root.
     expect(relativePathFor("/whatsapp/console", "/whatsapp/console")).toBe("/");
-    // A query on the mount keeps its query.
     expect(relativePathFor("/whatsapp/console?x=1", "/whatsapp/console")).toBe("/?x=1");
-  });
-
-  it("does not touch a path outside the prefix", () => {
     expect(relativePathFor("/api/other", "/whatsapp/console")).toBe("/api/other");
   });
 
-  it("forwards a stripped path end to end", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/api/v1/ping`);
+  it("forwards the account-scoped path end to end, with the account intact", async () => {
+    // The regression this whole change exists for. Serving the console under a
+    // sub-path shifted the URL indices so the console asked for
+    // `/api/v1/accounts/app/...` — 167 consecutive 404s live, rendered as an
+    // empty conversation list with no error. The account segment must survive.
+    const res = await fetch(`${gatewayUrl}/api/v1/accounts/3/conversations`);
     expect(res.status).toBe(200);
     const data = (await res.json()) as { path: string };
-    expect(data.path).toBe("/api/v1/ping");
+    expect(data.path).toBe("/api/v1/accounts/3/conversations");
+  });
+
+  it("claims only Chatwoot's own path space, never the app's", () => {
+    // The console is at the ROOT, so the ownership test is what keeps the SPA
+    // and the API working. A too-greedy rule would swallow `/api/...` and every
+    // page of the portal.
+    for (const p of [
+      "/app",
+      "/app/accounts/3/dashboard",
+      "/api/v1/accounts/3",
+      "/platform/api/v1/users",
+      "/cable",
+      "/vite/assets/dashboard.js",
+      "/packs/js/app.js",
+    ]) {
+      expect(chatwootOwnsPath(p), p).toBe(true);
+    }
+    for (const p of [
+      "/",
+      "/api/healthz",
+      "/api/chatwoot/status",
+      "/login",
+      "/whatsapp",
+      "/dashboard",
+      "/customer-rfq/12",
+      "/iclock/cdata",
+    ]) {
+      expect(chatwootOwnsPath(p), p).toBe(false);
+    }
+  });
+
+  it("leaves the app's own routes to the app", async () => {
+    const res = await fetch(`${gatewayUrl}/dashboard`);
+    expect(await res.text()).toContain("SPA");
   });
 });
 
 describe("cookies", () => {
-  it("rescopes the console session cookie to the console path", () => {
-    // The upstream sets `path=/app`. Left alone, a browser would scope the
-    // cookie to the login DIRECTORY and drop it on the console root — and it
-    // would also be sent with unrelated gateway requests.
+  it("leaves the console cookie alone at the ROOT", () => {
+    // Re-scoping it to a sub-path would HIDE the cookie from the dashboard's
+    // own pages and break the login it just performed. Chatwoot already sets
+    // `Path=/`, which is correct when it is mounted at the root.
+    const value = "_chatwoot_session=abc; path=/app; HttpOnly";
+    expect(scopeSetCookie(value, "")).toBe(value);
+    expect(scopeSetCookie(value, "/")).toBe(value);
+  });
+
+  it("still rescopes when a prefix IS configured", () => {
     const scoped = scopeSetCookie(
       "_chatwoot_session=abc; path=/app; HttpOnly",
       "/whatsapp/console",
@@ -132,11 +187,10 @@ describe("cookies", () => {
     expect(scoped).toContain("HttpOnly");
   });
 
-  it("applies the rescope to the real response", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/set-cookie`);
+  it("passes the upstream's cookie through untouched, end to end", async () => {
+    const res = await fetch(`${gatewayUrl}/api/v1/set-cookie`);
     const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("Path=/whatsapp/console");
-    expect(setCookie.toLowerCase()).not.toContain("path=/app");
+    expect(setCookie.toLowerCase()).toContain("path=/app");
   });
 
   it("strips the GATEWAY session upstream but keeps the console's own cookie", () => {
@@ -158,7 +212,7 @@ describe("cookies", () => {
   });
 
   it("forwards the console cookie and never the gateway session, end to end", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/echo`, {
+    const res = await fetch(`${gatewayUrl}/app/echo`, {
       headers: { cookie: "connect.sid=gateway-secret; cw_d_session_info=console-auth" },
     });
     const data = (await res.json()) as { cookie?: string | null };
@@ -168,22 +222,30 @@ describe("cookies", () => {
 });
 
 describe("HTML rewriting", () => {
-  it("rewrites HTML with the base tag AND prefixes root-absolute assets", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/html`);
+  it("leaves root-absolute assets untouched at the ROOT", async () => {
+    const res = await fetch(`${gatewayUrl}/app/html`);
     const body = await res.text();
     expect(res.headers.get("content-type")).toContain("text/html");
-    expect(body).toContain('<base href="/whatsapp/console/">');
-    // `<base>` governs RELATIVE urls only. This asset reference is
-    // root-absolute, so it must be prefixed here or the browser fetches it from
-    // the domain root, the SPA fallback answers with index.html, and the console
-    // renders a BLANK PAGE — which is what production did.
-    expect(body).toContain('src="/whatsapp/console/vite/assets/dashboard.js"');
-    expect(body).not.toContain('src="/vite/assets/dashboard.js"');
+    // The console IS the root, so `/vite/assets/...` already resolves to it.
+    // Prefixing it would send the browser to `/app/vite/...` — a path nothing
+    // serves — which is how a blank console happens.
+    expect(body).toContain('src="/vite/assets/dashboard.js"');
+    expect(body).not.toContain('src="/app/vite/assets');
     expect(body).not.toContain("upstream.example");
   });
 
+  it("rewrites hostURL to OUR origin so links stay first-party", async () => {
+    const res = await fetch(`${gatewayUrl}/app/html`);
+    const body = await res.text();
+    // The link-copy helpers build `${hostURL}${path}`. Leaving the upstream's
+    // host would copy a link into a different site — whose session cookie is
+    // refused, so the pasted link lands on a login page.
+    expect(body).not.toContain("upstream.example");
+    expect(body).toMatch(/hostURL: 'https:\/\/127\.0\.0\.1:\d+'/);
+  });
+
   it("does not buffer or rewrite a non-HTML body", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/echo`, {
+    const res = await fetch(`${gatewayUrl}/app/echo`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ hello: "world" }),
@@ -210,7 +272,7 @@ describe("upstream addressing", () => {
     // rewritten HTML body made it worse by re-encoding plain text under a gzip
     // header. The stub echoes the header it actually received, so this is a
     // wire-level assertion rather than a source scan.
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/echo`, {
+    const res = await fetch(`${gatewayUrl}/app/echo`, {
       headers: { "accept-encoding": "gzip, deflate, br" },
     });
     const data = (await res.json()) as { acceptEncoding?: string };
@@ -218,7 +280,7 @@ describe("upstream addressing", () => {
   });
 
   it("presents the upstream's own host, not the gateway's", async () => {
-    const res = await fetch(`${gatewayUrl}/whatsapp/console/cable`);
+    const res = await fetch(`${gatewayUrl}/cable`);
     const data = (await res.json()) as { host: string };
     // A forwarded gateway Host would make a virtual-hosted upstream answer for
     // a site it does not serve.
@@ -235,11 +297,13 @@ describe("configuration", () => {
     if (saved !== undefined) process.env.CHATWOOT_URL = saved;
   });
 
-  it("derives the mount from the configured prefix", () => {
-    const saved = process.env.CHATWOOT_PROXY_PREFIX;
-    process.env.CHATWOOT_PROXY_PREFIX = "/whatsapp";
-    expect(chatwootProxyMount()).toBe("/whatsapp/console");
-    if (saved === undefined) delete process.env.CHATWOOT_PROXY_PREFIX;
-    else process.env.CHATWOOT_PROXY_PREFIX = saved;
+  it("mounts at the ROOT when a target is configured", () => {
+    // Chatwoot reads its account id from the URL position, so it cannot live
+    // under a sub-path. The mount is the root whenever there is a target.
+    const saved = process.env.CHATWOOT_URL;
+    process.env.CHATWOOT_URL = "https://console.example";
+    expect(chatwootProxyMount()).toBe("/");
+    if (saved === undefined) delete process.env.CHATWOOT_URL;
+    else process.env.CHATWOOT_URL = saved;
   });
 });
