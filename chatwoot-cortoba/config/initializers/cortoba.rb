@@ -18,6 +18,49 @@
 # missing one column in its UI.
 require "cortoba"
 
+# ── Embedding the console inside the Cortoba app ────────────────────────────
+#
+# Chatwoot sends `X-Frame-Options: SAMEORIGIN`, so a browser REFUSES to render
+# it inside an iframe served from another origin. Measured against the deployed
+# console:
+#
+#   cortoba-chatwoot.onrender.com refused to connect.  ERR_BLOCKED_BY_RESPONSE
+#
+# The panel is simply blank, which reads as a broken console rather than a
+# policy refusal — the operator cannot tell the difference.
+#
+# The header comes from Rails' `default_headers`, which `ActionDispatch::
+# DefaultHeaders` applies on the way OUT. A middleware that merely deletes it
+# would have it re-added afterwards and the embed would keep failing while the
+# code looked right — so the fix belongs HERE, at the source.
+#
+# It is replaced by `frame-ancestors` naming exactly the Cortoba app. That is
+# STRICTER than what it removes: `SAMEORIGIN` admitted any page on Chatwoot's
+# own origin, while the allow-list names one origin and nothing else.
+#
+# Opt-IN via CORTOBA_ALLOW_FRAMING, so a deployment that has not asked for it
+# keeps upstream's protection untouched. Without a resolvable app URL the
+# header is KEPT: dropping it with no allow-list would make the console
+# embeddable by any site (clickjacking) — worse than a blank panel.
+if Cortoba::Config.framing_enabled?
+  ancestors = Cortoba::Config.frame_ancestors
+
+  if ancestors.empty?
+    Rails.logger.warn(
+      "[cortoba] CORTOBA_ALLOW_FRAMING is on but CORTOBA_APP_URL is unset — " \
+      "keeping X-Frame-Options so the console cannot be clickjacked"
+    )
+  else
+    Rails.application.config.action_dispatch.default_headers =
+      Rails.application.config.action_dispatch.default_headers.except("X-Frame-Options")
+
+    Rails.application.config.action_dispatch.default_headers["Content-Security-Policy"] =
+      "frame-ancestors #{ancestors.join(' ')}"
+
+    Rails.logger.info("[cortoba] console embeddable from: #{ancestors.join(', ')}")
+  end
+end
+
 # Provision the attributes for an account as soon as it exists. The boot pass
 # below runs BEFORE the first account on a fresh database, so without this hook
 # a documented install ends up with no attributes at all (measured: the boot

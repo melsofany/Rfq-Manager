@@ -51,8 +51,19 @@ export default function ChatwootInboxPage() {
           setError(null);
         }
       } catch (err) {
+        // A console we cannot REACH must not take the page down with it.
+        //
+        // Configured-but-unreachable used to render an error screen, so an
+        // outage at Chatwoot left the agent with a dead page — while the
+        // built-in chat, which needs none of that, sat unused behind it. The
+        // supplier messages live in OUR database either way, so the built-in
+        // chat still works during a console outage; falling back is strictly
+        // better than showing an error the agent cannot act on.
+        //
+        // The error is kept so the built-in view can explain what happened.
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "فشل الاتصال بـ Chatwoot");
+          setUseLegacy(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -63,7 +74,8 @@ export default function ChatwootInboxPage() {
     };
   }, []);
 
-  // Chatwoot unavailable → fall back to the proven built-in chat, never a dead end.
+  // Chatwoot unavailable (unconfigured OR unreachable) → the proven built-in
+  // chat, so the agent always has somewhere to answer suppliers from.
   if (useLegacy) return <WhatsAppPage />;
 
   return (

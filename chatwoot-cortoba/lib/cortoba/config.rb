@@ -25,10 +25,37 @@ module Cortoba
         DEFAULT_OWNER_ATTRIBUTE_KEY
     end
 
-    # The Cortoba app the agent clicks through to. Informational only — the
-    # console never calls it, so an unset value is not an error.
+    # The Cortoba app the agent clicks through to. It is ALSO the origin allowed
+    # to embed the console (see Cortoba::FrameHeaders), so an unset value is no
+    # longer cosmetic: without it the console stays un-embeddable and the agent
+    # gets a blank panel.
     def app_url
-      ENV.fetch("CORTOBA_APP_URL", "").to_s
+      ENV.fetch("CORTOBA_APP_URL", "").to_s.strip
+    end
+
+    # Extra origins allowed to embed the console, comma-separated. Needed when
+    # the app answers on more than one host (a custom domain alongside the
+    # onrender.com one). An origin missing from the list renders a BLANK panel
+    # with no error, so this is the knob to reach for when the embed works on
+    # one host and not another.
+    def extra_frame_ancestors
+      ENV.fetch("CORTOBA_FRAME_ANCESTORS", "").to_s.split(",").map(&:strip).reject(&:empty?)
+    end
+
+    # Every origin permitted to frame the console, the app URL first.
+    def frame_ancestors
+      [app_url] + extra_frame_ancestors
+    end
+
+    # Framing is opt-IN: a deployment that has not asked for it keeps upstream's
+    # X-Frame-Options, so the default posture stays the safe one.
+    #
+    # Read through an explicit truthy list rather than "is it set?". `present?`
+    # would treat the literal string "false" as enabled — the opposite of what
+    # an operator writing CORTOBA_ALLOW_FRAMING=false means, and it would widen
+    # a security header based on a value that reads as a refusal.
+    def framing_enabled?
+      %w[1 true yes on].include?(ENV.fetch("CORTOBA_ALLOW_FRAMING", "").to_s.strip.downcase)
     end
 
     def account_name
