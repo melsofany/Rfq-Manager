@@ -71,8 +71,14 @@ describe("Chatwoot console page — fallback", () => {
     });
   });
 
-  it("embeds the console when it IS reachable", async () => {
+  it("embeds the console on OUR OWN ORIGIN rather than the upstream address", async () => {
     // The other half: the fallback must not swallow the working case.
+    //
+    // The upstream address must NOT appear in the frame's src. `onrender.com` is
+    // on the Public Suffix List, so a frame pointed at the Chatwoot service is a
+    // third-party frame and the browser refuses its session cookie — the agent
+    // would be logged out inside it forever. Same-origin hosting (served by the
+    // gateway's proxy at /whatsapp/console) is what makes the console usable.
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.includes("/api/chatwoot/status")) return jsonResponse({ configured: true });
@@ -86,7 +92,9 @@ describe("Chatwoot console page — fallback", () => {
     await waitFor(() => {
       const frame = document.querySelector("iframe");
       expect(frame).not.toBeNull();
-      expect(frame?.getAttribute("src")).toContain("cortoba-chatwoot.onrender.com");
+      const src = frame?.getAttribute("src") ?? "";
+      expect(src).toBe("/whatsapp/console/app/login");
+      expect(src).not.toContain("onrender.com");
     });
     expect(screen.queryByTestId("builtin-chat")).toBeNull();
   });
@@ -126,14 +134,17 @@ describe("Chatwoot console page — fallback", () => {
       expect(document.querySelector("iframe")?.getAttribute("src")).toContain("FIRST");
     });
 
-    const button = await screen.findByRole("button", { name: /openExternal|نافذة/ });
+    const button = await screen.findByRole("button", { name: /نافذة/ });
     button.click();
 
     await waitFor(() => {
       expect(opened).toHaveLength(1);
     });
-    // The point of the guard: the opened link is NOT the consumed iframe link.
+    // The point of the guard: the opened link is NOT the consumed iframe link,
+    // and it stays on our own origin so the session cookie is first-party.
     expect(opened[0]).toContain("SECOND");
     expect(opened[0]).not.toContain("FIRST");
+    expect(opened[0]).not.toContain("onrender.com");
+    expect(opened[0]).toContain("/whatsapp/console/app/login");
   });
 });

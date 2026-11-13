@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, ExternalLink } from "lucide-react";
 import WhatsAppPage from "./index";
 
 /**
@@ -87,6 +87,27 @@ export default function ChatwootInboxPage() {
     setReloadKey((k) => k + 1);
   }, []);
 
+  /**
+   * Open the console in its own window, for an agent who wants the full screen.
+   *
+   * A FRESH SSO link is minted rather than reusing the frame's `src`: the token
+   * is consumed the moment the frame loads it (measured against the live
+   * console — a second sign-in with the same token answers 401), so handing the
+   * frame's href to `window.open` opens a console that never signs in. The link
+   * is re-pointed at our own origin for the same reason the frame is.
+   */
+  const openExternal = useCallback(async () => {
+    try {
+      const res = await fetch("/api/chatwoot/sso", { credentials: "include" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { url: string };
+      window.open(sameOriginConsolePath(data.url), "_blank");
+    } catch {
+      // Nothing to recover: the frame is still there, and this is a convenience
+      // control. Failing silently beats an error dialog over a working console.
+    }
+  }, []);
+
   // Console unavailable (unconfigured OR unreachable) → the proven built-in
   // chat, so the agent always has somewhere to answer suppliers from.
   if (useLegacy) return <WhatsAppPage />;
@@ -99,15 +120,27 @@ export default function ChatwootInboxPage() {
             <span className="w-2 h-2 rounded-full bg-green-500" />
             {t("nav.whatsapp")}
           </h1>
-          <button
-            type="button"
-            onClick={retry}
-            disabled={loading}
-            className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-            تحديث
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openExternal}
+              disabled={loading}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
+              title="فتح صندوق المحادثات في نافذة مستقلة"
+            >
+              <ExternalLink size={13} />
+              نافذة مستقلة
+            </button>
+            <button
+              type="button"
+              onClick={retry}
+              disabled={loading}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+              تحديث
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 relative overflow-hidden">
