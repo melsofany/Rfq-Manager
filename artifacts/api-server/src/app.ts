@@ -15,6 +15,7 @@ import {
   chatwootProxyMount,
   chatwootConsoleGuard,
   chatwootOwnsPath,
+  chatwootRequiresAuth,
 } from "./modules/chatwoot/proxy";
 import { logger } from "./shared/logger";
 
@@ -136,6 +137,11 @@ if (chatwootTarget && chatwootConsoleBase) {
   const guard = chatwootConsoleGuard();
   const gate = (req: Request, res: Response, next: NextFunction): void => {
     if (!chatwootOwnsPath(req.path)) return next();
+    // Static assets carry no business data and are requested dozens of times per
+    // page. Charging the guard — a database lookup — to each one returned 401
+    // for the console's own JS and made every screen slow. Supplier data still
+    // goes through the guard.
+    if (!chatwootRequiresAuth(req.path)) return handler(req, res, next);
     guard(req, res, () => handler(req, res, next));
   };
   app.use(chatwootConsoleBase, gate);
