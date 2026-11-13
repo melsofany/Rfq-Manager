@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 
 /**
  * The history replay is the one thing standing between "the console exists" and
@@ -231,6 +232,24 @@ describe("history replay into the console", () => {
     expect(res.skipped).toBe(1);
     // The cursor must point at the LAST row examined, not the last row written.
     expect(res.lastId).toBe(12);
+  });
+
+  it("does not skip a number's early messages when another number advances", async () => {
+    // THE ROOT DEFECT. One global id cursor was passed into every number, so
+    // once any number with late messages moved it, every EARLIER message of
+    // every other number was skipped for good. Production reported the same
+    // cursor three batches in a row while only 2 of 414 numbers had been
+    // replayed.
+    //
+    // Progress is now the synced-at column, so a number is replayed from its own
+    // beginning whatever any other number did.
+    const src = readFileSync(
+      new URL("../../modules/chatwoot/backfill.ts", import.meta.url),
+      "utf8",
+    );
+    expect(src).not.toContain("afterId");
+    expect(src).not.toContain("highWater");
+    expect(src).toContain("isNull(whatsappChatsTable.chatwootSyncedAt)");
   });
 
   it("records the conversation it created, so a re-run does not make a second one", async () => {

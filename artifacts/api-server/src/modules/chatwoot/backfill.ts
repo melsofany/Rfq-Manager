@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   db,
   whatsappChatsTable,
@@ -126,7 +126,7 @@ async function markChatSynced(id: number): Promise<void> {
  */
 export async function backfillPhone(
   phone: string,
-  opts: { limit: number; afterId?: number },
+  opts: { limit: number },
 ): Promise<{
   created: number;
   skipped: number;
@@ -183,16 +183,11 @@ export async function backfillPhone(
       createdAt: whatsappChatsTable.createdAt,
       waMessageId: whatsappChatsTable.waMessageId,
       // Read on every row: a replayed message must never be re-scanned, or the
-      // batch cursor below can never advance past it.
+      // number is replayed from its beginning on every run.
       chatwootSyncedAt: whatsappChatsTable.chatwootSyncedAt,
     })
     .from(whatsappChatsTable)
-    .where(
-      and(
-        eq(whatsappChatsTable.phone, phone),
-        opts.afterId && opts.afterId > 0 ? gt(whatsappChatsTable.id, opts.afterId) : sql`true`,
-      ),
-    )
+    .where(eq(whatsappChatsTable.phone, phone))
     .orderBy(asc(whatsappChatsTable.id))
     .limit(opts.limit);
 
@@ -274,7 +269,7 @@ export async function backfillPhone(
  * the order the conversations began.
  */
 export async function backfillHistory(
-  opts: { limit?: number; cursor?: number } = {},
+  opts: { limit?: number } = {},
 ): Promise<BackfillResult> {
   const limit = Math.min(
     Math.max(1, opts.limit ?? BACKFILL_BATCH_DEFAULT),
@@ -295,17 +290,18 @@ export async function backfillHistory(
     };
   }
 
-  const afterId = opts.cursor ?? 0;
-
-  // The next numbers to replay: those with messages after the cursor, oldest
-  // history first, so a resumed run continues rather than restarting.
+  // The numbers still owing a replay, oldest history first. Progress is the
+  // `chatwoot_synced_at` COLUMN, not a cursor: an id cursor applied inside each
+  // number skipped that number's earlier messages for good as soon as some other
+  // number advanced it (the run reported the same cursor three batches in a row
+  // while only 2 of 414 numbers had been replayed).
   const phones = await db
     .select({
       phone: whatsappChatsTable.phone,
       oldest: sql<number>`min(${whatsappChatsTable.id})`,
     })
     .from(whatsappChatsTable)
-    .where(afterId > 0 ? gt(whatsappChatsTable.id, afterId) : sql`true`)
+    .where(isNull(whatsappChatsTable.chatwootSyncedAt))
     .groupBy(whatsappChatsTable.phone)
     .orderBy(sql`min(${whatsappChatsTable.id})`)
     .limit(20);
@@ -315,7 +311,6 @@ export async function backfillHistory(
   let errors = 0;
   let conversationsCreated = 0;
   let conversationsReused = 0;
-  let highWater = afterId;
   let budget = limit;
 
   for (const p of phones) {
@@ -330,32 +325,27 @@ export async function backfillHistory(
     if (existing.length) conversationsReused += 1;
     else conversationsCreated += 1;
 
-    const res = await backfillPhone(p.phone, { limit: budget, afterId });
+    // No id cursor: the column already says which messages are done, so each
+    // number is replayed from its own beginning.
+    const res = await backfillPhone(p.phone, { limit: budget });
     messagesCreated += res.created;
     messagesSkipped += res.skipped;
     errors += res.errors;
-    if (res.lastId !== null) highWater = Math.max(highWater, res.lastId);
     budget -= res.created + res.skipped;
   }
 
   // Any message at all left beyond the high-water mark means there is more.
+  // Anything still unreplayed means there is more to do.
   const remaining = await db
     .select({ id: whatsappChatsTable.id })
     .from(whatsappChatsTable)
-    .where(gt(whatsappChatsTable.id, highWater))
+    .where(isNull(whatsappChatsTable.chatwootSyncedAt))
     .limit(1);
 
   const complete = remaining.length === 0;
   if (messagesCreated || messagesSkipped) {
     logger.info(
-      {
-        phones: phones.length,
-        messagesCreated,
-        messagesSkipped,
-        errors,
-        highWater,
-        complete,
-      },
+      { phones: phones.length, messagesCreated, messagesSkipped, errors, complete },
       "Chatwoot history backfill batch complete",
     );
   }
@@ -367,7 +357,7 @@ export async function backfillHistory(
     messagesCreated,
     messagesSkipped,
     errors,
-    nextCursor: complete ? null : highWater,
+    nextCursor: null,
     complete,
     stoppedBy: complete ? "complete" : "batch",
   };
