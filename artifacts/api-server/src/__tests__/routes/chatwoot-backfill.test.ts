@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 const h = vi.hoisted(() => ({
   created: [] as Array<Record<string, unknown>>,
   contactArgs: { name: "", phone: "" },
+  conversationExists: "201000000000" as string | null,
   seenSourceIds: new Set<string>(),
   chatRows: [] as Array<Record<string, unknown>>,
   supplierRows: [] as Array<Record<string, unknown>>,
@@ -33,12 +34,19 @@ const h = vi.hoisted(() => ({
 vi.mock("../../modules/chatwoot/client", () => ({
   isChatwootConfigured: true,
   findContactByPhone: vi.fn(async () => h.contact),
+  getConversationContactPhone: vi.fn(async () => h.conversationExists),
   createContact: vi.fn(async (name: string, phone: string) => {
     h.contactArgs = { name, phone };
     return h.contact;
   }),
   createConversation: vi.fn(async () => {
     h.conversationsCreated += 1;
+    // A conversation that has just been created EXISTS from now on, so the
+    // messages that follow are accepted. Leaving it "dead" would make the mock
+    // reject the very replacement the code just made.
+    if (h.conversationExists === null && h.conversation?.id) {
+      h.conversationExists = String(h.conversation.id);
+    }
     return h.conversation;
   }),
   createMessage: vi.fn(
@@ -48,6 +56,11 @@ vi.mock("../../modules/chatwoot/client", () => ({
       direction: string,
       meta: { externalCreatedAt?: string; sourceId?: string },
     ) => {
+      // A message into a conversation the console does NOT have answers 404
+      // there, and the real client returns undefined for it. Without this the
+      // mock accepted every send and the "dead conversation" guard could never
+      // fail — the mock has to reproduce the failure it claims to guard.
+      if (h.conversationExists === null) return undefined;
       h.created.push({ conversationId, content, direction, ...meta });
       h.seenSourceIds.add(meta.sourceId ?? "");
       return { id: h.created.length, source_id: meta.sourceId };
@@ -149,6 +162,7 @@ beforeEach(() => {
   h.conversationsCreated = 0;
   h.links = [];
   h.contactArgs = { name: "", phone: "" };
+  h.conversationExists = "201000000000";
 });
 
 describe("history replay into the console", () => {
@@ -241,6 +255,33 @@ describe("history replay into the console", () => {
     expect(res.skipped).toBe(1);
     // The cursor must point at the LAST row examined, not the last row written.
     expect(res.lastId).toBe(12);
+  });
+
+  it("replaces a conversation the console no longer has, instead of spinning", async () => {
+    // THE DEFECT THAT MADE THE REPLAY SPIN FOREVER. A stored link pointed at a
+    // conversation Chatwoot no longer had (its database was reset while our link
+    // rows survived). Every message then answered 404, so nothing was ever
+    // marked as replayed, the same 20 numbers were re-read on every batch, and
+    // the run reported `messagesCreated: 0, errors: 12` forever.
+    h.chatRows = [
+      {
+        id: 9,
+        phone: "201001234567",
+        body: "استفسار",
+        direction: "inbound",
+        createdAt: new Date("2026-06-02T09:00:00Z"),
+        waMessageId: "w10",
+        chatwootSyncedAt: null,
+      },
+    ];
+    h.linkRows = [{ conversationId: 3, phone: "201001234567", rfqId: 0 }];
+    // The console answers 404 for the stored conversation.
+    h.conversationExists = null;
+    const res = await backfillPhone("201001234567", { limit: 10 });
+    // A replacement conversation is created and the message is delivered into
+    // it — rather than failing against the dead id on every run.
+    expect(res.created).toBe(1);
+    expect(res.errors).toBe(0);
   });
 
   it("creates the contact with (name, phone), never the swap", async () => {
