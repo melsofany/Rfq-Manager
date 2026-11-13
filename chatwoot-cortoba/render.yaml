@@ -103,6 +103,13 @@ services:
         generateValue: true
       - key: CORTOBA_APP_URL
         value: https://cortoba-rfq.onrender.com
+      # Allows the console to be rendered inside the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser REFUSE the iframe and the
+      # panel is simply blank (measured: ERR_BLOCKED_BY_RESPONSE). The overlay
+      # replaces the header with a `frame-ancestors` allow-list built from
+      # CORTOBA_APP_URL + CORTOBA_FRAME_ANCESTORS.
+      - key: CORTOBA_ALLOW_FRAMING
+        value: "true"
       - key: CORTOBA_RFQ_ATTRIBUTE_KEY
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY
@@ -158,6 +165,13 @@ services:
           envVarKey: SECRET_KEY_BASE
       - key: CORTOBA_APP_URL
         value: https://cortoba-rfq.onrender.com
+      # Allows the console to be rendered inside the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser REFUSE the iframe and the
+      # panel is simply blank (measured: ERR_BLOCKED_BY_RESPONSE). The overlay
+      # replaces the header with a `frame-ancestors` allow-list built from
+      # CORTOBA_APP_URL + CORTOBA_FRAME_ANCESTORS.
+      - key: CORTOBA_ALLOW_FRAMING
+        value: "true"
       - key: CORTOBA_RFQ_ATTRIBUTE_KEY
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY
