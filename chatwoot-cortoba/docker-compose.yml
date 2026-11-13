@@ -1,6 +1,6 @@
 # Chatwoot + Cortoba overlay — the ONE canonical stack.
 #
-# Four services: web (Rails), worker (Sidekiq), postgres, redis.
+# Five services: migrate (one-shot), web (Rails), worker (Sidekiq), postgres, redis.
 #
 # DATABASE ISOLATION IS ABSOLUTE: Chatwoot gets its own postgres container and
 # its own volume. It never sees Cortoba's DATABASE_URL, and Cortoba never reads
@@ -10,14 +10,70 @@
 #
 # Run:
 #   cd chatwoot-cortoba && cp .env.example .env   # then set the secrets
-#   docker compose up -d --build
-#   docker compose exec web bundle exec rails db:chatwoot_prepare
+#   docker compose up -d
+#
+# `docker compose up -d` is the WHOLE install. It used to be two commands
+# (`up -d --build` then `exec web rails db:chatwoot_prepare`), and that order is
+# broken: web and worker boot before the schema exists and crash-loop on
+# `relation "installation_configs" does not exist` until the second command
+# happens to run. A stack that looks dead on a correct install is a defect, so
+# the preparation is now a service that web and worker WAIT FOR.
 #
 # See README.md.
 
 name: chatwoot-cortoba
 
 services:
+  # One-shot schema preparation. Runs to completion, verifies its own work, and
+  # exits — so `up -d` is correct in a single command and a failure is visible
+  # as a non-zero exit instead of an app that quietly cannot boot.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cortoba/chatwoot:4.19.1
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: .env
+    environment: &chatwoot_env
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      # A separate database, on a separate container. Not Cortoba's.
+      DATABASE_URL: postgres://chatwoot:${POSTGRES_PASSWORD}@postgres:5432/chatwoot
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Local install: no TLS termination in front of this compose file.
+      FORCE_SSL: ${FORCE_SSL:-false}
+      # Employees sign in to Cortoba only; they never get a Chatwoot password.
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      DISABLE_TELEMETRY: "true"
+      ACTIVE_STORAGE_SERVICE: local
+      DEFAULT_LOCALE: ar
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+      # Cortoba wiring (read by the overlay initializer).
+      CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
+      CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
+      CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+      # The console is reachable ONLY through the Cortoba gateway. Leave the
+      # secret empty to disable the gate (upstream behaviour: the console
+      # answers directly); set it — the SAME value on the gateway — to arm it.
+      # A local smoke test needs it set, or the gateway's proxy gets a 404.
+      CORTOBA_GATEWAY_SECRET: ${CORTOBA_GATEWAY_SECRET:-}
+      # Endpoints Meta calls directly cannot carry the gateway header, so they
+      # stay public by path.
+      CORTOBA_GATEWAY_PUBLIC_PATHS: ${CORTOBA_GATEWAY_PUBLIC_PATHS:-}
+      # Allows the console to be framed by the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser refuse the frame.
+      CORTOBA_ALLOW_FRAMING: ${CORTOBA_ALLOW_FRAMING:-}
+    restart: "no"
+    # The migration + its verification live in ./bin/entrypoint.sh, which Render
+    # runs too. Defining the command once is what keeps a local install and a
+    # deploy from drifting apart.
+    command: ["sh", "/app/bin/entrypoint.sh", "migrate"]
+
   postgres:
     # Chatwoot v4.19+ requires the `vector` extension (db/schema.rb:
     # `enable_extension "vector"`), so plain postgres fails at db:chatwoot_prepare
@@ -58,6 +114,10 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      # The schema must exist BEFORE Rails boots, or the app crash-loops. The
+      # one-shot `migrate` service is the single migrator here; on Render the web
+      # service plays that role and the worker waits instead.
+      migrate: { condition: service_completed_successfully }
     ports:
       - "${CHATWOOT_PORT:-3000}:3000"
     env_file: .env
@@ -82,6 +142,17 @@ services:
       CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
       CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
       CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+      # The console is reachable ONLY through the Cortoba gateway. Leave the
+      # secret empty to disable the gate (upstream behaviour: the console
+      # answers directly); set it — the SAME value on the gateway — to arm it.
+      # A local smoke test needs it set, or the gateway's proxy gets a 404.
+      CORTOBA_GATEWAY_SECRET: ${CORTOBA_GATEWAY_SECRET:-}
+      # Endpoints Meta calls directly cannot carry the gateway header, so they
+      # stay public by path.
+      CORTOBA_GATEWAY_PUBLIC_PATHS: ${CORTOBA_GATEWAY_PUBLIC_PATHS:-}
+      # Allows the console to be framed by the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser refuse the frame.
+      CORTOBA_ALLOW_FRAMING: ${CORTOBA_ALLOW_FRAMING:-}
     healthcheck:
       # Two traps this avoids, both observed on the running stack:
       #  * the image ships no `curl` (`/bin/sh: curl: not found`) — `wget` is there;
@@ -94,7 +165,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 90s
-    command: bundle exec rails s -b 0.0.0.0 -p 3000
+    # Same entrypoint Render runs, so the two paths cannot drift.
+    command: ["sh", "/app/bin/entrypoint.sh", "web"]
 
   worker:
     image: cortoba/chatwoot:4.19.1
@@ -111,7 +183,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
-    command: bundle exec sidekiq -C config/sidekiq.yml
+    command: ["sh", "/app/bin/entrypoint.sh", "worker"]
 
 volumes:
   chatwoot_pgdata:

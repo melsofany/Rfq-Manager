@@ -1556,6 +1556,339 @@ export async function sendWhatsAppText(phone: string, text: string): Promise<str
 }
 
 /**
+ * ── Interactive supplier bot: menus, item screens, confirmations ─────────────
+ *
+ * A supplier's whole quoting experience is these messages. WhatsApp's rules
+ * shape them and are not negotiable:
+ *   * ActionButtons hold at most 3 buttons; ActionList rows are capped at 10 per
+ *     section, with a title of 24 chars and a description of 72. A message that
+ *     exceeds those is REJECTED by Meta, not truncated — so the senders split on
+ *     the cap rather than trusting the caller to.
+ *   * Every payload is short and machine-parsed on the way back, so ids are
+ *     encoded, never a display label.
+ */
+
+/** The bot's entry menu — the three things a supplier can do. */
+export async function sendSupplierBotMainMenu(
+  phone: string,
+  name?: string | null,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const hello = name ? `أهلاً ${name} 👋` : "أهلاً بكم 👋";
+  const body = `${hello}\nشركة قرطبة للتوريدات.\n\nاختر ما تريد:`;
+  const message = new Interactive(
+    new ActionButtons(
+      new Button("sup_menu:myrfqs", "طلبات التسعير"),
+      new Button("sup_menu:help", "المساعدة"),
+      new Button("sup_menu:agent", "التواصل مع موظف"),
+    ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * The supplier's open requests, paginated.
+ *
+ * Pagination is not decoration: Meta rejects a list with more than 10 rows, and
+ * a supplier with a busy season genuinely has more than that open. `page` is
+ * 1-based and each row carries its request id, so a tap is unambiguous even
+ * after the list is redrawn.
+ */
+export async function sendSupplierBotRequestList(
+  phone: string,
+  requests: Array<{
+    rfqId: number;
+    internalRfqNo: string;
+    itemCount: number;
+    answeredCount: number;
+  }>,
+  page = 1,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  if (requests.length === 0) {
+    return sendWhatsAppText(phone, "لا توجد طلبات تسعير مفتوحة حالياً. سنوافيكم بأي طلب جديد.");
+  }
+
+  const PAGE_SIZE = 8; // leaves room for «الصفحة التالية» and «رجوع»
+  const start = (page - 1) * PAGE_SIZE;
+  const slice = requests.slice(start, start + PAGE_SIZE);
+
+  const rows = slice.map(
+    (r) =>
+      new Row(
+        `sup_rfq:${r.rfqId}`,
+        r.internalRfqNo.slice(0, 24),
+        `${r.answeredCount}/${r.itemCount} بند تم الرد عليه`,
+      ),
+  );
+
+  // Navigation rows are added AFTER the requests so a full page still shows as
+  // many real requests as possible.
+  if (start + PAGE_SIZE < requests.length) {
+    rows.push(new Row(`sup_page:${page + 1}`, "الصفحة التالية ▶", "عرض المزيد من الطلبات"));
+  }
+  rows.push(new Row("sup_menu:back", "رجوع", "القائمة الرئيسية"));
+
+  const [first, ...rest] = rows;
+  const title = `طلبات التسعير (${requests.length})`;
+  const message = new Interactive(
+    new ActionList("اختر طلب التسعير", new ListSection(title.slice(0, 24), first, ...rest)),
+    new Body("اختر طلب التسعير الذي تريد الرد عليه:"),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/** The items of one request, each row opening that item's answer screen. */
+export async function sendSupplierBotItemList(
+  phone: string,
+  rfqNo: string,
+  items: Array<{
+    id: number;
+    label: string;
+    qty: string | null;
+    uom: string | null;
+    answered: boolean;
+  }>,
+  page = 1,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  if (items.length === 0) {
+    return sendWhatsAppText(phone, "لا توجد بنود في هذا الطلب.");
+  }
+
+  const PAGE_SIZE = 8;
+  const start = (page - 1) * PAGE_SIZE;
+  const slice = items.slice(start, start + PAGE_SIZE);
+
+  const rows = slice.map((it) => {
+    const qty = it.qty ? `${formatQty(it.qty)}${it.uom ? " " + it.uom : ""}` : "";
+    const status = it.answered ? "✅ تم الرد" : "⬜ لم يتم الرد";
+    return new Row(
+      `sup_item:${it.id}`,
+      it.label.slice(0, 24),
+      `${qty}${qty ? " · " : ""}${status}`.slice(0, 72),
+    );
+  });
+
+  if (start + PAGE_SIZE < items.length) {
+    rows.push(new Row(`sup_ipage:${page + 1}`, "الصفحة التالية ▶", "عرض المزيد من البنود"));
+  }
+  rows.push(new Row("sup_menu:myrfqs", "رجوع", "قائمة الطلبات"));
+
+  const [first, ...rest] = rows;
+  const message = new Interactive(
+    new ActionList(
+      "اختر البند",
+      new ListSection(`بنود الطلب ${rfqNo}`.slice(0, 24), first, ...rest),
+    ),
+    new Body(`بنود طلب التسعير ${rfqNo}:\nاضغط على البند للرد عليه.`),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * One item's details plus the two availability answers.
+ *
+ * The item's full description is sent as TEXT before the buttons rather than
+ * inside a button label: a button label is capped at 20 characters and a real
+ * description does not fit, so putting it there is how a supplier ends up
+ * quoting the wrong part.
+ */
+export async function sendSupplierBotItemDetail(
+  phone: string,
+  rfqNo: string,
+  item: {
+    id: number;
+    lineItem: string | null;
+    partNo: string | null;
+    description: string;
+    uom: string | null;
+    qty: string | null;
+    referencePrice: string | null;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const lines = [
+    `📋 الطلب: ${rfqNo}`,
+    item.partNo ? `رقم القطعة: ${item.partNo}` : null,
+    item.lineItem ? `Line Item: ${item.lineItem}` : null,
+    `الوصف: ${item.description}`,
+    item.qty ? `الكمية: ${formatQty(item.qty)}${item.uom ? " " + item.uom : ""}` : null,
+    item.referencePrice ? `السعر المرجعي: ${item.referencePrice}` : null,
+  ].filter(Boolean);
+  const message = new Interactive(
+    new ActionButtons(
+      new Button(`sup_avail:${item.id}:1`, "متاح ✓"),
+      new Button(`sup_avail:${item.id}:0`, "غير متاح ✗"),
+      new Button("sup_back:items", "رجوع"),
+    ),
+    new Body(`${lines.join("\n")}\n\nهل هذا البند متاح للتوريد؟`),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/** The supplier's saved answers for one item, so they can see and correct them. */
+export async function sendSupplierBotItemSummary(
+  phone: string,
+  itemLabel: string,
+  draft: {
+    availability: string | null;
+    unitPrice: string | null;
+    currency: string | null;
+    deliveryDays: number | null;
+    originCountry: string | null;
+    brand: string | null;
+    notes: string | null;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const lines = [
+    `📦 ${itemLabel}`,
+    draft.availability
+      ? `التوفر: ${draft.availability === "available" ? "متاح" : "غير متاح"}`
+      : null,
+    draft.unitPrice
+      ? `السعر: ${draft.unitPrice}${draft.currency ? " " + draft.currency : ""}`
+      : null,
+    draft.deliveryDays != null ? `مدة التوريد: ${draft.deliveryDays} يوم` : null,
+    draft.originCountry ? `بلد المنشأ: ${draft.originCountry}` : null,
+    draft.brand ? `العلامة: ${draft.brand}` : null,
+    draft.notes ? `ملاحظات: ${draft.notes}` : null,
+  ].filter(Boolean);
+  return sendWhatsAppText(phone, `${lines.join("\n")}\n\nيمكنك تعديل أي قيمة أو المتابعة.`);
+}
+
+/**
+ * Final confirmation before the answer becomes an offer.
+ *
+ * BOTH lists are shown. «تم الرد على 3» on its own is how a supplier confirms a
+ * half-finished quote; naming the items still open is what makes the button
+ * honest.
+ */
+export async function sendSupplierBotConfirm(
+  phone: string,
+  rfqNo: string,
+  summary: {
+    pricedCount: number;
+    totalCount: number;
+    answeredLabels: string[];
+    unansweredLabels: string[];
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const answered =
+    summary.answeredLabels.length > 0
+      ? summary.answeredLabels.map((l) => `✅ ${l}`).join("\n")
+      : "—";
+  const unanswered =
+    summary.unansweredLabels.length > 0
+      ? summary.unansweredLabels.map((l) => `⬜ ${l}`).join("\n")
+      : null;
+  const body = [
+    `مراجعة الرد على الطلب ${rfqNo}:`,
+    "",
+    `تم الرد على ${summary.pricedCount} من ${summary.totalCount} بند:`,
+    answered,
+    unanswered ? `\nلم يتم الرد على:\n${unanswered}` : null,
+    "",
+    "هل تريد إرسال هذا الرد؟",
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+  const message = new Interactive(
+    new ActionButtons(
+      new Button("sup_confirm:1", "إرسال الرد ✓"),
+      new Button("sup_confirm:0", "تعديل لاحقاً"),
+    ),
+    new Body(body.slice(0, 1024)),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/** Sent to the responsible employee when a supplier confirms a reply. */
+export async function notifyEmployeeOfSupplierReply(
+  phone: string,
+  opts: {
+    employeeName?: string | null;
+    rfqNo: string;
+    supplierName: string;
+    pricedCount: number;
+    totalCount: number;
+    /** Approved lines whose price the supplier restated, so the approval was released. */
+    approvalsCleared?: number;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const who = opts.employeeName ? `${opts.employeeName}\n` : "";
+  // A released approval is said OUT LOUD. The supplier restating a price drops
+  // the endorsement on that line, and an approval that vanishes silently is the
+  // one thing the employee must not discover later from a margin report.
+  const cleared =
+    (opts.approvalsCleared ?? 0) > 0
+      ? `\n⚠️ تغيّر سعر ${opts.approvalsCleared} بند كنت معتمداً سعره — أُلغيت الموافقة، يلزم إعادة الاعتماد.`
+      : "";
+  return sendWhatsAppText(
+    phone,
+    `${who}📥 رد مورد جديد على طلب التسعير ${opts.rfqNo}\n` +
+      `المورد: ${opts.supplierName}\n` +
+      `عدد البنود المسعّرة: ${opts.pricedCount} من ${opts.totalCount}${cleared}\n\n` +
+      `راجع الرد واعتمده من شاشة طلب التسعير في النظام.`,
+  );
+}
+
+/**
+ * Tell the responsible employee that a supplier asked for a human.
+ *
+ * Distinct from `notifyEmployeeOfSupplierReply`: no prices have arrived, so the
+ * message must ask the employee to open the conversation rather than to review a
+ * quote. It carries no figures at all — the supplier may still be mid-negotiation
+ * and a "requested a call" notice is not a place to leak a price.
+ */
+export async function notifyEmployeeOfSupplierRequest(
+  phone: string,
+  opts: {
+    employeeName?: string | null;
+    supplierName: string;
+    rfqNo?: string | null;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const who = opts.employeeName ? `${opts.employeeName}\n` : "";
+  const about = opts.rfqNo ? ` بخصوص طلب التسعير ${opts.rfqNo}` : "";
+  return sendWhatsAppText(
+    phone,
+    `${who}☎️ المورد «${opts.supplierName}» طلب التحدث مع موظف${about}.\n\n` +
+      `افتح محادثة المورد من شاشة الواتساب في النظام للرد عليه.`,
+  );
+}
+
+/**
  * Supplier request picker — the console bot's opening message.
  *
  * When a supplier messages us and their reply cannot be tied to a specific

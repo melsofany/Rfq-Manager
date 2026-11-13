@@ -8,6 +8,26 @@
 import { logger } from "../../shared/logger";
 
 export const CHATWOOT_URL = (process.env.CHATWOOT_URL || "").replace(/\/$/, "");
+
+/**
+ * Headers that let a server-to-server call through the Cortoba gateway.
+ *
+ * The console refuses every request that does not carry this header once
+ * `CORTOBA_GATEWAY_SECRET` is set on it (see chatwoot-cortoba/lib/cortoba/
+ * gateway.rb — the console's only reachable entry point is the app's own
+ * origin, because `onrender.com` puts the two services on different SITES and
+ * the browser then refuses the console's session cookie).
+ *
+ * Every caller MUST spread this, in one place: a header attached to some calls
+ * and forgotten on others works until the gate is armed and then fails on the
+ * one path nobody tested. The secret is read per call, not at import, so a
+ * value set after boot still applies.
+ */
+export function gatewayHeaders(): Record<string, string> {
+  const secret = process.env.CHATWOOT_GATEWAY_SECRET?.trim();
+  return secret ? { "x-cortoba-gateway": secret } : {};
+}
+
 export const CHATWOOT_ACCOUNT_ID = process.env.CHATWOOT_ACCOUNT_ID || "";
 export const CHATWOOT_INBOX_ID = process.env.CHATWOOT_INBOX_ID || "";
 const CHATWOOT_API_TOKEN = process.env.CHATWOOT_API_TOKEN || "";
@@ -46,6 +66,7 @@ async function cw(path: string, init: RequestInit = {}): Promise<Response> {
       ...init,
       signal: controller.signal,
       headers: {
+        ...gatewayHeaders(),
         api_access_token: CHATWOOT_API_TOKEN,
         "Content-Type": "application/json",
         ...(init.headers || {}),

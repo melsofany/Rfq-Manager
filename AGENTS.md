@@ -4882,3 +4882,198 @@ REST API cannot set `created_at` or a message id).
 **Tests**: 2300 api-server (chatwoot-assignment 21, up from 0) + 78 portal pass;
 tsc (libs + api-server + portal) clean; tracked-file format gate clean; eslint
 clean on the changed files. Committed `fb7fcd9` on `feat/chatwoot-agent-console`.
+
+## `tsc --build` from the root is NOT the typecheck CI runs
+
+`pnpm typecheck` runs `tsc -p tsconfig.json --noEmit` **inside each package**
+(`artifacts/api-server/package.json`), which resolves types differently from the
+root-level `tsc --build`. A change that passes the root build can still fail CI:
+
+```
+supplier-bot.ts(454,15): error TS2769: No overload matches this call.
+  Argument of type 'Record<string, unknown>' is not assignable to parameter of
+  type '{ rfqId: number | SQL<unknown> | ... }'
+```
+
+`Record<string, unknown>` erases the column types drizzle needs for
+`values()`. Use the table's own `$inferInsert` / `Partial<...>` shapes (the
+convention in `modules/users/representatives.ts`) — a renamed column then
+becomes a compile error instead of a value that silently stops being written.
+
+**Run the check the way CI runs it, from the package directory**, before
+pushing:
+`cd artifacts/api-server && ../../node_modules/.bin/tsc -p tsconfig.json --noEmit`
+
+## A guard that errors is not a guard that passes
+
+The `migrate` service's first cut read the table count with
+`count=$(rails runner ...)` and tested `[ "$count" -lt 50 ]`. Rails logs to
+stdout too, so `$count` was `"W, [2026-...] INFO -- ... 110"`, the numeric test
+failed with **`out of range`** — and **a failing test inside `if` does NOT trip
+`set -e`**, so the check fell through and printed `schema ready` for a database
+it had never verified. Extract a sentinel line, then fail closed on anything
+unparsable. Same family as the `filter(Boolean)` and false-`truncated`
+incidents: a capability reporting something other than what it did.
+
+## The documented Chatwoot install was broken (fixed in PR #439)
+
+`docker compose up -d --build` then `exec web rails db:chatwoot_prepare` starts
+`web`/`worker` **before the schema exists**, so they crash-loop on
+`relation "installation_configs" does not exist` until the second command is run
+by hand — a correct install looks like a dead stack. A one-shot `migrate`
+service now prepares the schema, verifies it, and `web`/`worker` wait for
+`service_completed_successfully`. **`up -d` is the whole install.**
+
+`db:chatwoot_prepare` **exits 0 even when it creates nothing** (it short-circuits
+on a database it considers half-prepared), so its exit code is never the proof.
+
+- **Compose interpolates `${...}` even inside a `#` comment** inside a block
+  scalar. A `${var:-default}` written in prose produced
+  `WARN The "count" variable is not set` on every `docker compose` command.
+- **Verify a fix in BOTH directions.** Passes at 110 tables, exits 1 at 0 — a
+  guard only checked on the happy path guards nothing.
+- **A mock cannot see a DDL syntax error.** The new tables, their unique index
+  and the FK cascade were executed against real Postgres
+  (`pgvector/pgvector:pg16`): duplicate triple rejected, `DELETE supplier` →
+  drafts `1 → 0`.
+
+## Supplier WhatsApp bot — scoping must live in the QUERY (Phase 6, PR #439)
+
+The supplier-facing bot (`modules/communications/supplier-bot.ts`) mirrors the
+representative bot: main menu → my requests → request → item → step answers →
+confirm → **unapproved** offer + employee notification.
+
+- **Scoping is in the query, not downstream.** Every item lookup requires the
+  `sent_log` row for `(supplier, rfq)`, so a hand-typed id or a stale button
+  cannot open another supplier's lines.
+- **A mock that returns rows directly cannot test that.** It cannot tell a
+  scoped query from an unscoped one, so "supplier B cannot see A's items" would
+  pass against the unscoped query. The tests record the built `WHERE` and assert
+  the columns.
+- **An answer is a DRAFT; only a confirmation writes an offer, and it is stored
+  unapproved.** A WhatsApp message is not a signed quotation.
+- **`parsePrice("-5")` returned `5`** — dropping a sign invents a price the
+  supplier never stated. It now re-asks.
+- **`upsertDraft` wrote `String(price)` on insert but a raw number in the
+  conflict `SET`** — one column, two shapes depending on whether the row existed.
+  Build one row object and derive the `set` from it.
+- **Add a handler to BOTH webhook paths.** `handleSupplierBotMessage` is in
+  `Whatsapp.on.message` **and** `dispatchWebhookPayload`, in the same order
+  (`reaction → AI → rep → supplier bot → pick → work-order → inbound`). One path
+  only is the recorded dispatch-order bug.
+
+**Tests**: 2322 api-server (was 2300) + 78 portal pass; `tsc` clean for libs,
+api-server and portal; repo-wide prettier clean. PR #439, all 4 CI checks green.
+
+## Never delete-and-reinsert a row other tables point at (supplier bot)
+
+`confirmDrafts` re-confirmed a supplier's reply by `DELETE FROM offer_items
+WHERE offer_id = ...` and re-inserting every line. Two things died silently:
+
+- **`offer_items.is_approved`** — the approved supplier price, i.e. the
+  reference cost `customer-rfq`'s margin check and the RFQ KPIs read. An
+  approval that vanishes is the "silently wrong authoritative number" class.
+- **`purchase_order_items.offer_item_id`** is `ON DELETE SET NULL`, so every PO
+  line raised from that offer lost its link to it.
+
+Now: match existing lines by `rfqItemId`, UPDATE in place, insert only new ones,
+delete nothing. Same rule already recorded for `customer_rfq_items` and
+`customer_po_items`.
+
+**An approval is an approval OF A PRICE.** When the supplier restates the price
+the endorsement no longer describes the quoted figure, so it is released
+(`approvalsCleared`) rather than left as a stale reference cost; an unchanged
+price keeps its approval. The employee is told over WhatsApp when it happens —
+an approval must never vanish silently.
+
+The passing tests did not catch this; reading the code against the schema did.
+A green suite proves the code does what the tests assert, not that the asserts
+were the right ones.
+
+**Tests**: 3 new cases, all 3 fail against the old block (verified by restoring
+it). 2325 api-server tests pass.
+
+## A bot that answers before the generic handler consumes the message
+
+The supplier bot (`handleSupplierBotMessage`) runs BEFORE `handleInboundMessage`,
+so it CONSUMES the supplier's message: whatever it does not record itself is
+never recorded at all. The bot saved prices into drafts and recorded nothing, so
+the employee opened the Chatwoot conversation to find an EMPTY thread while the
+supplier was actively quoting — the console is where the employee works, so a
+silent bot makes the console lie about the conversation it shows.
+
+- `recordSupplierBotInbound` records the inbound message (idempotent on
+  `wa_message_id`, so a redelivered webhook cannot double the thread) and mirrors
+  it into Chatwoot. Best-effort — a console fault must never cost the supplier
+  their answer.
+- `mirrorSupplierQuoteToConsole` puts the submitted prices (label, price,
+  currency, delivery days) plus the unpriced count into the thread. A bare
+  acknowledgement there means the employee must open the RFQ screen to learn what
+  was quoted.
+- `describeInboundBody` is the ONE inbound body mapping, shared by the bot and
+  the generic handler. Two copies drift, and the same message would then read
+  differently depending on which path consumed it.
+
+**A test that calls a helper directly guards nothing about whether it is
+called.** The quote-mirror wiring test drives the REAL confirmation; calling
+`mirrorSupplierQuoteToConsole` in isolation passed even after the call site was
+deleted. Removing the recording call fails 3 tests, removing the mirror call
+fails 1 — both verified by reverting.
+
+**The public Chatwoot webhook answers 200 BEFORE validating, deliberately:**
+Chatwoot retries a slow webhook, which would double-send. The token check returns
+before any action, so an unauthenticated request sends nothing. A 200 on that
+path is an ack, not evidence of authorization — verify the absence of the
+outbound send, not the status code.
+
+## تحقّق Chatwoot + بوت الموردين من الصفر (فرع feat/supplier-bot-and-chatwoot-install)
+
+تحقّق مستقلّ بلا الاعتماد على تقارير سابقة. أربعة عيوب حقيقية أُصلحت، كلٌّ بحارس
+**يفشل ضد الكود قبل الإصلاح** (مُتحقَّق بالـstash).
+
+### 1) حاجز التضمين في iframe عبر `*.onrender.com` — قياس لا تخمين
+
+- `onrender.com` مُدرَج في **قائمة النطاقات العامة** (PSL) ⇒
+  `cortoba-rfq.onrender.com` و`cortoba-chatwoot.onrender.com` **موقعان مستقلان**،
+  فالكوكي داخل الـiframe طرف ثالث ⇒ لا تُرسَل ولا تُخزَّن.
+- **الدليل**: الـiframe يُحمَّل ويُنفّذ `POST /auth/sign_in` بنجاح (سجل الخادم:
+  `Enqueued UserSessionIpLookupJob`) **ثم تعود الواجهة لصفحة الدخول** و
+  `localStorage` يبقى فارغًا. هذا سلوك منصة، **لا عيب كود** — لا يُصلح بتعديل Chatwoot.
+- الحلّان: (أ) تاب منفصل (يعمل الآن، Chatwoot يصبح طرفًا أول)،
+  (ب) نطاق مخصّص same-site (جذري، يحتاج موافقة DNS).
+
+### 2) توكن SSO أحادي الاستخدام كان يترك رابط «فتح في نافذة منفصلة» ميتًا
+
+- التوكن يُحذف من Redis عند أول `POST /auth/sign_in` (مُثبت: استهلاك أول 200،
+  ثانٍ **401**). الـiframe يستهلكه عند التحميل، فالزر `<a href={iframeUrl}>`
+  يفتح رابطًا ميتًا ⇒ يُقرأ كـ«اللوحة لا تفتح».
+- الإصلاح: الزر يصدر **رابطًا طازجًا** من `/api/chatwoot/sso` عند الضغط.
+- الحارس: `chatwoot-fallback.test.tsx` يقارن الرابط المفتوح بالرابط المُستهلك
+  ويرفض تطابقهما (**1 failed** قبل الإصلاح).
+
+### 3) «التواصل مع موظف» كان وعدًا بلا وفاء
+
+- المورد يُقال له «سيتواصل معك أحد الموظفين» والكود يكتفي بـ`broadcastWaEvent`
+  (بث SSE لصفحة مفتوحة فقط). **وأخطر**: الزر من القائمة الرئيسية لا يحمل `rfqId`
+  ⇒ لا «موظف مسؤول» ⇒ لا إشعار في الحالة الشائعة.
+- الإصلاح: إشعار واتساب مباشر لرقم الموظف (`notifyEmployeeOfSupplierRequest`)،
+  بسلّم الأولوية نفسه الذي يستخدمه إسناد اللوحة (مسؤول → مشرف → أدمن → أي موظف).
+- الحارس في `supplier-bot-console-trail.test.ts` (**1 failed** قبل الإصلاح).
+- **درس اختبار الموك**: الإشعار يستدعي `sendWhatsAppText` عبر الربط الداخلي للوحدة،
+  فتجاوز التصدير **لا يعترضه** — يجب تسجيله عند حدّ `notifyEmployeeOfSupplierRequest`
+  نفسه، وإلا «أثبت» الاختبار شيئًا لم يحدث.
+
+### ما تم التحقق منه سليمًا (بلا تغيير)
+
+- **ترتيب المعالجات متطابق في مساري الويبهوك** (`Whatsapp.on.message` و
+  `dispatchWebhookPayload`): `reaction → ai → rep → supplierBot → workOrder → inbound`.
+- **عزل الموردين**: كل استعلامات البوت مقيّدة بـ`supplierId` في `WHERE` (لا فلتر لاحق).
+- **العرض يُكتب UNAPPROVED** — لا يُعتبر ردّ المورد عرضًا معتمدًا.
+- **السيناريوهات الستة** كلها موجودة ومعالَجة (`sup_menu` → myrfqs/help/agent،
+  `sup_rfq` → البنود، `sup_item`/`sup_avail` → الردود، `sup_confirm` → التأكيد).
+- **`data_services: failing` تقرير كاذب**: Postgres يعمل فعلًا (مُثبت:
+  `GET /platform/api/v1/accounts/3/account_users` → 200 بصفَّين). الفحص الأصلي
+  يستخدم `connection.active?` التي لا تتفق مع connection pooling عند الخمول.
+- **مسارات إرسال RFQ/PO لم تُمَس**: 8 أسطر محذوفة فقط (توقيع دالة أُعيد ترتيبه).
+
+الاختبارات: **2354 api-server** (كان 2352) + 82 واجهة تمر؛ tsc + prettier + البناء نظيف.

@@ -15,6 +15,9 @@ import {
   customerPoItemDeliveriesTable,
   representativesTable,
   WORK_ORDER_KIND,
+  rfqTable,
+  rfqItemsTable,
+  employeesTable,
 } from "@workspace/db";
 import { eq, desc, sql, and, inArray, ne, isNotNull } from "drizzle-orm";
 import {
@@ -37,7 +40,35 @@ import {
   formatQty as formatWaQty,
   sendSupplierRequestPicker,
   sendSupplierRequestConfirmed,
+  sendSupplierBotMainMenu,
+  sendSupplierBotRequestList,
+  sendSupplierBotItemList,
+  sendSupplierBotItemDetail,
+  sendSupplierBotItemSummary,
+  sendSupplierBotConfirm,
+  notifyEmployeeOfSupplierReply,
+  notifyEmployeeOfSupplierRequest,
 } from "./service";
+import {
+  listSupplierOpenRequests,
+  listSupplierRequestItems,
+  supplierMayAnswer,
+  loadSession,
+  saveSession,
+  clearSession,
+  upsertDraft,
+  loadDrafts,
+  loadSupplierRequestItemsWithDrafts,
+  summariseDrafts,
+  confirmDrafts,
+  itemLabel,
+  parsePrice,
+  parseDeliveryDays,
+  isSkip,
+  stepPrompt,
+  STEP_ORDER,
+  type BotStep,
+} from "./supplier-bot";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
@@ -170,6 +201,12 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     } else if (await handleRepMessage(from, msg)) {
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
+    } else if (await handleSupplierBotMessage(from, msg)) {
+      // Interactive supplier bot owns this message (sup_ menu or a supplier's
+      // step answer). Sits after the rep bot so a number that is BOTH a rep and
+      // a supplier keeps its rep behaviour, and before the generic handler so
+      // the bot's menus are not echoed into the shared inbox.
+      logger.info({ from }, "Supplier bot message handled");
     } else if (await handleSupplierRequestPick(from, msg)) {
       // Supplier tapped a request button — the conversation is now filed there.
       logger.info({ from }, "Supplier request pick handled");
@@ -309,6 +346,9 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
+      } else if (await handleSupplierBotMessage(from, message)) {
+        // Interactive supplier bot — same order as the library path above.
+        logger.info({ from }, "Supplier bot message handled");
       } else if (await handleSupplierRequestPick(from, message)) {
         logger.info({ from }, "Supplier request pick handled");
       } else if (message.type === "interactive" && (await handleWorkOrderButton(from, message))) {
@@ -1045,6 +1085,703 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
 }
 
 /**
+ * ── Interactive supplier bot ─────────────────────────────────────────────────
+ *
+ * The supplier-facing counterpart of the representative bot. A supplier opens
+ * the menu with any message, browses THEIR OWN open pricing requests, opens an
+ * item, answers it step by step, and confirms — at which point the answers are
+ * written as an unapproved offer for an employee to review.
+ *
+ * Returns true when the bot owned the message, so the caller stops before the
+ * generic inbound handler. Returns false for anything that is not the supplier
+ * flow (no `sup_` payload and not a supplier's plain text), which is what keeps
+ * ordinary supplier chat working exactly as before.
+ */
+/**
+ * The supplier bot intercepts plain text from a REGISTERED supplier, which is a
+ * behaviour change on a live channel: a supplier typing an ordinary question now
+ * gets the bot menu instead of the human chat. Ship it enabled (that is the
+ * requested behaviour) but keep a kill-switch, so if a supplier is mid-quote and
+ * the flow misbehaves the operator can set SUPPLIER_BOT_ENABLED=false and the
+ * message falls through to the ordinary handler on the next deploy — no code
+ * revert, no data migration.
+ */
+function supplierBotEnabled(): boolean {
+  return process.env.SUPPLIER_BOT_ENABLED !== "false";
+}
+
+/**
+ * Record an inbound supplier message and mirror it into the console.
+ *
+ * The bot consumes a supplier's message BEFORE the generic handler runs, so
+ * without this the employee opens the conversation in Chatwoot and sees an empty
+ * thread while the supplier is actively quoting — the prices, availability and
+ * notes exist only inside the bot session. The console is where the employee is
+ * supposed to work, so the bot has to leave the same trail the generic handler
+ * does.
+ *
+ * Best-effort by design: a console or DB hiccup must never cost the supplier
+ * their answer.
+ */
+async function recordSupplierBotInbound(opts: {
+  phone: string;
+  waMessageId: string | undefined;
+  msg: ServerMessage;
+  supplierId: number;
+  supplierName?: string | null;
+  rfqId?: number | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
+}): Promise<void> {
+  try {
+    const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(opts.msg);
+    if (opts.waMessageId) {
+      const existing = await db
+        .select({ id: whatsappChatsTable.id })
+        .from(whatsappChatsTable)
+        .where(eq(whatsappChatsTable.waMessageId, opts.waMessageId))
+        .limit(1);
+      // Idempotent: a redelivered webhook must not double the thread.
+      if (existing.length === 0) {
+        await db.insert(whatsappChatsTable).values({
+          waMessageId: opts.waMessageId,
+          direction: "inbound",
+          phone: opts.phone,
+          supplierId: opts.supplierId,
+          body,
+          mediaId,
+          mediaType,
+          mimeType,
+          filename,
+          isRead: false,
+        });
+      }
+    }
+    await mirrorInboundMessage({
+      phone: opts.phone,
+      body,
+      rfqId: opts.rfqId ?? null,
+      contactName: opts.supplierName ?? null,
+      supplierId: opts.supplierId,
+      employeeId: opts.employeeId ?? null,
+      employeeName: opts.employeeName ?? null,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, phone: opts.phone },
+      "Supplier bot: inbound record/mirror failed — non-fatal",
+    );
+  }
+}
+
+/**
+ * Mirror a submitted quote into the supplier's console conversation.
+ *
+ * The employee reviews offers in Chatwoot, so the prices have to be IN the
+ * thread. Mirrored as an internal-style summary rather than as a WhatsApp
+ * message: this is a record for the team, not something the supplier receives
+ * (they already got their own confirmation).
+ *
+ * Best-effort — the offer is already saved by the time this runs.
+ */
+export async function mirrorSupplierQuoteToConsole(
+  supplier: { id: number; name: string },
+  phone: string,
+  rfqId: number,
+  rfqNo: string,
+): Promise<void> {
+  try {
+    const { items, drafts } = await loadSupplierRequestItemsWithDrafts(supplier.id, rfqId);
+    const priced = items
+      .map((it) => ({ it, d: drafts.get(it.id) }))
+      .filter(({ d }) => d?.unitPrice != null && String(d.unitPrice).trim() !== "");
+    if (priced.length === 0) return;
+
+    const lines = priced.map(({ it, d }) => {
+      const label = it.partNo || it.lineItem || it.description || `بند ${it.id}`;
+      const price = `${d!.unitPrice}${d!.currency ? " " + d!.currency : ""}`;
+      const extra = d!.deliveryDays != null ? ` — توريد ${d!.deliveryDays} يوم` : "";
+      return `• ${label}: ${price}${extra}`;
+    });
+    const unpriced = items.length - priced.length;
+
+    await mirrorOutboundMessage({
+      phone,
+      rfqId,
+      supplierId: supplier.id,
+      body:
+        `📩 رد سعري من ${supplier.name} على الطلب ${rfqNo} — ${priced.length} بند مسعّر` +
+        (unpriced > 0 ? ` (${unpriced} بند بدون سعر)` : "") +
+        `\n${lines.join("\n")}`,
+    });
+  } catch (err) {
+    logger.warn({ err, rfqId }, "Supplier quote mirror to console failed — non-fatal");
+  }
+}
+
+export async function handleSupplierBotMessage(
+  phone: string,
+  msg: ServerMessage,
+): Promise<boolean> {
+  if (!supplierBotEnabled()) return false;
+
+  const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
+  const isBotPayload = payload.startsWith("sup_");
+  const text = msg.type === "text" ? (msg.text?.body ?? "").trim() : "";
+
+  // Resolve the supplier FIRST. An unregistered number gets the ordinary chat
+  // flow — the bot must not become a way for a stranger to browse anything.
+  const supplier = await supplierByPhone(phone);
+  if (!supplier) return false;
+
+  const session = await loadSession(phone);
+
+  // A `sup_` payload from a stale menu is still ours: answer with the menu
+  // rather than letting it fall through to the generic handler, which would
+  // look like the bot ignoring the tap.
+  if (!isBotPayload && !text) return false;
+
+  // We are about to consume this message, so the generic handler will never see
+  // it — record it ourselves, once, for every branch below.
+  await recordSupplierBotInbound({
+    phone,
+    waMessageId: msg.id,
+    msg,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    rfqId: session?.rfqId ?? null,
+  });
+
+  try {
+    // ── Explicit taps ────────────────────────────────────────────────────────
+    if (isBotPayload) {
+      const [head, a, b] = payload.split(":");
+
+      if (head === "sup_menu") {
+        if (a === "myrfqs") {
+          const open = await listSupplierOpenRequests(supplier.id);
+          await sendSupplierBotRequestList(phone, open, 1);
+          await clearSession(phone);
+          return true;
+        }
+        if (a === "back") {
+          await sendSupplierBotMainMenu(phone, supplier.name);
+          await clearSession(phone);
+          return true;
+        }
+        if (a === "help") {
+          await sendWhatsAppText(
+            phone,
+            "كيفية الاستخدام:\n" +
+              "1) اضغط «طلبات التسعير» لعرض طلباتكم المفتوحة.\n" +
+              "2) اختر الطلب ثم البند.\n" +
+              "3) أدخل السعر والبيانات المطلوبة.\n" +
+              "4) كرر لكل بند ثم اضغط «إرسال الرد».\n\n" +
+              "يمكنكم استكمال الرد في أي وقت — يُحفظ تلقائياً.",
+          );
+          return true;
+        }
+        if (a === "agent") {
+          await requestHumanAgent(phone, supplier.id, session?.rfqId ?? null);
+          return true;
+        }
+        return true;
+      }
+
+      if (head === "sup_page") {
+        const page = Number(a) || 1;
+        const open = await listSupplierOpenRequests(supplier.id);
+        await sendSupplierBotRequestList(phone, open, page);
+        return true;
+      }
+
+      if (head === "sup_rfq") {
+        const rfqId = Number(a);
+        if (!Number.isFinite(rfqId)) return true;
+        // Authorise at the moment of USE, not when the menu was drawn: the
+        // request may have been closed or re-sent since.
+        const allowed = await supplierMayAnswer(supplier.id, rfqId);
+        if (!allowed.ok) {
+          await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
+          const open = await listSupplierOpenRequests(supplier.id);
+          await sendSupplierBotRequestList(phone, open, 1);
+          return true;
+        }
+        const items = await listSupplierRequestItems(supplier.id, rfqId);
+        await saveSession({
+          phone,
+          supplierId: supplier.id,
+          rfqId,
+          rfqItemId: null,
+          step: null,
+        });
+        await sendSupplierBotItemList(
+          phone,
+          await rfqNoOf(rfqId),
+          items.map((it) => ({
+            id: it.id,
+            label: itemLabel(it),
+            qty: it.qty,
+            uom: it.uom,
+            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+          })),
+          1,
+        );
+        return true;
+      }
+
+      if (head === "sup_ipage") {
+        const page = Number(a) || 1;
+        if (!session?.rfqId) return true;
+        const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+        await sendSupplierBotItemList(
+          phone,
+          await rfqNoOf(session.rfqId),
+          items.map((it) => ({
+            id: it.id,
+            label: itemLabel(it),
+            qty: it.qty,
+            uom: it.uom,
+            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+          })),
+          page,
+        );
+        return true;
+      }
+
+      if (head === "sup_back") {
+        if (a === "items" && session?.rfqId) {
+          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+          await sendSupplierBotItemList(
+            phone,
+            await rfqNoOf(session.rfqId),
+            items.map((it) => ({
+              id: it.id,
+              label: itemLabel(it),
+              qty: it.qty,
+              uom: it.uom,
+              answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+            })),
+            1,
+          );
+          await saveSession({
+            phone,
+            supplierId: supplier.id,
+            rfqId: session.rfqId,
+            rfqItemId: null,
+            step: null,
+          });
+          return true;
+        }
+        await sendSupplierBotMainMenu(phone, supplier.name);
+        await clearSession(phone);
+        return true;
+      }
+
+      if (head === "sup_item") {
+        const itemId = Number(a);
+        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
+        await showItemDetail(phone, supplier.id, session.rfqId, itemId);
+        return true;
+      }
+
+      if (head === "sup_avail") {
+        const itemId = Number(a);
+        const available = b === "1";
+        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
+        await upsertDraft(supplier.id, session.rfqId, itemId, {
+          availability: available ? "available" : "unavailable",
+        });
+        if (!available) {
+          // «غير متاح» ends the item — there is nothing to price. Say so and
+          // return to the list, where the item now reads as answered.
+          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+          await sendWhatsAppText(phone, "تم تسجيل أن البند غير متاح. اختر بنداً آخر أو أرسل الرد.");
+          await sendSupplierBotItemList(
+            phone,
+            await rfqNoOf(session.rfqId),
+            items.map((it) => ({
+              id: it.id,
+              label: itemLabel(it),
+              qty: it.qty,
+              uom: it.uom,
+              answered:
+                it.draft?.availability === "unavailable" ||
+                (it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0),
+            })),
+            1,
+          );
+          await saveSession({
+            phone,
+            supplierId: supplier.id,
+            rfqId: session.rfqId,
+            rfqItemId: null,
+            step: null,
+          });
+          return true;
+        }
+        // Available → ask for the price, the one field that makes it an offer.
+        await saveSession({
+          phone,
+          supplierId: supplier.id,
+          rfqId: session.rfqId,
+          rfqItemId: itemId,
+          step: "await_price",
+        });
+        await sendWhatsAppText(
+          phone,
+          stepPrompt("await_price", await itemLabelOf(session.rfqId, itemId)),
+        );
+        return true;
+      }
+
+      if (head === "sup_confirm") {
+        const confirmed = a === "1";
+        if (!session?.rfqId) return true;
+        if (!confirmed) {
+          await sendWhatsAppText(
+            phone,
+            "تمام، تم الحفظ. يمكنك استكمال الرد في أي وقت من «طلبات التسعير».",
+          );
+          await clearSession(phone);
+          return true;
+        }
+        const result = await confirmDrafts(supplier.id, session.rfqId);
+        if (!result.ok) {
+          const why =
+            result.reason === "no_priced_items"
+              ? "لم تقم بإدخال أي سعر بعد. أدخل سعراً لبند واحد على الأقل ثم أرسل الرد."
+              : "تعذّر حفظ الرد حالياً. حاول مرة أخرى بعد قليل.";
+          await sendWhatsAppText(phone, why);
+          return true;
+        }
+        const rfqNo = await rfqNoOf(session.rfqId);
+        await sendWhatsAppText(
+          phone,
+          `✅ تم إرسال ردكم على الطلب ${rfqNo} (${result.savedItems} بند).\n` +
+            "سيتم مراجعته من قبل الموظف المسؤول وسنوافيكم بالنتيجة.",
+        );
+        // Put the submitted prices in the console thread. The employee reviews
+        // the offer THERE; without this the thread shows a bare acknowledgement
+        // and the employee has to open the RFQ screen to learn what was quoted.
+        await mirrorSupplierQuoteToConsole(supplier, phone, session.rfqId, rfqNo);
+        // Tell the responsible employee. Best-effort: the offer is already
+        // saved, and a notification failure must not look like a failed reply.
+        void notifyResponsibleEmployee(
+          supplier.id,
+          session.rfqId,
+          result.savedItems ?? 0,
+          result.approvalsCleared ?? 0,
+        );
+        await clearSession(phone);
+        return true;
+      }
+
+      return true;
+    }
+
+    // ── Free text: either a step answer or a request to open the bot ─────────
+    if (session?.step && session.rfqId && session.rfqItemId) {
+      const allowed = await supplierMayAnswer(supplier.id, session.rfqId);
+      if (!allowed.ok) {
+        await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
+        await clearSession(phone);
+        return true;
+      }
+      await advanceStep(phone, supplier.id, session.rfqId, session.rfqItemId, session.step, text);
+      return true;
+    }
+
+    // No active step: any plain text from a supplier opens the main menu. The
+    // message was already recorded and mirrored above, so answering here loses
+    // nothing from the console's point of view.
+    await sendSupplierBotMainMenu(phone, supplier.name);
+    return true;
+  } catch (err) {
+    logger.error({ err, phone }, "Supplier bot handling error");
+    // Swallow: the inbound message was recorded before this point, and a bot
+    // fault must not surface as silence.
+    return true;
+  }
+}
+
+/** Send one item's detail screen. */
+async function showItemDetail(
+  phone: string,
+  supplierId: number,
+  rfqId: number,
+  itemId: number,
+): Promise<void> {
+  const items = await listSupplierRequestItems(supplierId, rfqId);
+  const item = items.find((i) => i.id === itemId);
+  if (!item) {
+    await sendWhatsAppText(phone, "هذا البند لم يعد موجوداً في الطلب.");
+    return;
+  }
+  await sendSupplierBotItemDetail(phone, await rfqNoOf(rfqId), {
+    id: item.id,
+    lineItem: item.lineItem,
+    partNo: item.partNo,
+    description: item.description,
+    uom: item.uom,
+    qty: item.qty,
+    referencePrice: null,
+  });
+}
+
+async function itemLabelOf(rfqId: number, itemId: number): Promise<string> {
+  const [row] = await db
+    .select({
+      partNo: rfqItemsTable.partNo,
+      lineItem: rfqItemsTable.lineItem,
+      description: rfqItemsTable.description,
+    })
+    .from(rfqItemsTable)
+    .where(and(eq(rfqItemsTable.rfqId, rfqId), eq(rfqItemsTable.id, itemId)))
+    .limit(1);
+  return row ? itemLabel(row) : `#${itemId}`;
+}
+
+async function rfqNoOf(rfqId: number): Promise<string> {
+  const [row] = await db
+    .select({ no: rfqTable.internalRfqNo })
+    .from(rfqTable)
+    .where(eq(rfqTable.id, rfqId))
+    .limit(1);
+  return row?.no ?? `#${rfqId}`;
+}
+
+/**
+ * Apply one free-text answer to the item's draft and ask the next question.
+ *
+ * The ladder is walked one field at a time; «تخطي» advances an OPTIONAL field
+ * without a value. The price is the only field that must parse — re-asking on an
+ * unparsable price is correct, while storing a 0 would create a fake zero quote.
+ */
+async function advanceStep(
+  phone: string,
+  supplierId: number,
+  rfqId: number,
+  itemId: number,
+  step: BotStep,
+  text: string,
+): Promise<void> {
+  const label = await itemLabelOf(rfqId, itemId);
+  const skip = isSkip(text);
+
+  switch (step) {
+    case "await_price": {
+      const price = parsePrice(text);
+      if (price == null) {
+        await sendWhatsAppText(phone, "لم أتعرف على السعر. اكتب السعر بالأرقام فقط، مثال: 120");
+        return;
+      }
+      await upsertDraft(supplierId, rfqId, itemId, { unitPrice: price, currency: "EGP" });
+      break;
+    }
+    case "await_delivery": {
+      if (!skip) {
+        const days = parseDeliveryDays(text);
+        if (days == null) {
+          await sendWhatsAppText(phone, "اكتب عدد الأيام بالأرقام، مثال: 7 — أو «تخطي».");
+          return;
+        }
+        await upsertDraft(supplierId, rfqId, itemId, { deliveryDays: days });
+      }
+      break;
+    }
+    case "await_origin":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { originCountry: text });
+      break;
+    case "await_brand":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { brand: text });
+      break;
+    case "await_notes":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { notes: text });
+      break;
+  }
+
+  const idx = STEP_ORDER.indexOf(step);
+  const next = STEP_ORDER[idx + 1];
+  if (next) {
+    await saveSession({ phone, supplierId, rfqId, rfqItemId: itemId, step: next });
+    await sendWhatsAppText(phone, stepPrompt(next, label));
+    return;
+  }
+
+  // Item complete — show what was recorded, then offer the next step so the
+  // supplier is never left at a dead end.
+  const drafts = await loadDrafts(supplierId, rfqId);
+  const d = drafts.get(itemId);
+  await saveSession({ phone, supplierId, rfqId, rfqItemId: null, step: null });
+  await sendSupplierBotItemSummary(phone, label, {
+    availability: d?.availability ?? "available",
+    unitPrice: d?.unitPrice ?? null,
+    currency: d?.currency ?? null,
+    deliveryDays: d?.deliveryDays ?? null,
+    originCountry: d?.originCountry ?? null,
+    brand: d?.brand ?? null,
+    notes: d?.notes ?? null,
+  });
+  const items = await listSupplierRequestItems(supplierId, rfqId);
+  await sendSupplierBotItemList(
+    phone,
+    await rfqNoOf(rfqId),
+    items.map((it) => ({
+      id: it.id,
+      label: itemLabel(it),
+      qty: it.qty,
+      uom: it.uom,
+      answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+    })),
+    1,
+  );
+  // And the confirmation screen, so «done» is always one tap away.
+  const summary = await summariseDrafts(supplierId, rfqId);
+  await sendSupplierBotConfirm(phone, await rfqNoOf(rfqId), {
+    pricedCount: summary.pricedCount,
+    totalCount: summary.totalCount,
+    answeredLabels: summary.answered.map((x) => x.label),
+    unansweredLabels: summary.unanswered.map((x) => x.label),
+  });
+}
+
+/**
+ * The supplier asked for a human. Hand the conversation to the responsible
+ * employee (or the supervisor ladder) and tell the supplier it is on the way.
+ */
+async function requestHumanAgent(
+  phone: string,
+  supplierId: number,
+  rfqId: number | null,
+): Promise<void> {
+  let owner: { employeeId: number | null; employeeName: string | null } = {
+    employeeId: null,
+    employeeName: null,
+  };
+  if (rfqId) {
+    const open = await openPricingRequestsForSupplier(supplierId);
+    const match = open.find((r) => r.rfqId === rfqId);
+    owner = { employeeId: match?.employeeId ?? null, employeeName: match?.employeeName ?? null };
+  }
+  await sendWhatsAppText(
+    phone,
+    owner.employeeName
+      ? `تم تحويل طلبك إلى ${owner.employeeName} وسيتواصل معك في أقرب وقت.`
+      : "تم تحويل طلبك إلى فريق المشتريات وسيتواصل معك أحد الموظفين في أقرب وقت.",
+  );
+  // Stop the automated questions so the human conversation is not interrupted
+  // by a price prompt.
+  await clearSession(phone);
+  // Tell the responsible employee DIRECTLY. The SSE broadcast below only reaches
+  // a portal page that happens to be open, so relying on it alone made the
+  // supplier's "someone will contact you" untrue whenever nobody was watching —
+  // the request sat unseen. The employee must be reachable on their own phone.
+  //
+  // The main-menu tap carries no request id, so there is often no owner to look
+  // up; fall back to a manager/admin rather than notifying nobody. The order is
+  // the same ladder the console assignment uses (owner → supervisor).
+  try {
+    const ownerPhone = await employeePhoneOf(owner.employeeId);
+    const fallback = ownerPhone ? null : await fallbackHumanAgentPhone();
+    const targetPhone = ownerPhone ?? fallback?.phone ?? null;
+    if (targetPhone) {
+      const [supplier] = await db
+        .select({ name: suppliersTable.name })
+        .from(suppliersTable)
+        .where(eq(suppliersTable.id, supplierId))
+        .limit(1);
+      await notifyEmployeeOfSupplierRequest(targetPhone, {
+        employeeName: owner.employeeName ?? fallback?.name ?? null,
+        supplierName: supplier?.name ?? "مورد",
+        rfqNo: rfqId ? await rfqNoOf(rfqId) : null,
+      });
+    } else {
+      logger.info(
+        { supplierId, rfqId, employeeId: owner.employeeId },
+        "Human-agent request: no employee phone to notify",
+      );
+    }
+  } catch (err) {
+    // The supplier was already told a human is coming; a notification failure
+    // must not turn that answer into an error.
+    logger.warn({ err, supplierId, rfqId }, "Human-agent request notification failed");
+  }
+  broadcastWaEvent({ type: "new_message", phone });
+}
+
+/** Notify the employee responsible for the request that a reply arrived. */
+async function notifyResponsibleEmployee(
+  supplierId: number,
+  rfqId: number,
+  pricedCount: number,
+  approvalsCleared = 0,
+): Promise<void> {
+  try {
+    const open = await openPricingRequestsForSupplier(supplierId);
+    const match = open.find((r) => r.rfqId === rfqId);
+    const [supplier] = await db
+      .select({ name: suppliersTable.name, phone: suppliersTable.phone })
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, supplierId))
+      .limit(1);
+    const rfqNo = await rfqNoOf(rfqId);
+    const items = await listSupplierRequestItems(supplierId, rfqId);
+    const employeePhone = await employeePhoneOf(match?.employeeId ?? null);
+    if (!employeePhone) {
+      logger.info({ rfqId, supplierId }, "Supplier reply: no employee phone to notify");
+      return;
+    }
+    await notifyEmployeeOfSupplierReply(employeePhone, {
+      employeeName: match?.employeeName ?? null,
+      rfqNo,
+      supplierName: supplier?.name ?? "مورد",
+      pricedCount,
+      totalCount: items.length,
+      approvalsCleared,
+    });
+  } catch (err) {
+    logger.warn({ err, rfqId }, "Supplier reply notification failed");
+  }
+}
+
+/** The dialable number of an employee, or null when they have none on file. */
+async function employeePhoneOf(employeeId: number | null): Promise<string | null> {
+  if (!employeeId) return null;
+  const [row] = await db
+    .select({ phone: employeesTable.phone })
+    .from(employeesTable)
+    .where(eq(employeesTable.id, employeeId))
+    .limit(1);
+  return row?.phone ?? null;
+}
+
+/**
+ * Who to notify when the supplier asks for a human but the request is unknown.
+ *
+ * The main-menu «التواصل مع موظف» tap carries NO request id — that is the common
+ * case, not the exception — so there is no responsible employee to look up. The
+ * notice must still reach SOMEONE, or the supplier's «سيتواصل معك أحد الموظفين»
+ * is a promise nobody keeps. Preference: an active manager, then an active
+ * admin, then any active employee with a phone on file.
+ */
+async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string | null } | null> {
+  const rows = await db
+    .select({
+      name: employeesTable.name,
+      phone: employeesTable.phone,
+      role: employeesTable.role,
+      isActive: employeesTable.isActive,
+    })
+    .from(employeesTable);
+  const reachable = rows.filter((r) => r.isActive !== false && r.phone);
+  const rank = (role: string) => (role === "manager" ? 0 : role === "admin" ? 1 : 2);
+  reachable.sort((a, b) => rank(a.role) - rank(b.role));
+  const first = reachable[0];
+  return first ? { phone: first.phone as string, name: first.name } : null;
+}
+
+/**
  * Handle an inbound message from a registered representative. Returns true if
  * handled (rep bot owns the message), false to let it fall through to the
  * normal chat flow. Triggers on: any text, or a list_reply/button_reply with a
@@ -1566,14 +2303,21 @@ async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise
   return true;
 }
 
-async function handleInboundMessage(
-  phoneID: string,
-  phone: string,
-  msg: ServerMessage,
-  senderName: string | undefined,
-  reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
-): Promise<void> {
-  const waMessageId = msg.id;
+/**
+ * Describe an inbound WhatsApp message as the console should show it.
+ *
+ * Extracted so the supplier bot and the generic handler render a message the
+ * SAME way. The bot answers before the generic handler runs, so it has to record
+ * the message itself; two copies of this mapping would drift and the same
+ * message would read differently depending on which path consumed it.
+ */
+function describeInboundBody(msg: ServerMessage): {
+  body: string;
+  mediaId: string | null;
+  mediaType: string | null;
+  mimeType: string | null;
+  filename: string | null;
+} {
   let body: string;
   let mediaId: string | null = null;
   let mediaType: string | null = null;
@@ -1649,6 +2393,18 @@ async function handleInboundMessage(
   } else {
     body = `[رسالة من نوع: ${msg.type}]`;
   }
+  return { body, mediaId, mediaType, mimeType, filename };
+}
+
+async function handleInboundMessage(
+  phoneID: string,
+  phone: string,
+  msg: ServerMessage,
+  senderName: string | undefined,
+  reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
+): Promise<void> {
+  const waMessageId = msg.id;
+  const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
 
   const allSuppliers = await db.select().from(suppliersTable);
   const matchedSupplier = allSuppliers.find((s) => {

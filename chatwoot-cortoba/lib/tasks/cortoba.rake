@@ -10,6 +10,17 @@
 # Cortoba's database: this container has no Cortoba credentials and must not
 # need any. Cortoba exports the thread; this side only writes to its own DB.
 namespace :cortoba do
+  desc "Provision account / admin / API inbox / tokens so Cortoba can connect (idempotent)"
+  task bootstrap: :environment do
+    result = Cortoba::Bootstrap.run!
+    if result[:skipped]
+      puts "[cortoba] bootstrap SKIPPED — #{result[:skipped]}"
+    else
+      puts "[cortoba] created: #{result[:created].join(', ').presence || '(none)'}"
+      puts "[cortoba] reused:  #{result[:reused].join(', ').presence || '(none)'}"
+    end
+  end
+
   desc "Provision the Cortoba conversation custom attributes (idempotent)"
   task attributes: :environment do
     account = Cortoba::Config.account
