@@ -19,6 +19,7 @@ import { logger } from "../../shared/logger";
 import { guardFor } from "../../shared/permissions";
 import { sendWhatsAppText } from "../communications/service";
 import { isChatwootConfigured as isBridgeConfigured, phoneForConversation } from "./bridge";
+import { gatewayHeaders } from "./client";
 
 const router: IRouter = Router();
 router.use("/chatwoot", guardFor("/chatwoot"));
@@ -43,6 +44,7 @@ async function chatwootFetch(path: string, init: RequestInit = {}): Promise<Resp
   return fetch(`${CHATWOOT_URL}${path}`, {
     ...init,
     headers: {
+      ...gatewayHeaders(),
       api_access_token: CHATWOOT_PLATFORM_TOKEN,
       "Content-Type": "application/json",
       ...(init.headers || {}),
