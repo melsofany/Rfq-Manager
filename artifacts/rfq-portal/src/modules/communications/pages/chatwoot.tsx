@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Loader2, AlertCircle, RefreshCw, ExternalLink } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2, AlertCircle, RefreshCw, ExternalLink, History } from "lucide-react";
 import WhatsAppPage from "./index";
 
 /**
@@ -51,6 +52,63 @@ const CONSOLE_ENTRY = `${CONSOLE_APP}/`;
 
 export default function ChatwootInboxPage() {
   const { t } = useLanguage();
+  const { employee } = useAuth();
+
+  // Importing the backlog writes to the console for EVERY supplier at once, so
+  // it is offered to admins and managers only — the same gate the endpoint
+  // enforces. The UI hiding it is a courtesy; the server is the boundary.
+  const canImportHistory = employee?.role === "admin" || employee?.role === "manager";
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
+
+  /**
+   * Replay our existing WhatsApp history into the console, one batch at a time.
+   *
+   * A single call cannot cover it: production holds thousands of messages, so
+   * the endpoint reports `nextCursor` and we keep going until it says it is
+   * done. The loop is bounded by the server's own cap, and a partial import is
+   * still progress — the messages are already there.
+   */
+  const importHistory = useCallback(async () => {
+    setImporting(true);
+    setImportNote(null);
+    try {
+      let cursor: number | undefined;
+      let total = 0;
+      for (let round = 0; round < 60; round += 1) {
+        const res = await fetch("/api/chatwoot/backfill", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cursor }),
+        });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as {
+          messagesCreated: number;
+          messagesSkipped: number;
+          nextCursor: number | null;
+          complete: boolean;
+        };
+        total += data.messagesCreated;
+        setImportNote(`جارٍ الاستيراد… أُضيفت ${total} رسالة`);
+        if (data.complete || !data.nextCursor) {
+          setImportNote(`تم استيراد ${total} رسالة من المحادثات القديمة. حدّث الصفحة لعرضها.`);
+          return;
+        }
+        cursor = data.nextCursor;
+      }
+      // Stopping early is a real outcome, not a failure — say so instead of
+      // claiming a finished import.
+      setImportNote(`تم استيراد ${total} رسالة. اضغط مرة أخرى لاستكمال الباقي.`);
+    } catch (err) {
+      setImportNote(err instanceof Error ? err.message : "تعذّر استيراد المحادثات القديمة");
+    } finally {
+      setImporting(false);
+    }
+  }, []);
   const [consoleSrc, setConsoleSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,6 +217,18 @@ export default function ChatwootInboxPage() {
             {t("nav.whatsapp")}
           </h1>
           <div className="flex items-center gap-2">
+            {canImportHistory && (
+              <button
+                type="button"
+                onClick={importHistory}
+                disabled={importing || loading}
+                className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
+                title="استيراد محادثات واتساب السابقة إلى الصندوق"
+              >
+                <History size={13} className={importing ? "animate-spin" : ""} />
+                استيراد المحادثات القديمة
+              </button>
+            )}
             <button
               type="button"
               onClick={openExternal}
@@ -180,6 +250,12 @@ export default function ChatwootInboxPage() {
             </button>
           </div>
         </div>
+
+        {importNote && (
+          <div className="px-4 py-1.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+            {importNote}
+          </div>
+        )}
 
         <div className="flex-1 relative overflow-hidden">
           {loading && (
