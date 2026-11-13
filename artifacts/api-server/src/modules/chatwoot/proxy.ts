@@ -32,7 +32,58 @@ import type { Duplex } from "node:stream";
 import { URL } from "node:url";
 import type { Request, Response } from "express";
 import { logger } from "../../shared/logger";
+import { loadAccess, allowsAny } from "../../shared/permissions";
 import { normalisePrefix, rewriteChatwootHtml } from "./html-rewrite";
+
+/**
+ * The console is reached through a BROWSER, so a rejection has to be something a
+ * browser can act on.
+ *
+ * `guardFor("/whatsapp")` — the guard on the API routes — answers a rejected
+ * request with JSON (`401 {"error":"Unauthorized"}`). That is right for a fetch
+ * and wrong for a document: the operator gets a page of JSON inside the console
+ * frame with no way back. This redirects to the app's login instead, which is
+ * what the SPA's own `ProtectedRoute` does for `/whatsapp`.
+ *
+ * Permission set is deliberately the SAME as `/whatsapp` in `ROUTE_GUARDS`: the
+ * console REPLACES that page, so anyone allowed to see the chat list is allowed
+ * to see the console, and nobody else is. A second, divergent rule here is how
+ * an unauthenticated visitor ends up looking at a login form for a product they
+ * have no account on.
+ */
+export function chatwootConsoleGuard() {
+  return async (req: Request, res: Response, next: () => void): Promise<void> => {
+    const toLogin = (): void => {
+      // Only a document navigation should be redirected; an XHR (the console's
+      // own `/api/v1`, its websocket handshake) gets a status it can handle.
+      const wantsHtml = String(req.headers.accept || "").includes("text/html");
+      if (wantsHtml && req.method === "GET") {
+        res.redirect(302, "/login");
+        return;
+      }
+      res.status(401).json({ error: "Unauthorized" });
+    };
+    try {
+      const session = (req as Request & { session?: { employeeId?: number } }).session;
+      if (!session?.employeeId) return toLogin();
+      const access = await loadAccess(session.employeeId);
+      if (!access) return toLogin();
+      if (!allowsAny(access, ["whatsapp", "whatsapp:chats"])) {
+        const wantsHtml = String(req.headers.accept || "").includes("text/html");
+        if (wantsHtml && req.method === "GET") res.redirect(302, "/");
+        else res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    } catch (err) {
+      // Fail CLOSED. A guard that lets the request through when its own lookup
+      // throws is not a guard: the console is the one surface where a failed
+      // permission read would expose every supplier conversation at once.
+      logger.error({ err }, "chatwoot console guard failed; refusing the request");
+      toLogin();
+    }
+  };
+}
 
 /** Hop-by-hop headers (RFC 7230 §6.1) must not be forwarded either way. */
 const HOP_BY_HOP = new Set([

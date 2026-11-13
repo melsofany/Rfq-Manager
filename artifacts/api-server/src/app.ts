@@ -14,6 +14,7 @@ import {
   chatwootProxyPrefix,
   chatwootProxyTarget,
   chatwootProxyMount,
+  chatwootConsoleGuard,
 } from "./modules/chatwoot/proxy";
 import { logger } from "./shared/logger";
 
@@ -123,7 +124,7 @@ app.use(
 const chatwootConsoleBase = chatwootProxyMount();
 const chatwootTarget = chatwootProxyTarget();
 if (chatwootTarget && chatwootConsoleBase) {
-  app.use(chatwootConsoleBase, (req, res, next) => {
+  app.use(chatwootConsoleBase, chatwootConsoleGuard(), (req, res, next) => {
     // Express strips the mount path from `req.url` but keeps `req.originalUrl`;
     // the proxy reads originalUrl, so the upstream still sees `/api/v1`,
     // `/cable` and `/vite/assets` exactly as it does standalone.
