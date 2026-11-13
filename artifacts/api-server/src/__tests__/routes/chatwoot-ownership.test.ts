@@ -55,6 +55,10 @@ describe("canonicalPhone", () => {
     expect(canonicalPhone("00201000000000")).toBe("201000000000");
     expect(canonicalPhone("201000000000")).toBe("201000000000");
     expect(canonicalPhone("01000000000")).toBe("201000000000");
+    // A Cairo LANDLINE: 10 digits, trunk 0, area 2. It has no mobile-length
+    // special case, so it stayed local and Chatwoot refused it — the last
+    // failure of the live replay.
+    expect(canonicalPhone("0227538195")).toBe("20227538195");
     expect(canonicalPhone("1000000000")).toBe("201000000000");
   });
 

@@ -66,8 +66,14 @@ export function isOwnChatwootMessage(id: number | undefined): boolean {
 export function canonicalPhone(phone: string): string {
   let c = (phone || "").replace(/[^\d]/g, "");
   if (c.startsWith("00")) c = c.slice(2);
-  if (c.length === 11 && c.startsWith("0")) c = "2" + c;
-  if (c.length === 10 && c.startsWith("1")) c = "20" + c;
+  // A LOCAL Egyptian number: mobile `010…` (11 digits) and landline `02…`
+  // (10 digits) both carry a trunk `0`, which is dropped in the international
+  // form. The landline branch was missing, so `0227538195` stayed local and
+  // Chatwoot refused it with «Phone number should be in e164 format» — the last
+  // remaining failure of the live replay.
+  if (c.startsWith("0")) c = "2" + c;
+  // A bare mobile without the trunk zero (`1000000000`).
+  else if (c.length === 10 && c.startsWith("1")) c = "20" + c;
   return c;
 }
 
