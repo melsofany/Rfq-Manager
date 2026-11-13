@@ -53,6 +53,29 @@ export default function ChatwootInboxPage() {
           return;
         }
 
+        // Reuse an existing console session before minting a new one.
+        //
+        // Every SSO mint creates a Chatwoot session and Chatwoot caps them
+        // (`MAX_USER_SESSIONS`, 25 by default). Minting on every page load
+        // reached that cap and the console answered "Active session limit
+        // reached" instead of loading — 25 sessions deep, all of them this
+        // same employee's own browser.
+        //
+        // The console writes its credentials to a JS-readable cookie
+        // (`cw_d_session_info`, set by `setAuthCredentials`) and replays them as
+        // `access-token`/`client`/`uid` headers — so an existing session can be
+        // detected from here, without spending a mint. The proxy widens that
+        // cookie's path to `/whatsapp` precisely so this page can read it.
+        //
+        // Only a REAL credential counts: an empty or truncated cookie means no
+        // session, and minting is still correct. This must never become a
+        // guess — a false positive would frame a console that never signs in.
+        if (hasConsoleSession()) {
+          setConsoleSrc(`${CONSOLE_PREFIX}/`);
+          setError(null);
+          return;
+        }
+
         const res = await fetch("/api/chatwoot/sso", { credentials: "include" });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -187,6 +210,33 @@ export default function ChatwootInboxPage() {
       </div>
     </Layout>
   );
+}
+
+/**
+ * Is there a live console session we can reuse instead of minting a new one?
+ *
+ * Chatwoot's dashboard stores its devise-token-auth credentials in the
+ * `cw_d_session_info` cookie — written by JS (`setAuthCredentials`), so it is
+ * deliberately NOT HttpOnly and this page can read it. Its path is widened to
+ * `/whatsapp` by the proxy, which is what makes it visible here at all.
+ *
+ * A credential is present only when the cookie parses AND carries the three
+ * headers the API needs. An empty or truncated value must read as "no session",
+ * because a false positive frames a console that can never sign in — a blank
+ * frame is worse than one extra mint.
+ */
+export function hasConsoleSession(): boolean {
+  try {
+    const raw = document.cookie
+      .split("; ")
+      .find((c) => c.startsWith("cw_d_session_info="))
+      ?.slice("cw_d_session_info=".length);
+    if (!raw) return false;
+    const creds = JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>;
+    return Boolean(creds["access-token"] && creds.client && creds.uid);
+  } catch {
+    return false;
+  }
 }
 
 /**
