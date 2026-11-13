@@ -5110,7 +5110,16 @@ Chatwoot يستخرج رقم الحساب من **موضع** المقطع في ا
   - `chatwootOwnsPath` = الاتحاد (ماذا يردّ عليه البروكسي)،
     `chatwootRequiresAuth` = المحمية (على ماذا يعمل الحارس).
 - **`/auth` هو نقطة دخول اللوحة نفسها** (`mount_devise_token_auth_for 'User', at:
-  'auth'`). نقصه = `auth/sign_in 404` و**لا يمكن تسجيل الدخول إطلاقًا** — حدث حيًّا.
+  'auth'`)، **وهو مسار SSO أيضًا**: رابط SSO يُبنى
+  `FRONTEND_URL + /app/login?email=…&sso_auth_token=…`، واللوحة تقرأ المعاملين في
+  `v3/helpers/RouteHelper.js` وتُرسلهما تلقائيًا في **`POST /auth/sign_in`**
+  (`v3/views/login/Index.vue`)، والخادم يستهلك الرمز في
+  `devise_overrides/sessions_controller.rb` (`process_sso_auth_token`). فنقص `/auth`
+  = `auth/sign_in 404` → اللوحة **تعرض نموذج الدخول اليدوي بدل الدخول التلقائي**.
+  حدث حيًّا بالضبط.
+  - **الـ404 كان من Express لا من Chatwoot**: catch-all في `app.ts` هو **GET فقط**،
+    فـPOST غير المطابق (مسار `/auth` قبل إصلاحه) يعطي 404 من Express. لذلك لا
+    تستنتج من رمز الحالة وحده — تحقّق من أي جهة صدر.
 - **`/dashboard` ليس مملوكًا لـChatwoot** رغم وجوده في `public/`: هو مسار SPA حقيقي
   لنا ويفوز.
 - **أي مسار عليا جديد في Chatwoot يجب إضافته** إلى إحدى المجموعتين وإلا 404 لميزة
