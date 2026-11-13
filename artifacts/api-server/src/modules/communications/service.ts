@@ -1863,6 +1863,32 @@ export async function notifyEmployeeOfSupplierReply(
 }
 
 /**
+ * Tell the responsible employee that a supplier asked for a human.
+ *
+ * Distinct from `notifyEmployeeOfSupplierReply`: no prices have arrived, so the
+ * message must ask the employee to open the conversation rather than to review a
+ * quote. It carries no figures at all — the supplier may still be mid-negotiation
+ * and a "requested a call" notice is not a place to leak a price.
+ */
+export async function notifyEmployeeOfSupplierRequest(
+  phone: string,
+  opts: {
+    employeeName?: string | null;
+    supplierName: string;
+    rfqNo?: string | null;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const who = opts.employeeName ? `${opts.employeeName}\n` : "";
+  const about = opts.rfqNo ? ` بخصوص طلب التسعير ${opts.rfqNo}` : "";
+  return sendWhatsAppText(
+    phone,
+    `${who}☎️ المورد «${opts.supplierName}» طلب التحدث مع موظف${about}.\n\n` +
+      `افتح محادثة المورد من شاشة الواتساب في النظام للرد عليه.`,
+  );
+}
+
+/**
  * Supplier request picker — the console bot's opening message.
  *
  * When a supplier messages us and their reply cannot be tied to a specific

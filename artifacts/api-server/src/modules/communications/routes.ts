@@ -47,6 +47,7 @@ import {
   sendSupplierBotItemSummary,
   sendSupplierBotConfirm,
   notifyEmployeeOfSupplierReply,
+  notifyEmployeeOfSupplierRequest,
 } from "./service";
 import {
   listSupplierOpenRequests,
@@ -1672,6 +1673,40 @@ async function requestHumanAgent(
   // Stop the automated questions so the human conversation is not interrupted
   // by a price prompt.
   await clearSession(phone);
+  // Tell the responsible employee DIRECTLY. The SSE broadcast below only reaches
+  // a portal page that happens to be open, so relying on it alone made the
+  // supplier's "someone will contact you" untrue whenever nobody was watching —
+  // the request sat unseen. The employee must be reachable on their own phone.
+  //
+  // The main-menu tap carries no request id, so there is often no owner to look
+  // up; fall back to a manager/admin rather than notifying nobody. The order is
+  // the same ladder the console assignment uses (owner → supervisor).
+  try {
+    const ownerPhone = await employeePhoneOf(owner.employeeId);
+    const fallback = ownerPhone ? null : await fallbackHumanAgentPhone();
+    const targetPhone = ownerPhone ?? fallback?.phone ?? null;
+    if (targetPhone) {
+      const [supplier] = await db
+        .select({ name: suppliersTable.name })
+        .from(suppliersTable)
+        .where(eq(suppliersTable.id, supplierId))
+        .limit(1);
+      await notifyEmployeeOfSupplierRequest(targetPhone, {
+        employeeName: owner.employeeName ?? fallback?.name ?? null,
+        supplierName: supplier?.name ?? "مورد",
+        rfqNo: rfqId ? await rfqNoOf(rfqId) : null,
+      });
+    } else {
+      logger.info(
+        { supplierId, rfqId, employeeId: owner.employeeId },
+        "Human-agent request: no employee phone to notify",
+      );
+    }
+  } catch (err) {
+    // The supplier was already told a human is coming; a notification failure
+    // must not turn that answer into an error.
+    logger.warn({ err, supplierId, rfqId }, "Human-agent request notification failed");
+  }
   broadcastWaEvent({ type: "new_message", phone });
 }
 
@@ -1719,6 +1754,31 @@ async function employeePhoneOf(employeeId: number | null): Promise<string | null
     .where(eq(employeesTable.id, employeeId))
     .limit(1);
   return row?.phone ?? null;
+}
+
+/**
+ * Who to notify when the supplier asks for a human but the request is unknown.
+ *
+ * The main-menu «التواصل مع موظف» tap carries NO request id — that is the common
+ * case, not the exception — so there is no responsible employee to look up. The
+ * notice must still reach SOMEONE, or the supplier's «سيتواصل معك أحد الموظفين»
+ * is a promise nobody keeps. Preference: an active manager, then an active
+ * admin, then any active employee with a phone on file.
+ */
+async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string | null } | null> {
+  const rows = await db
+    .select({
+      name: employeesTable.name,
+      phone: employeesTable.phone,
+      role: employeesTable.role,
+      isActive: employeesTable.isActive,
+    })
+    .from(employeesTable);
+  const reachable = rows.filter((r) => r.isActive !== false && r.phone);
+  const rank = (role: string) => (role === "manager" ? 0 : role === "admin" ? 1 : 2);
+  reachable.sort((a, b) => rank(a.role) - rank(b.role));
+  const first = reachable[0];
+  return first ? { phone: first.phone as string, name: first.name } : null;
 }
 
 /**

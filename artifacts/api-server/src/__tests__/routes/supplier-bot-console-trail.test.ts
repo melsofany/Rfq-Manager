@@ -18,6 +18,15 @@ const selectCalls: Array<{ table: unknown; args: unknown }> = [];
 const insertCalls: Array<{ table: unknown; values: Record<string, unknown> }> = [];
 const mirrorInboundCalls: Array<Record<string, unknown>> = [];
 const mirrorOutboundCalls: Array<Record<string, unknown>> = [];
+// Every `sendWhatsAppText` call, recorded with its recipient: the assertion that
+// matters for the human-agent notice is WHO was told, not merely that a message
+// was sent somewhere.
+const sendTextCalls: Array<{ to: string; body: string }> = [];
+// The employee notice is recorded at its own boundary. It lives INSIDE the
+// service module and calls `sendWhatsAppText` through the module-internal
+// binding, so overriding the export would not intercept it — the notification
+// itself must be observed instead.
+const employeeNoticeCalls: Array<Record<string, unknown>> = [];
 
 vi.mock("@workspace/db", () => {
   const supplier = { id: 7, name: "مورد الاختبار", phone: "201000000007" };
@@ -58,6 +67,14 @@ vi.mock("@workspace/db", () => {
     },
     supplierBotSessionsTable: { __table: "supplierBotSessionsTable", phone: "s.phone" },
     supplierItemDraftsTable: { __table: "supplierItemDraftsTable", id: "d.id" },
+    employeesTable: {
+      __table: "employeesTable",
+      id: "e.id",
+      name: "e.name",
+      phone: "e.phone",
+      role: "e.role",
+      isActive: "e.is_active",
+    },
     rfqTable: {
       __table: "rfqTable",
       id: "rfq.id",
@@ -107,6 +124,13 @@ vi.mock("../../modules/communications/service", async (importOriginal) => {
   // Keep the REAL module (its exports are imported at load time by routes.ts)
   // and override only the senders, so no test ever touches the WhatsApp API.
   const stub = async () => "wamid.stub";
+  // `sendWhatsAppText` RECORDS its recipient: the human-agent notice is only
+  // proven by showing the EMPLOYEE's number was messaged, which a bare stub
+  // cannot express.
+  const recordText = async (to: string, body: string) => {
+    sendTextCalls.push({ to: String(to), body: String(body) });
+    return "wamid.stub";
+  };
   return {
     ...actual,
     sendSupplierBotMainMenu: stub,
@@ -115,13 +139,28 @@ vi.mock("../../modules/communications/service", async (importOriginal) => {
     sendSupplierBotItemDetail: stub,
     sendSupplierBotItemSummary: stub,
     sendSupplierBotConfirm: stub,
-    sendWhatsAppText: stub,
+    sendWhatsAppText: recordText,
     sendWhatsAppInteractiveConfirmation: stub,
+    // Recorded at the notice's OWN boundary: it calls `sendWhatsAppText` through
+    // the module-internal binding, so overriding that export would not intercept
+    // it and the test would "prove" nothing.
+    notifyEmployeeOfSupplierRequest: async (
+      to: string,
+      opts: Record<string, unknown>,
+    ): Promise<string> => {
+      employeeNoticeCalls.push({ to, ...opts });
+      return "wamid.stub";
+    },
   };
 });
 
 vi.mock("../../modules/chatwoot/bridge", () => ({
   supplierByPhone: vi.fn(async () => ({ id: 7, name: "مورد الاختبار", phone: "201000000007" })),
+  // `requestHumanAgent` resolves the responsible employee through this list, so
+  // the mock must answer it or the notice would never be addressed to anyone.
+  openPricingRequestsForSupplier: vi.fn(async () => [
+    { rfqId: 55, rfqNo: "RFQ-2026-000055", employeeId: 4, employeeName: "سارة" },
+  ]),
   mirrorInboundMessage: vi.fn(async (o: Record<string, unknown>) => {
     mirrorInboundCalls.push(o);
   }),
@@ -145,6 +184,8 @@ beforeEach(() => {
   insertCalls.length = 0;
   mirrorInboundCalls.length = 0;
   mirrorOutboundCalls.length = 0;
+  sendTextCalls.length = 0;
+  employeeNoticeCalls.length = 0;
   for (const k of Object.keys(rowsByTable)) delete rowsByTable[k];
   vi.clearAllMocks();
 });
@@ -184,6 +225,49 @@ describe("the supplier bot leaves a trail the employee can read", () => {
   });
 });
 
+describe("a human-agent request actually reaches the employee", () => {
+  it("notifies the responsible employee on WhatsApp, not only the SSE stream", async () => {
+    // The supplier is told «تم تحويل طلبك إلى <الموظف> وسيتواصل معك». That
+    // promise was previously backed by an SSE broadcast alone, which reaches
+    // only a portal page that happens to be OPEN — with nobody watching, the
+    // request sat unseen while the supplier waited. The employee must be
+    // reached on their own phone.
+    rowsByTable.employeesTable = [{ phone: "201111111111" }];
+    rowsByTable.rfqTable = [{ id: 55, internalRfqNo: "RFQ-2026-000055" }];
+    rowsByTable.suppliersTable = [{ name: "مورد الاختبار" }];
+
+    const handled = await handleSupplierBotMessage("201000000007", {
+      id: "wamid.agent",
+      type: "interactive",
+      interactive: { button_reply: { id: "sup_menu:agent" } },
+    } as never);
+
+    expect(handled).toBe(true);
+    // The notice is addressed to the EMPLOYEE — the assertion that matters is
+    // WHO was told. A notice nobody receives is the defect under guard.
+    expect(employeeNoticeCalls.length).toBeGreaterThan(0);
+    expect(String(employeeNoticeCalls[0].to)).toBe("201111111111");
+    expect(String(employeeNoticeCalls[0].supplierName)).toContain("مورد الاختبار");
+  });
+
+  it("still answers the supplier when no employee phone is on file", async () => {
+    // A missing phone is a data gap, not a reason to leave the supplier with
+    // silence. The acknowledgement must still go out.
+    rowsByTable.employeesTable = [];
+
+    const handled = await handleSupplierBotMessage("201000000007", {
+      id: "wamid.agent2",
+      type: "interactive",
+      interactive: { button_reply: { id: "sup_menu:agent" } },
+    } as never);
+
+    expect(handled).toBe(true);
+    expect(employeeNoticeCalls.length).toBe(0);
+    const toSupplier = sendTextCalls.filter((c) => c.to === "201000000007");
+    expect(toSupplier.length).toBeGreaterThan(0);
+  });
+});
+
 describe("a submitted quote reaches the console", () => {
   it("puts the priced items in the thread, with the prices and the phone", async () => {
     // The employee reviews the offer in Chatwoot. A bare acknowledgement there
@@ -191,7 +275,6 @@ describe("a submitted quote reaches the console", () => {
     // itself has to be in the thread.
     const { mirrorSupplierQuoteToConsole } = await import("../../modules/communications/routes");
 
-    // The request must have been SENT to this supplier or the load is refused.
     rowsByTable.sentLogTable = [{ id: 1 }];
     rowsByTable.rfqItemsTable = [
       { id: 900, lineItem: "10", partNo: "PN-1", description: "قاطع 30A", uom: "قطعة", qty: "5" },
