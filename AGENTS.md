@@ -5025,3 +5025,55 @@ Chatwoot retries a slow webhook, which would double-send. The token check return
 before any action, so an unauthenticated request sends nothing. A 200 on that
 path is an ack, not evidence of authorization — verify the absence of the
 outbound send, not the status code.
+
+## تحقّق Chatwoot + بوت الموردين من الصفر (فرع feat/supplier-bot-and-chatwoot-install)
+
+تحقّق مستقلّ بلا الاعتماد على تقارير سابقة. أربعة عيوب حقيقية أُصلحت، كلٌّ بحارس
+**يفشل ضد الكود قبل الإصلاح** (مُتحقَّق بالـstash).
+
+### 1) حاجز التضمين في iframe عبر `*.onrender.com` — قياس لا تخمين
+
+- `onrender.com` مُدرَج في **قائمة النطاقات العامة** (PSL) ⇒
+  `cortoba-rfq.onrender.com` و`cortoba-chatwoot.onrender.com` **موقعان مستقلان**،
+  فالكوكي داخل الـiframe طرف ثالث ⇒ لا تُرسَل ولا تُخزَّن.
+- **الدليل**: الـiframe يُحمَّل ويُنفّذ `POST /auth/sign_in` بنجاح (سجل الخادم:
+  `Enqueued UserSessionIpLookupJob`) **ثم تعود الواجهة لصفحة الدخول** و
+  `localStorage` يبقى فارغًا. هذا سلوك منصة، **لا عيب كود** — لا يُصلح بتعديل Chatwoot.
+- الحلّان: (أ) تاب منفصل (يعمل الآن، Chatwoot يصبح طرفًا أول)،
+  (ب) نطاق مخصّص same-site (جذري، يحتاج موافقة DNS).
+
+### 2) توكن SSO أحادي الاستخدام كان يترك رابط «فتح في نافذة منفصلة» ميتًا
+
+- التوكن يُحذف من Redis عند أول `POST /auth/sign_in` (مُثبت: استهلاك أول 200،
+  ثانٍ **401**). الـiframe يستهلكه عند التحميل، فالزر `<a href={iframeUrl}>`
+  يفتح رابطًا ميتًا ⇒ يُقرأ كـ«اللوحة لا تفتح».
+- الإصلاح: الزر يصدر **رابطًا طازجًا** من `/api/chatwoot/sso` عند الضغط.
+- الحارس: `chatwoot-fallback.test.tsx` يقارن الرابط المفتوح بالرابط المُستهلك
+  ويرفض تطابقهما (**1 failed** قبل الإصلاح).
+
+### 3) «التواصل مع موظف» كان وعدًا بلا وفاء
+
+- المورد يُقال له «سيتواصل معك أحد الموظفين» والكود يكتفي بـ`broadcastWaEvent`
+  (بث SSE لصفحة مفتوحة فقط). **وأخطر**: الزر من القائمة الرئيسية لا يحمل `rfqId`
+  ⇒ لا «موظف مسؤول» ⇒ لا إشعار في الحالة الشائعة.
+- الإصلاح: إشعار واتساب مباشر لرقم الموظف (`notifyEmployeeOfSupplierRequest`)،
+  بسلّم الأولوية نفسه الذي يستخدمه إسناد اللوحة (مسؤول → مشرف → أدمن → أي موظف).
+- الحارس في `supplier-bot-console-trail.test.ts` (**1 failed** قبل الإصلاح).
+- **درس اختبار الموك**: الإشعار يستدعي `sendWhatsAppText` عبر الربط الداخلي للوحدة،
+  فتجاوز التصدير **لا يعترضه** — يجب تسجيله عند حدّ `notifyEmployeeOfSupplierRequest`
+  نفسه، وإلا «أثبت» الاختبار شيئًا لم يحدث.
+
+### ما تم التحقق منه سليمًا (بلا تغيير)
+
+- **ترتيب المعالجات متطابق في مساري الويبهوك** (`Whatsapp.on.message` و
+  `dispatchWebhookPayload`): `reaction → ai → rep → supplierBot → workOrder → inbound`.
+- **عزل الموردين**: كل استعلامات البوت مقيّدة بـ`supplierId` في `WHERE` (لا فلتر لاحق).
+- **العرض يُكتب UNAPPROVED** — لا يُعتبر ردّ المورد عرضًا معتمدًا.
+- **السيناريوهات الستة** كلها موجودة ومعالَجة (`sup_menu` → myrfqs/help/agent،
+  `sup_rfq` → البنود، `sup_item`/`sup_avail` → الردود، `sup_confirm` → التأكيد).
+- **`data_services: failing` تقرير كاذب**: Postgres يعمل فعلًا (مُثبت:
+  `GET /platform/api/v1/accounts/3/account_users` → 200 بصفَّين). الفحص الأصلي
+  يستخدم `connection.active?` التي لا تتفق مع connection pooling عند الخمول.
+- **مسارات إرسال RFQ/PO لم تُمَس**: 8 أسطر محذوفة فقط (توقيع دالة أُعيد ترتيبه).
+
+الاختبارات: **2354 api-server** (كان 2352) + 82 واجهة تمر؛ tsc + prettier + البناء نظيف.
