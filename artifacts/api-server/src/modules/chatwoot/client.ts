@@ -55,6 +55,8 @@ export interface ChatwootMessage {
   created_at?: number;
   conversation_id?: number;
   sender?: { id?: number; type?: string; name?: string };
+  /** The original id a replay carried; how a backfill recognises its own rows. */
+  source_id?: string | null;
   attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;
 }
 
@@ -157,6 +159,7 @@ export async function createMessage(
   conversationId: number,
   content: string,
   direction: "incoming" | "outgoing",
+  meta: { externalCreatedAt?: string; sourceId?: string } = {},
 ): Promise<ChatwootMessage | undefined> {
   const res = await cw(`/conversations/${conversationId}/messages`, {
     method: "POST",
@@ -164,6 +167,17 @@ export async function createMessage(
       content,
       message_type: direction,
       private: false,
+      // Chatwoot's message builder reads these straight off the request
+      // (`Messages::MessageBuilder#message_params`), so a historical replay can
+      // keep the ORIGINAL time and carry the original id.
+      //
+      // `external_created_at` is what makes a backfill a backfill rather than a
+      // pile of messages all stamped "now"; `source_id` is the id the replay
+      // checks before inserting, so a second run adds nothing.
+      ...(meta.externalCreatedAt
+        ? { external_created_at: meta.externalCreatedAt }
+        : {}),
+      ...(meta.sourceId ? { source_id: meta.sourceId } : {}),
     }),
   });
   if (!res.ok) {
@@ -196,6 +210,25 @@ export interface ChatwootAgent {
 export type ConversationStatus = "open" | "pending" | "resolved";
 
 /** List the account's agents. Used to resolve an employee → agent mapping. */
+/**
+ * Has a message carrying this `source_id` already been mirrored?
+ *
+ * Chatwoot's `messages.source_id` is indexed but NOT unique, so a replay must
+ * ask before it inserts. Without this a second run of the backfill duplicates
+ * every message — and a duplicate is invisible in the UI until someone counts.
+ */
+export async function findMessageBySourceId(
+  conversationId: number,
+  sourceId: string,
+): Promise<ChatwootMessage | undefined> {
+  // The list endpoint is newest-first and paginated; a backfill inserts
+  // chronologically, so the rows it cares about are the most recent ones.
+  const res = await cw(`/conversations/${conversationId}/messages?page=1`);
+  if (!res.ok) return undefined;
+  const data = (await res.json()) as { payload?: ChatwootMessage[] };
+  return (data.payload ?? []).find((m) => m.source_id === sourceId);
+}
+
 export async function listAgents(): Promise<ChatwootAgent[]> {
   const res = await cw(`/agents`);
   if (!res.ok) {

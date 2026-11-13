@@ -44,6 +44,10 @@ vi.mock("../../middlewares/auth", () => ({
     req.session = { employeeId: employeeRow.id };
     next();
   },
+  // The module under test mounts routes with `requireRole` too; a mock that
+  // omits it fails at import with "requireRole is not a function" and every
+  // case in the file goes red for a reason unrelated to what it asserts.
+  requireRole: () => (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock("../../shared/permissions", () => ({
