@@ -14,7 +14,8 @@ import { Router, type IRouter } from "express";
 import { randomInt, randomBytes } from "node:crypto";
 import { db, employeesTable, whatsappChatsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "../../middlewares/auth";
+import { requireAuth, requireRole } from "../../middlewares/auth";
+import { backfillHistory } from "./backfill";
 import { logger } from "../../shared/logger";
 import { guardFor } from "../../shared/permissions";
 import { sendWhatsAppText } from "../communications/service";
@@ -198,6 +199,30 @@ router.get("/chatwoot/status", requireAuth, (_req, res): void => {
     inboxId: CHATWOOT_INBOX_ID || null,
   });
 });
+
+// POST /api/chatwoot/backfill — replay our existing WhatsApp history into the
+// console. Admin/manager only: it writes to the console for every supplier at
+// once, which is not something an operator should be able to trigger casually.
+//
+// Batched and resumable on purpose. Production holds thousands of messages, and
+// a single request that replays all of them would time out and leave no record
+// of where it got to. `nextCursor` is the resume point.
+router.post(
+  "/chatwoot/backfill",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const limit = Number(req.body?.limit ?? 0) || undefined;
+    const cursor = Number(req.body?.cursor ?? 0) || undefined;
+    try {
+      const result = await backfillHistory({ limit, cursor });
+      res.json(result);
+    } catch (err) {
+      logger.error({ err }, "Chatwoot history backfill failed");
+      res.status(500).json({ error: "تعذّر تنفيذ استرجاع المحادثات" });
+    }
+  },
+);
 
 // GET /api/chatwoot/sso — returns a one-time SSO URL for the current user.
 router.get("/chatwoot/sso", requireAuth, async (req, res): Promise<void> => {
