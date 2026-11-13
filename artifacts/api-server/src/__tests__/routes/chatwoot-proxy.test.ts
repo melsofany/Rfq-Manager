@@ -144,6 +144,12 @@ describe("path handling", () => {
       "/cable",
       "/vite/assets/dashboard.js",
       "/packs/js/app.js",
+      // The dashboard's own profile menu links here, so a gap 404s a real
+      // destination rather than an unused route.
+      "/super_admin",
+      "/super_admin/users",
+      "/favicon.ico",
+      "/manifest.json",
     ]) {
       expect(chatwootOwnsPath(p), p).toBe(true);
     }
