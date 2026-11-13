@@ -114,6 +114,23 @@ services:
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY
         value: cortoba_owner_name
+      # ── Private-console gate ──────────────────────────────────────────────
+      # The console is reachable ONLY through the Cortoba gateway, which
+      # proxies it same-origin under /whatsapp/console. Render cannot make a
+      # web service private on this plan (measured: the IP allow-list answers
+      # "only available for Enterprise workspaces"), so the wall is the
+      # overlay's own middleware.
+      #
+      # The secret is REQUIRED for the gate to arm; the value is set in the
+      # Render dashboard (sync:false) because a committed value would be a
+      # published password. The SAME value must be set on the cortoba-rfq
+      # service as CHATWOOT_GATEWAY_SECRET.
+      - key: CORTOBA_GATEWAY_SECRET
+        sync: false
+      # Endpoints Meta calls directly cannot carry our header, so they stay
+      # public by PATH. Nothing else is exempt.
+      - key: CORTOBA_GATEWAY_PUBLIC_PATHS
+        value: /webhooks/whatsapp,/webhooks/telegram
 
   - type: worker
     name: cortoba-chatwoot-worker
@@ -176,6 +193,23 @@ services:
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY
         value: cortoba_owner_name
+      # ── Private-console gate ──────────────────────────────────────────────
+      # The console is reachable ONLY through the Cortoba gateway, which
+      # proxies it same-origin under /whatsapp/console. Render cannot make a
+      # web service private on this plan (measured: the IP allow-list answers
+      # "only available for Enterprise workspaces"), so the wall is the
+      # overlay's own middleware.
+      #
+      # The secret is REQUIRED for the gate to arm; the value is set in the
+      # Render dashboard (sync:false) because a committed value would be a
+      # published password. The SAME value must be set on the cortoba-rfq
+      # service as CHATWOOT_GATEWAY_SECRET.
+      - key: CORTOBA_GATEWAY_SECRET
+        sync: false
+      # Endpoints Meta calls directly cannot carry our header, so they stay
+      # public by PATH. Nothing else is exempt.
+      - key: CORTOBA_GATEWAY_PUBLIC_PATHS
+        value: /webhooks/whatsapp,/webhooks/telegram
 
   - type: keyvalue
     name: cortoba-chatwoot-redis

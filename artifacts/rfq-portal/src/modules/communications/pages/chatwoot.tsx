@@ -1,37 +1,49 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import WhatsAppPage from "./index";
 
 /**
- * Chatwoot Inbox — يدمج واجهة Chatwoot داخل التطبيق عند مسار /whatsapp.
+ * Conversation console inside Cortoba, at /whatsapp.
  *
- * يقوم بطلب رابط SSO لمرة واحدة من الخادم، ثم يعرض واجهة Chatwoot بالكامل
- * داخل iframe يملأ المساحة المتاحة داخل قشرة التطبيق (Layout). المستخدم
- * يُسجَّل دخوله تلقائياً عبر SSO فلا حاجة لتسجيل دخول ثانٍ.
+ * The console is rendered from `/whatsapp/console` on the GATEWAY'S OWN ORIGIN,
+ * where a reverse proxy serves the private Chatwoot service. That is not a
+ * preference: `onrender.com` is on the Public Suffix List, so the gateway and
+ * the Chatwoot service are different SITES — a frame from the upstream address
+ * would be third-party, its session cookie would be refused, and the agent
+ * would be logged out inside the frame forever. Same-origin makes the frame
+ * first-party, and lets the Chatwoot service stay private with no public
+ * entry point at all.
  *
- * Chatwoot صندوق وارد للوكلاء فقط: رسائل الواتساب تظل تمر عبر الـ webhook
- * الخاص بنا (وهو ما يشغّل إرسال طلبات التسعير وأوامر الشراء وبوت المندوبين
- * والمساعد الذكي)، ويتم نسخ المحادثات إلى Chatwoot للعرض والرد.
+ * No direct link to the Chatwoot service is exposed and no login is ever shown:
+ * the server mints a one-time SSO link that the frame consumes on load.
  *
- * لو Chatwoot غير مُعدّ (أو تعذّر الاتصال) نُعيد المستخدم تلقائياً إلى صفحة
- * الدردشة الأصلية — فلا يفقد أحد إمكانية مراسلة الموردين أبداً.
+ * Supplier messages still travel through our own Meta webhook (which drives RFQ
+ * sending, PO dispatch, the representative bot and the AI assistant); Chatwoot
+ * only mirrors the conversation for the agents who handle it.
+ *
+ * An unconfigured or unreachable console falls back to the built-in chat, so an
+ * outage never leaves the agent with nowhere to answer suppliers.
  */
+
+/** Where the server mounts the proxied console, e.g. `/whatsapp/console`. */
+const CONSOLE_PREFIX = "/whatsapp/console";
+
 export default function ChatwootInboxPage() {
   const { t } = useLanguage();
-  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const [consoleSrc, setConsoleSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [useLegacy, setUseLegacy] = useState(false);
-  const [openingExternal, setOpeningExternal] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        // Check configuration first: an unconfigured deployment must render the
-        // built-in chat immediately, not a flash of an error screen.
+        // Configuration first: an unconfigured deployment renders the built-in
+        // chat immediately, instead of a flash of an empty frame.
         const statusRes = await fetch("/api/chatwoot/status", { credentials: "include" });
         const status = statusRes.ok
           ? ((await statusRes.json()) as { configured?: boolean })
@@ -47,23 +59,15 @@ export default function ChatwootInboxPage() {
           throw new Error(data.error || `HTTP ${res.status}`);
         }
         const data = (await res.json()) as { url: string };
-        if (!cancelled) {
-          setIframeUrl(data.url);
-          setError(null);
-        }
+        if (cancelled) return;
+        setConsoleSrc(sameOriginConsolePath(data.url));
+        setError(null);
       } catch (err) {
-        // A console we cannot REACH must not take the page down with it.
-        //
-        // Configured-but-unreachable used to render an error screen, so an
-        // outage at Chatwoot left the agent with a dead page — while the
-        // built-in chat, which needs none of that, sat unused behind it. The
+        // A console we cannot REACH must not take the page down with it. The
         // supplier messages live in OUR database either way, so the built-in
-        // chat still works during a console outage; falling back is strictly
-        // better than showing an error the agent cannot act on.
-        //
-        // The error is kept so the built-in view can explain what happened.
+        // chat still works during a console outage.
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "فشل الاتصال بـ Chatwoot");
+          setError(err instanceof Error ? err.message : "فشل الاتصال بصندوق المحادثات");
           setUseLegacy(true);
         }
       } finally {
@@ -73,62 +77,44 @@ export default function ChatwootInboxPage() {
     return () => {
       cancelled = true;
     };
+  }, [reloadKey]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    setUseLegacy(false);
+    setConsoleSrc(null);
+    setReloadKey((k) => k + 1);
   }, []);
 
-  // The SSO URL is SINGLE-USE: the iframe consumes its token the moment it
-  // loads. Reusing that same href for the "open in a new tab" link therefore
-  // opens a DEAD link (measured: second consumption → 401), which reads as a
-  // broken console. Mint a FRESH one-time link on click instead.
-  //
-  // A new tab is also the reliable path when third-party cookies are blocked:
-  // the console is then first-party, so its session cookie is accepted.
-  const openExternal = async () => {
-    setOpeningExternal(true);
-    try {
-      const res = await fetch("/api/chatwoot/sso", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { url: string };
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch {
-      // Fall back to the link we already hold rather than doing nothing.
-      window.open(iframeUrl ?? "", "_blank", "noopener,noreferrer");
-    } finally {
-      setOpeningExternal(false);
-    }
-  };
-
-  // Chatwoot unavailable (unconfigured OR unreachable) → the proven built-in
+  // Console unavailable (unconfigured OR unreachable) → the proven built-in
   // chat, so the agent always has somewhere to answer suppliers from.
   if (useLegacy) return <WhatsAppPage />;
 
   return (
     <Layout>
       <div className="flex flex-col h-[calc(100vh-57px)] bg-gray-50">
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-gray-200">
           <h1 className="text-base font-semibold text-gray-800 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500" />
             {t("nav.whatsapp")}
           </h1>
-          {iframeUrl && (
-            <button
-              type="button"
-              onClick={openExternal}
-              disabled={openingExternal}
-              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
-            >
-              <ExternalLink size={13} />
-              {t("whatsapp.openExternal") || "فتح في نافذة منفصلة"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={retry}
+            disabled={loading}
+            className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            تحديث
+          </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 relative overflow-hidden">
           {loading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500">
               <Loader2 className="animate-spin" size={28} />
-              <p className="text-sm">جارٍ تحميل صندوق الدردشة…</p>
+              <p className="text-sm">جارٍ تحميل صندوق المحادثات…</p>
             </div>
           )}
 
@@ -138,21 +124,9 @@ export default function ChatwootInboxPage() {
                 <AlertCircle className="text-amber-600" size={26} />
               </div>
               <p className="text-sm font-medium text-gray-700 max-w-md">{error}</p>
-              <p className="text-xs text-gray-400 max-w-md leading-relaxed">
-                تأكّد من أن خدمة Chatwoot تعمل ومن ضبط المتغيرات البيئية:
-                <code className="mx-1 px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">
-                  CHATWOOT_URL
-                </code>
-                <code className="mx-1 px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">
-                  CHATWOOT_ACCOUNT_ID
-                </code>
-                <code className="mx-1 px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">
-                  CHATWOOT_PLATFORM_TOKEN
-                </code>
-              </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={retry}
                   className="mt-2 px-4 py-1.5 text-xs bg-gray-800 text-white rounded-md hover:bg-gray-700"
                 >
                   إعادة المحاولة
@@ -167,10 +141,11 @@ export default function ChatwootInboxPage() {
             </div>
           )}
 
-          {iframeUrl && !error && (
+          {consoleSrc && !error && (
             <iframe
-              src={iframeUrl}
-              title="Chatwoot Inbox"
+              key={consoleSrc}
+              src={consoleSrc}
+              title="Conversations"
               className="absolute inset-0 w-full h-full border-0"
               allow="clipboard-read; clipboard-write"
             />
@@ -179,4 +154,22 @@ export default function ChatwootInboxPage() {
       </div>
     </Layout>
   );
+}
+
+/**
+ * Re-point a Chatwoot SSO URL at our own origin's console path.
+ *
+ * Chatwoot mints the link from its OWN host, so following it verbatim would
+ * navigate the frame off the gateway — a different site whose session cookie is
+ * refused. Only the path is kept, because the proxy serves the console here.
+ * An unparseable link is returned unchanged: a malformed value must degrade to
+ * "the upstream link" rather than to an empty frame.
+ */
+export function sameOriginConsolePath(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return `${CONSOLE_PREFIX}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return url;
+  }
 }

@@ -9,6 +9,12 @@ import { existsSync } from "fs";
 import { getPool } from "@workspace/db";
 import router from "./routes";
 import admsRouter from "./modules/hr/adms";
+import {
+  proxyChatwootRequest,
+  chatwootProxyPrefix,
+  chatwootProxyTarget,
+  chatwootProxyMount,
+} from "./modules/chatwoot/proxy";
 import { logger } from "./shared/logger";
 
 const app: Express = express();
@@ -100,6 +106,37 @@ app.use(
     },
   }),
 );
+
+// ─── Chatwoot console, served on OUR origin under a path prefix ──────────────
+//
+// Mounted HERE — before the body parsers — because the console uploads files
+// and posts forms: `express.json()` would consume the stream and the proxy
+// would forward an empty body. It is also the reason the mount sits outside
+// `/api`: the console's own `/api/v1` must never collide with Cortoba's router.
+//
+// Serving the console from our own origin is not a preference. `onrender.com`
+// is on the Public Suffix List, so the gateway and the Chatwoot service are
+// DIFFERENT SITES; a console framed from the second into the first is a
+// third-party frame and its session cookie is refused. First-party hosting is
+// what makes the embedded login work, and it lets the Chatwoot service itself
+// stay PRIVATE with no public entry point.
+const chatwootConsoleBase = chatwootProxyMount();
+const chatwootTarget = chatwootProxyTarget();
+if (chatwootTarget && chatwootConsoleBase) {
+  app.use(chatwootConsoleBase, (req, res, next) => {
+    // Express strips the mount path from `req.url` but keeps `req.originalUrl`;
+    // the proxy reads originalUrl, so the upstream still sees `/api/v1`,
+    // `/cable` and `/vite/assets` exactly as it does standalone.
+    proxyChatwootRequest(req, res, {
+      target: chatwootTarget,
+      prefix: chatwootConsoleBase,
+    }).catch(next);
+  });
+  logger.info(
+    { target: chatwootTarget, at: chatwootConsoleBase },
+    "Chatwoot console proxy mounted",
+  );
+}
 
 // Capture the raw request body for routes that need to verify Meta's
 // X-Hub-Signature-256 webhook signature (see modules/communications/routes.ts).

@@ -20,6 +20,7 @@ module Cortoba
 end
 
 require "cortoba/config"
+require "cortoba/gateway"
 require "cortoba/custom_attributes"
 require "cortoba/bootstrap"
 require "cortoba/importer"

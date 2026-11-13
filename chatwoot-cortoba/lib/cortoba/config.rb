@@ -62,6 +62,41 @@ module Cortoba
       ENV.fetch("CORTOBA_ACCOUNT_NAME", "Cortoba").to_s.strip
     end
 
+    # ── Private-console gate ────────────────────────────────────────────────
+    #
+    # The console must be reachable ONLY through the Cortoba gateway, which
+    # proxies it same-origin under /whatsapp. The service therefore answers
+    # nothing to a direct visitor — no login page, no API — even though Render's
+    # free/team tiers give no way to make a web service private (verified: the
+    # IP allow-list is Enterprise-only, and a service's type cannot be changed
+    # after creation).
+    #
+    # The gate is OFF unless a secret is configured, so a stack that has not
+    # asked for it keeps upstream's behaviour and cannot be locked out by an
+    # empty environment.
+    def gateway_secret
+      ENV.fetch("CORTOBA_GATEWAY_SECRET", "").to_s.strip
+    end
+
+    def gateway_enabled?
+      !gateway_secret.empty?
+    end
+
+    # Requests that must stay reachable from the PUBLIC internet, whatever the
+    # gate says. These are callers that cannot carry our header:
+    #
+    #   * Meta's WhatsApp webhook, which Chatwoot verifies with its own signature;
+    #   * health probes;
+    #   * the marketing site's "contact us" form, when configured.
+    #
+    # A prefix here is a deliberate hole in the wall, so the list is explicit,
+    # commented and env-overridable — never a wildcard.
+    def gateway_public_paths
+      configured = ENV.fetch("CORTOBA_GATEWAY_PUBLIC_PATHS", "").to_s.split(",").map(&:strip)
+      defaults = ["/health", "/webhooks/whatsapp", "/webhooks/telegram"]
+      (defaults + configured).reject(&:empty?).uniq
+    end
+
     # Custom attributes are account-scoped, so the overlay must resolve the SAME
     # account Cortoba's bridge talks to.
     #

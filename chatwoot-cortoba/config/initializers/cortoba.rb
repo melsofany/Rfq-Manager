@@ -18,6 +18,28 @@
 # missing one column in its UI.
 require "cortoba"
 
+# ── The console answers ONLY the Cortoba gateway ────────────────────────────
+#
+# Inserted at the TOP of the middleware stack, before anything can render a page
+# or answer an API call. A gate mounted later would let a request do work (and
+# possibly leak a login page) before being refused.
+#
+# It is inert until CORTOBA_GATEWAY_SECRET is set, so no existing deployment
+# changes behaviour merely by taking this build.
+if Cortoba::Config.gateway_enabled?
+  Rails.application.config.middleware.insert_before 0, Cortoba::Gateway::Middleware
+
+  Rails.logger.info(
+    "[cortoba] private-console gate armed (public paths: " \
+    "#{Cortoba::Config.gateway_public_paths.join(', ')})"
+  )
+else
+  Rails.logger.info(
+    "[cortoba] private-console gate is OFF — set CORTOBA_GATEWAY_SECRET to " \
+    "answer only the gateway"
+  )
+end
+
 # ── Embedding the console inside the Cortoba app ────────────────────────────
 #
 # Chatwoot sends `X-Frame-Options: SAMEORIGIN`, so a browser REFUSES to render
