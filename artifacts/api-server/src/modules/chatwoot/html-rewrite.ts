@@ -114,7 +114,10 @@ export function rewriteChatwootHtml(html: string, opts: HtmlRewriteOptions): str
   const publicOrigin = `${host}${prefix}`;
 
   let out = stripBaseTags(html);
-  out = injectBase(out, base);
+  // At the root the document already resolves relative urls correctly, so the
+  // tag is skipped rather than injected as a no-op. Under a sub-path it is what
+  // makes them resolve to the console instead of the domain root.
+  if (prefix) out = injectBase(out, base);
   // MUST run before the config injection: the injected `apiHost` is an
   // absolute url with a scheme, which the ref rewrite correctly ignores — but
   // ordering it first keeps that a property of the value, not of the sequence.

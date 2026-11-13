@@ -140,10 +140,23 @@ describe("the console proxy requires an authenticated, permitted employee", () =
     );
     const gateIndex = source.indexOf("const gate = (req");
     expect(gateIndex, "the gate middleware must be defined").toBeGreaterThan(-1);
-    const gateBlock = source.slice(gateIndex, gateIndex + 300);
-    expect(gateBlock, "the gate must invoke the guard").toMatch(/guard\(req, res/);
+    // Read to the END of the mount block, not a fixed window: the gate now has
+    // a static-asset branch before the guard, and a fixed-length slice stopped
+    // short of the `guard(...)` call while the guard was in fact still wired.
+    const gateBlock = source.slice(
+      gateIndex,
+      source.indexOf("app.use(chatwootConsoleBase", gateIndex),
+    );
+    expect(gateBlock, "the gate must invoke the guard for supplier data").toMatch(
+      /guard\(req, res/,
+    );
     expect(gateBlock, "the gate must only claim Chatwoot's paths").toMatch(
       /chatwootOwnsPath\(req\.path\)/,
+    );
+    // The asset branch is the fix for `manifest.json 401` and the console's own
+    // JS being refused; without it every page loads with 401s in the log.
+    expect(gateBlock, "assets must bypass the permission check").toMatch(
+      /chatwootRequiresAuth\(req\.path\)/,
     );
   });
 });

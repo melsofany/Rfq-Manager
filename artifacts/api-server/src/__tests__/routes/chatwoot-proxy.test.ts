@@ -11,6 +11,7 @@ import {
   chatwootProxyMount,
   chatwootProxyTarget,
   chatwootOwnsPath,
+  chatwootRequiresAuth,
 } from "../../modules/chatwoot/proxy";
 
 /**
@@ -164,6 +165,55 @@ describe("path handling", () => {
       "/iclock/cdata",
     ]) {
       expect(chatwootOwnsPath(p), p).toBe(false);
+    }
+  });
+
+  it("forwards the console's OWN login endpoint, and guards it", () => {
+    // `mount_devise_token_auth_for 'User', at: 'auth'`. The dashboard calls it
+    // directly, so a gap here means the console can never sign anyone in — the
+    // live symptom was `auth/sign_in 404` on the login form.
+    expect(chatwootOwnsPath("/auth/sign_in")).toBe(true);
+    expect(chatwootRequiresAuth("/auth/sign_in")).toBe(true);
+    // `/dashboard` is a path under Chatwoot's public/ AND a real route of our
+    // SPA. Ours must win, or the portal's dashboard page disappears.
+    expect(chatwootOwnsPath("/dashboard")).toBe(false);
+  });
+
+  it("does NOT charge the permission check for static assets", () => {
+    // Measured live: the login page reported `manifest.json 401`, and the
+    // console's own JS under /vite was refused the same way — failures that
+    // surface as unrelated bugs. The check is also a DATABASE lookup, so
+    // charging it per asset would make every screen slow.
+    for (const p of [
+      "/vite/assets/dashboard.js",
+      "/packs/js/app.js",
+      "/manifest.json",
+      "/favicon.ico",
+      "/sw.js",
+      "/audio/dashboard/ping.mp3",
+      "/brand-assets/logo.svg",
+    ]) {
+      expect(chatwootOwnsPath(p), p).toBe(true);
+      expect(chatwootRequiresAuth(p), p).toBe(false);
+    }
+  });
+
+  it("keeps supplier DATA behind the guard", () => {
+    // The other half of the rule: everything that exposes a supplier's
+    // conversation or attachment must still pass authentication AND the
+    // `whatsapp` permission.
+    for (const p of [
+      "/app/accounts/3/dashboard",
+      "/api/v1/accounts/3/conversations",
+      "/platform/api/v1/users",
+      "/auth/sign_in",
+      "/super_admin",
+      "/cable",
+      // ActiveStorage: the attachments suppliers send.
+      "/rails/active_storage/blobs/abc/quote.pdf",
+    ]) {
+      expect(chatwootOwnsPath(p), p).toBe(true);
+      expect(chatwootRequiresAuth(p), p).toBe(true);
     }
   });
 

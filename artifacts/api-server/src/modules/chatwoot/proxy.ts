@@ -156,23 +156,78 @@ export function chatwootProxyMount(): string {
 }
 
 /**
- * Does this request path belong to the Chatwoot console?
+ * Paths the console serves that carry NO business data.
+ *
+ * These must reach the console WITHOUT the gateway's permission check, for two
+ * reasons. A static asset request has no session to speak of, so the check
+ * answers 401 for every JS/CSS file the dashboard needs — measured live: the
+ * login page reported `manifest.json 401` and `/vite/assets/*.js 401`, and the
+ * console then fails in ways that look like unrelated bugs. And the check is a
+ * DATABASE lookup, so charging it for each of the dozens of assets a page loads
+ * would make every screen slow.
+ *
+ * Nothing here is supplier data: compiled bundles, system sounds, brand marks,
+ * icons and the PWA manifest. Everything that IS supplier data (`/api/v1`,
+ * `/rails` for attachments, `/app` for the conversations themselves) stays in
+ * `CHATWOOT_PROTECTED_PREFIXES`.
+ */
+const CHATWOOT_PUBLIC_PREFIXES = [
+  "/vite",
+  "/packs",
+  "/audio",
+  "/assets",
+  "/brand-assets",
+  "/downloads",
+  "/integrations",
+  "/favicon.ico",
+  "/favicon",
+  "/apple-icon",
+  "/apple-touch-icon",
+  "/android-icon",
+  "/ms-icon",
+  "/manifest.json",
+  "/sw.js",
+  "/browserconfig.xml",
+];
+
+/**
+ * Paths that expose supplier conversations, and therefore require the gateway's
+ * authentication AND its `whatsapp` permission.
+ *
+ * `/rails` is here deliberately: that is ActiveStorage, which serves the
+ * attachments suppliers send. Leaving it public would hand every file to anyone
+ * who can reach the host.
+ *
+ * `/auth` is here too. It is `mount_devise_token_auth_for 'User', at: 'auth'` —
+ * the console's OWN login endpoint. The dashboard calls it directly, so it must
+ * be forwarded, but it is not public: only an employee who already passed the
+ * gateway's check may attempt a console login.
+ */
+const CHATWOOT_PROTECTED_PREFIXES = [
+  "/app",
+  "/api/v1",
+  "/platform",
+  "/auth",
+  "/super_admin",
+  "/cable",
+  "/rails",
+];
+
+function matchesPrefix(path: string, prefixes: string[]): boolean {
+  return prefixes.some((p) => path === p || path.startsWith(`${p}/`));
+}
+
+/**
+ * Does this request path belong to the Chatwoot console at all?
  *
  * The console is mounted at the root, so the proxy would otherwise answer for
  * the whole deployment. This is the ONE description of the path space Chatwoot
- * actually serves; anything not listed falls through to the app's own API and
- * SPA.
+ * serves; anything not listed falls through to the app's own API and SPA.
  *
  * Derived from Chatwoot's `config/routes.rb` and its `public/` directory rather
- * than guessed: `/app` is the dashboard SPA (and its catch-all), `/api/v1` and
- * `/platform` are its APIs, `/cable` and `/rails` are its websockets, `/vite`
- * and `/packs` are its assets, `/super_admin` is the super-admin console the
- * dashboard's own profile menu links to, and the named files are the icons and
- * manifests the dashboard loads from the root.
- *
- * A NEW top-level path in Chatwoot must be added here, or that one feature will
- * 404 while the rest of the console keeps working — which is exactly the failure
- * this function exists to prevent, so keep it complete rather than minimal.
+ * than guessed. A NEW top-level path in Chatwoot must be added here, or that one
+ * feature 404s while the rest of the console keeps working — which is exactly
+ * the failure this function exists to prevent, so keep it complete.
  *
  * Deliberately NOT claimed, because nothing links to them from the dashboard
  * and each widens the exposed surface for no operational gain:
@@ -181,33 +236,26 @@ export function chatwootProxyMount(): string {
  *   `/bot`         Facebook Messenger's webhook. This deployment uses WhatsApp.
  *   `/api`         Chatwoot's bare index. It would ALSO collide with the app's
  *                  own `/api/*`, which must keep reaching the app's router.
- *   `/survey`, `/integrations`   unused here.
+ *   `/survey`      unused here.
+ *   `/dashboard`   a path under Chatwoot's `public/`, but also a real route of
+ *                  OUR SPA. Ours must win.
  */
-const CHATWOOT_ROOT_PREFIXES = [
-  "/app",
-  "/api/v1",
-  "/platform",
-  "/super_admin",
-  "/cable",
-  "/rails",
-  "/vite",
-  "/packs",
-  "/audio",
-  "/sw.js",
-  "/manifest.json",
-  "/robots.txt",
-  "/favicon.ico",
-  "/favicon",
-  "/apple-icon",
-  "/android-icon",
-  "/ms-icon",
-  "/browserconfig.xml",
-];
-
 export function chatwootOwnsPath(path: string): boolean {
-  return CHATWOOT_ROOT_PREFIXES.some(
-    (p) => path === p || path.startsWith(`${p}/`),
+  return (
+    matchesPrefix(path, CHATWOOT_PUBLIC_PREFIXES) ||
+    matchesPrefix(path, CHATWOOT_PROTECTED_PREFIXES)
   );
+}
+
+/**
+ * Does this path need the gateway's authentication and permission check?
+ *
+ * False for the console's static assets, which carry no business data and are
+ * requested dozens of times per page — charging a database lookup to each one
+ * would make the console slow for no security gain.
+ */
+export function chatwootRequiresAuth(path: string): boolean {
+  return matchesPrefix(path, CHATWOOT_PROTECTED_PREFIXES);
 }
 
 /**
