@@ -170,15 +170,21 @@ export function chatwootProxyMount(): string {
  * icons and the PWA manifest. Everything that IS supplier data (`/api/v1`,
  * `/rails` for attachments, `/app` for the conversations themselves) stays in
  * `CHATWOOT_PROTECTED_PREFIXES`.
+ *
+ * `/assets` and `/integrations` are deliberately ABSENT even though Chatwoot
+ * serves paths by those names. Both are ours: `/assets` is where Vite writes the
+ * portal's own bundles and `/integrations` is a real portal route. Claiming
+ * either for the console sent the portal's CSS and JS to Chatwoot, which
+ * answered HTML — the page then rendered unstyled with `404` on its own bundle.
+ * `chatwoot-prefix-collision.test.ts` reads the portal's routes and fails if any
+ * prefix here collides with one of them, so this cannot recur.
  */
 const CHATWOOT_PUBLIC_PREFIXES = [
   "/vite",
   "/packs",
   "/audio",
-  "/assets",
   "/brand-assets",
   "/downloads",
-  "/integrations",
   "/favicon.ico",
   "/favicon",
   "/apple-icon",
