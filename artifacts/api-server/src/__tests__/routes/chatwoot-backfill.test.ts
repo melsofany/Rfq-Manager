@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 const h = vi.hoisted(() => ({
   created: [] as Array<Record<string, unknown>>,
   contactArgs: { name: "", phone: "" },
+  lastWhere: undefined as unknown,
   conversationExists: "201000000000" as string | null,
   seenSourceIds: new Set<string>(),
   chatRows: [] as Array<Record<string, unknown>>,
@@ -82,8 +83,25 @@ function builder(rows: Array<Record<string, unknown>>) {
   for (const m of ["from", "where", "groupBy", "orderBy", "limit", "innerJoin", "leftJoin"]) {
     q[m] = chain;
   }
+  // Record the predicate instead of second-guessing it. The mock cannot see
+  // what the source query asked for, so filtering here would make the query
+  // invisible and let a guard pass against unfiltered code. The CALL is what
+  // these tests assert (see the file header), so the caller's WHERE is captured
+  // and inspected directly.
+  q.where = (arg: unknown) => {
+    h.lastWhere = arg;
+    return q;
+  };
   q.then = (resolve: (v: unknown) => unknown) => resolve(rows);
   return q;
+}
+
+/** Does a drizzle predicate ask for NULLs in `chatwoot_synced_at`? */
+function asksForUnreplayed(pred: unknown): boolean {
+  const text = JSON.stringify(pred, (_k, v) =>
+    v && typeof v === "object" && v.constructor?.name === "StringChunk" ? String(v.value) : v,
+  );
+  return /is null/i.test(text) && /chatwoot_synced_at/.test(text);
 }
 
 vi.mock("@workspace/db", () => ({
@@ -103,7 +121,12 @@ vi.mock("@workspace/db", () => ({
       // The "is anything left?" probe selects the id ALONE, and must be empty
       // for the batch to be considered finished.
       if (arg && Object.keys(arg).length === 1 && "id" in arg) return builder([]);
-      return builder(h.chatRows);
+      // The replay's own query asks for the rows STILL OWING a replay
+      // (`isNull(chatwoot_synced_at)`), so the mock must not hand back rows that
+      // are already done. Without this the "does not re-read" guard could never
+      // fail: the code would receive the done rows and the assertion would pass
+      // against the unfiltered query too.
+      return builder(h.chatRows.filter((r) => !r.chatwootSyncedAt));
     }),
   },
   whatsappChatsTable: {
@@ -162,6 +185,7 @@ beforeEach(() => {
   h.conversationsCreated = 0;
   h.links = [];
   h.contactArgs = { name: "", phone: "" };
+  h.lastWhere = undefined;
   h.conversationExists = "201000000000";
 });
 
@@ -251,10 +275,52 @@ describe("history replay into the console", () => {
     ];
     const res = await backfillPhone("201001234567", { limit: 50 });
     expect(h.created).toHaveLength(1);
+    // The already-replayed row is filtered OUT by the query itself, so it is not
+    // counted as a skip either — the batch's budget goes to work, not to
+    // re-reading history (which is what froze the replay at 20 numbers).
     expect(h.created[0].content).toBe("جديدة");
-    expect(res.skipped).toBe(1);
-    // The cursor must point at the LAST row examined, not the last row written.
-    expect(res.lastId).toBe(12);
+    // The already-replayed row never enters the window (the query filters it),
+    // so it is not counted as a skip and the budget is not spent on it.
+    expect(res.skipped).toBe(0);
+  });
+
+  it("does not spend the batch re-reading messages it already replayed", async () => {
+    // THE DEFECT THAT FROZE THE REPLAY AT 20 NUMBERS. The window was the OLDEST
+    // `limit` rows of the number, replayed or not, so a number with 100 done of
+    // its 125 returned those 100 again, the batch spent itself skipping them,
+    // and the 394 numbers behind it were never reached — `phonesConsidered: 20`
+    // on every batch forever.
+    const done = Array.from({ length: 5 }, (_, i) => ({
+      id: 100 + i,
+      phone: "201001234567",
+      body: `قديم ${i}`,
+      direction: "inbound",
+      createdAt: new Date("2026-06-01T09:00:00Z"),
+      waMessageId: `old${i}`,
+      chatwootSyncedAt: new Date("2026-06-01T10:00:00Z"),
+    }));
+    h.chatRows = [
+      ...done,
+      {
+        id: 200,
+        phone: "201001234567",
+        body: "جديد",
+        direction: "inbound",
+        createdAt: new Date("2026-06-02T09:00:00Z"),
+        waMessageId: "new1",
+        chatwootSyncedAt: null,
+      },
+    ];
+    const res = await backfillPhone("201001234567", { limit: 10 });
+    // The one message still owing a replay is the one that is replayed.
+    expect(res.created).toBe(1);
+    // …and the five already done are not re-read to fill the window.
+    expect(res.skipped).toBe(0);
+    // The window is defined by the QUERY, so assert the query: it must ask for
+    // the rows whose `chatwoot_synced_at` is still NULL. Without this the guard
+    // would pass on a mock that filtered by itself while the real SQL read the
+    // whole history — which is exactly how the defect reached production.
+    expect(asksForUnreplayed(h.lastWhere)).toBe(true);
   });
 
   it("replaces a conversation the console no longer has, instead of spinning", async () => {
