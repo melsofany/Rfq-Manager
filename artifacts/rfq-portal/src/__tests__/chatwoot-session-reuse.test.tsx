@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import ChatwootInboxPage, { hasConsoleSession } from "../modules/communications/pages/chatwoot";
+import ChatwootInboxPage, { hasLiveConsoleSession } from "../modules/communications/pages/chatwoot";
 
 vi.mock("../modules/communications/pages/index", () => ({
   default: () => <div data-testid="builtin-chat">BUILTIN_CHAT</div>,
@@ -45,29 +45,55 @@ function clearCookies(): void {
   });
 }
 
-describe("hasConsoleSession", () => {
-  beforeEach(clearCookies);
-  afterEach(clearCookies);
+describe("hasLiveConsoleSession", () => {
+  // `mockRestore` on a spy does not clear a call count accumulated by a PREVIOUS
+  // test's spy on the same global, so the counter is reset explicitly — the
+  // "not called" assertions below are about THIS test, not the whole file.
+  beforeEach(() => {
+    clearCookies();
+    vi.restoreAllMocks();
+  });
+  afterEach(() => {
+    clearCookies();
+    vi.restoreAllMocks();
+  });
 
-  it("is true for a real credential", () => {
+  it("is true only when the SERVER accepts the credential", async () => {
     setConsoleCookie(CREDS);
-    expect(hasConsoleSession()).toBe(true);
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    );
+    await expect(hasLiveConsoleSession()).resolves.toBe(true);
   });
 
-  it("is false without the cookie — a mint is still correct", () => {
-    expect(hasConsoleSession()).toBe(false);
+  it("is false when the cookie is present but the token is DEAD", async () => {
+    // The dead-end under guard: "End all sessions" leaves the cookie in the
+    // browser. Trusting presence would frame a console that can never sign in,
+    // and no SSO link would be minted to recover it.
+    setConsoleCookie(CREDS);
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      Promise.resolve(new Response("{}", { status: 401 })),
+    );
+    await expect(hasLiveConsoleSession()).resolves.toBe(false);
   });
 
-  it("is false for a truncated credential", () => {
-    // A partial cookie must NOT count: framing a console that can never sign in
-    // is worse than spending one extra mint.
+  it("is false without the cookie, without calling the server", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(hasLiveConsoleSession()).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("is false for a truncated credential", async () => {
     setConsoleCookie({ "access-token": "tok" });
-    expect(hasConsoleSession()).toBe(false);
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(hasLiveConsoleSession()).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("is false for unparseable junk rather than throwing", () => {
-    document.cookie = "cw_d_session_info=not-json";
-    expect(hasConsoleSession()).toBe(false);
+  it("is false when the server is unreachable rather than throwing", async () => {
+    setConsoleCookie(CREDS);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    await expect(hasLiveConsoleSession()).resolves.toBe(false);
   });
 });
 
@@ -86,6 +112,7 @@ describe("the console page reuses a session instead of minting on every load", (
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url.includes("/api/chatwoot/status")) return jsonResponse({ configured: true });
+      if (url.includes("/api/v1/profile")) return jsonResponse({});
       if (url.includes("/api/chatwoot/sso")) return jsonResponse({ url: "https://x/app/login" });
       return jsonResponse({});
     });

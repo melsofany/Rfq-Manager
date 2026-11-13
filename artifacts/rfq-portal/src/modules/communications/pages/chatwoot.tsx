@@ -55,22 +55,18 @@ export default function ChatwootInboxPage() {
 
         // Reuse an existing console session before minting a new one.
         //
-        // Every SSO mint creates a Chatwoot session and Chatwoot caps them
-        // (`MAX_USER_SESSIONS`, 25 by default). Minting on every page load
-        // reached that cap and the console answered "Active session limit
-        // reached" instead of loading — 25 sessions deep, all of them this
-        // same employee's own browser.
+        // Every SSO mint creates a Chatwoot session and Chatwoot caps them, so
+        // minting on every page load reached the cap and the console answered
+        // "Active session limit reached" instead of loading — 25 sessions deep,
+        // all of them this same employee's own browser.
         //
-        // The console writes its credentials to a JS-readable cookie
-        // (`cw_d_session_info`, set by `setAuthCredentials`) and replays them as
-        // `access-token`/`client`/`uid` headers — so an existing session can be
-        // detected from here, without spending a mint. The proxy widens that
-        // cookie's path to `/whatsapp` precisely so this page can read it.
-        //
-        // Only a REAL credential counts: an empty or truncated cookie means no
-        // session, and minting is still correct. This must never become a
-        // guess — a false positive would frame a console that never signs in.
-        if (hasConsoleSession()) {
+        // The check must be a SERVER check, not a cookie-presence check. A
+        // cookie outlives its session: after "End all sessions", or once DTA
+        // evicts the oldest token at `max_number_of_devices`, the cookie is
+        // still in the browser but its token is dead. Trusting presence alone
+        // would frame a console that can never sign in — a dead end with no
+        // way out, because no SSO link would be minted to fix it.
+        if (await hasLiveConsoleSession()) {
           setConsoleSrc(`${CONSOLE_PREFIX}/`);
           setError(null);
           return;
@@ -213,27 +209,61 @@ export default function ChatwootInboxPage() {
 }
 
 /**
- * Is there a live console session we can reuse instead of minting a new one?
+ * Read the console's own credentials from the `cw_d_session_info` cookie.
  *
- * Chatwoot's dashboard stores its devise-token-auth credentials in the
- * `cw_d_session_info` cookie — written by JS (`setAuthCredentials`), so it is
- * deliberately NOT HttpOnly and this page can read it. Its path is widened to
- * `/whatsapp` by the proxy, which is what makes it visible here at all.
+ * Chatwoot's dashboard stores its devise-token-auth credentials there (written
+ * by JS in `setAuthCredentials`, so it is deliberately NOT HttpOnly) and
+ * replays them as `access-token`/`client`/`uid` headers. js-cookie's bundled
+ * default is `path: "/"` (measured in the shipped bundle), so the cookie is
+ * visible to this page without any proxy intervention.
  *
- * A credential is present only when the cookie parses AND carries the three
- * headers the API needs. An empty or truncated value must read as "no session",
- * because a false positive frames a console that can never sign in — a blank
- * frame is worse than one extra mint.
+ * Returns null unless the cookie parses AND carries all three headers — a
+ * partial value cannot authenticate anything.
  */
-export function hasConsoleSession(): boolean {
+function readConsoleCredentials(): Record<string, string> | null {
   try {
     const raw = document.cookie
       .split("; ")
       .find((c) => c.startsWith("cw_d_session_info="))
       ?.slice("cw_d_session_info=".length);
-    if (!raw) return false;
-    const creds = JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>;
-    return Boolean(creds["access-token"] && creds.client && creds.uid);
+    if (!raw) return null;
+    const creds = JSON.parse(decodeURIComponent(raw)) as Record<string, string>;
+    if (!creds["access-token"] || !creds.client || !creds.uid) return null;
+    return creds;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is the console session still LIVE on the server, not merely present in the
+ * browser?
+ *
+ * Presence is not validity. A cookie outlives its session: after the operator
+ * presses "End all sessions", or once devise-token-auth evicts the oldest token
+ * at `max_number_of_devices` (25), the cookie remains but its token is dead.
+ * Treating that as a live session would frame a console that can never sign in,
+ * with no SSO link minted to recover — a dead end.
+ *
+ * So the credentials are replayed to the console's own profile endpoint, which
+ * is what the dashboard itself calls to validate a session on boot. Only a 2xx
+ * counts. Any failure (network, 401, proxy down) reads as "no session", which
+ * degrades to minting a link — the behaviour that always works.
+ */
+export async function hasLiveConsoleSession(): Promise<boolean> {
+  const creds = readConsoleCredentials();
+  if (!creds) return false;
+  try {
+    const res = await fetch(`${CONSOLE_PREFIX}/api/v1/profile`, {
+      credentials: "include",
+      headers: {
+        "access-token": creds["access-token"],
+        client: creds.client,
+        uid: creds.uid,
+        "token-type": creds["token-type"] ?? "Bearer",
+      },
+    });
+    return res.ok;
   } catch {
     return false;
   }
