@@ -344,7 +344,7 @@ function upstreamRequest(
   // header would merely be forwarded, and the console treats "no secret
   // configured" as "gate off" anyway.
   const gatewaySecret = process.env.CHATWOOT_GATEWAY_SECRET?.trim();
-  if (gatewaySecret) headers["x-cortoba-gateway"] = gatewaySecret;
+  if (gatewaySecret) headers[GATEWAY_HEADER] = gatewaySecret;
 
   return (isTls ? https : http).request({
     protocol: url.protocol,
@@ -498,6 +498,13 @@ export async function proxyChatwootRequest(
  * handshake to a TLS listener and the relay would fail at the worst moment
  * (when a message arrives).
  */
+/**
+ * The header the console's gate checks. The HTTP proxy and the WebSocket relay
+ * must BOTH present it, or the console reaches the API but never receives a
+ * live message — one working half is not a working console.
+ */
+export const GATEWAY_HEADER = "x-cortoba-gateway";
+
 export function relayWebSocket(
   req: Request,
   socket: Duplex,
@@ -512,15 +519,43 @@ export function relayWebSocket(
     const lines: string[] = [`${req.method} ${req.originalUrl || req.url} HTTP/1.1`];
     for (const [k, v] of Object.entries(req.headers)) {
       if (v === undefined) continue;
+      const lower = k.toLowerCase();
       // The upstream virtual-hosts on ITS hostname, not ours.
-      if (k.toLowerCase() === "host") continue;
+      if (lower === "host") continue;
+      // Ours to set below: a browser CAN send this header, and forwarding a
+      // client's value would leave two of them with the wrong one first.
+      if (lower === GATEWAY_HEADER) continue;
       lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
     }
     lines.push(`host: ${url.hostname}${url.port ? `:${url.port}` : ""}`);
-    socket.write(`${lines.join("\r\n")}\r\n\r\n`);
-    // Node hands over bytes it read past the request line; discarding them
-    // would corrupt the first frame of a socket that already started sending.
-    if (head && head.length) socket.write(head);
+    // Prove to the console that this UPGRADE came through the gateway, exactly
+    // as the HTTP proxy does below.
+    //
+    // Omitting it here was a live defect: the console's gate refused the
+    // handshake, so the console loaded, rendered and then silently stopped
+    // receiving anything — `WebSocket connection to 'wss://…/cable' failed`, on
+    // repeat. A console that renders but never updates is worse than one that
+    // fails to load, because nothing says why.
+    //
+    // A browser cannot forge the secret, so it stays a gateway-only credential
+    // on this path too.
+    const gatewaySecret = process.env.CHATWOOT_GATEWAY_SECRET?.trim();
+    if (gatewaySecret) lines.push(`${GATEWAY_HEADER}: ${gatewaySecret}`);
+    // `up`, NOT `socket`. `socket` is the BROWSER's connection and `up` is the
+    // upstream's; writing here sends the handshake to the wrong peer.
+    //
+    // Measured live: the request went back down the browser's socket, so the
+    // upstream received a bare TCP connection with no request line, never
+    // answered, and the browser reported
+    // `WebSocket connection to 'wss://…/cable' failed` on repeat. The browser's
+    // own bytes still reached the upstream through the pipe below — without the
+    // gateway credential, which the console's gate then refused with its 404.
+    // Two symptoms, one transposed argument.
+    up.write(`${lines.join("\r\n")}\r\n\r\n`);
+    // Node hands over bytes it read past the request line; they belong to the
+    // upstream stream. Discarding them would corrupt the first frame of a
+    // socket that already started sending.
+    if (head && head.length) up.write(head);
   };
 
   const up = isTls
