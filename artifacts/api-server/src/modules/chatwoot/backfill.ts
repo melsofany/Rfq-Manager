@@ -136,14 +136,21 @@ export async function backfillPhone(
   const supplier = await supplierNameForPhone(phone);
   const rfqId = (await rfqIdForPhone(phone)) ?? 0;
 
+  // Chatwoot requires E.164. `whatsapp_chats.phone` holds whatever WhatsApp sent,
+  // which in this data is often a LOCAL Egyptian number (`01006617574`), and
+  // Chatwoot answers «Phone number should be in e164 format» for it — that was
+  // the remaining failure after the argument swap was fixed. canonicalPhone
+  // expands a local number to `20…`; the `+` is what E.164 wants.
+  const intl = `+${canonicalPhone(phone)}`;
+
   // Contact first: a conversation cannot exist without one.
-  let contact = await findContactByPhone(phone);
+  let contact = await findContactByPhone(intl);
   if (!contact) {
     // (name, phone) — NOT (phone, name). Two adjacent string parameters, so the
     // compiler cannot catch a swap: the live run sent the SUPPLIER NAME as the
     // phone number and Chatwoot answered «Phone number should be in e164
     // format» for every single contact, which is why all 409 numbers failed.
-    contact = await createContact(supplier?.name ?? phone, phone);
+    contact = await createContact(supplier?.name ?? intl, intl);
   }
   if (!contact?.id) return { created: 0, skipped: 0, errors: 1, lastId: null };
 
@@ -156,7 +163,7 @@ export async function backfillPhone(
   conversationId = existingLink[0]?.conversationId ?? null;
 
   if (!conversationId) {
-    const conv = await createConversation(contact.id, `cortoba-backfill-${phone}`);
+    const conv = await createConversation(contact.id, `cortoba-backfill-${canonicalPhone(phone)}`);
     conversationId = conv?.id ?? null;
     // Record the link IMMEDIATELY. Without it the replay cannot see the
     // conversation it just created, so a second run creates a SECOND one for the

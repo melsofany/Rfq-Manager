@@ -118,7 +118,11 @@ vi.mock("../../modules/chatwoot/bridge", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
-    canonicalPhone: (p: string) => p.replace(/\D/g, ""),
+    // The REAL canonicalPhone, not a stubbed one. A stub that only stripped
+    // non-digits hid the E.164 defect: production sends a local number
+    // (`01001234567`) and the real function expands it to `20…`, which is what
+    // Chatwoot demands. A mock must reproduce the failure it claims to guard.
+    canonicalPhone: actual.canonicalPhone,
     // The replay must PERSIST the conversation it created, or the next run
     // cannot see it and makes another one.
     saveLink: vi.fn(async (link: Record<string, unknown>) => {
@@ -261,12 +265,14 @@ describe("history replay into the console", () => {
     // A REAL supplier name, so the two arguments differ and the swap is visible.
     // With no supplier the fallback makes both arguments the phone number, and
     // the guard would pass against the swapped code.
+    // A LOCAL Egyptian number, as `whatsapp_chats.phone` really stores it. A
+    // bare `01001234567` is not E.164 and Chatwoot refuses it with «Phone number
+    // should be in e164 format» — the second live failure after the swap.
     h.supplierRows = [{ id: 3, name: "شركة ساجدة ستور", phone: "201001234567" }];
-    await backfillPhone("201001234567", { limit: 10 });
-    // The second argument must be the NUMBER. Swapped, it is a name or the phone
-    // is a name — either way this fails.
-    expect(h.contactArgs.phone).toMatch(/^\+?\d+$/);
-    expect(h.contactArgs.phone).toBe("201001234567");
+    await backfillPhone("01001234567", { limit: 10 });
+    // The second argument must be the NUMBER, in international form. Swapped, it
+    // is a name; un-normalised, it lacks the country code and the plus.
+    expect(h.contactArgs.phone).toBe("+201001234567");
   });
 
   it("does not skip a number's early messages when another number advances", async () => {
