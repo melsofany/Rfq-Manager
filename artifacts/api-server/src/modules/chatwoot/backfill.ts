@@ -6,7 +6,7 @@ import {
   chatwootLinksTable,
 } from "@workspace/db";
 import { logger } from "../../shared/logger";
-import { canonicalPhone } from "./bridge";
+import { canonicalPhone, saveLink } from "./bridge";
 import {
   createContact,
   createConversation,
@@ -137,6 +137,22 @@ export async function backfillPhone(
   if (!conversationId) {
     const conv = await createConversation(contact.id, `cortoba-backfill-${phone}`);
     conversationId = conv?.id ?? null;
+    // Record the link IMMEDIATELY. Without it the replay cannot see the
+    // conversation it just created, so a second run creates a SECOND one for the
+    // same number and files every message into a fresh thread. Per-message
+    // idempotency does not help: the duplicate is the CONVERSATION.
+    if (conversationId) {
+      await saveLink({
+        phone,
+        rfqId,
+        contactId: contact.id ?? null,
+        conversationId,
+        displayName: supplier?.name ?? null,
+        supplierId: supplier?.id ?? null,
+        employeeId: null,
+        employeeName: null,
+      });
+    }
   }
   if (!conversationId) return { created: 0, skipped: 0, errors: 1, lastId: null };
 

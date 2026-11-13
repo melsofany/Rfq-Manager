@@ -421,7 +421,15 @@ async function loadLink(phone: string, rfqId: number): Promise<LinkRow | undefin
   return row as LinkRow | undefined;
 }
 
-async function saveLink(link: LinkRow): Promise<void> {
+/**
+ * Persist a conversation link.
+ *
+ * Exported because the history replay needs it: without a link row the replay
+ * cannot SEE the conversation it just created, so a second run creates a
+ * SECOND conversation for the same number — every message duplicated into a new
+ * thread. Idempotency at the message level is not enough on its own.
+ */
+export async function saveLink(link: LinkRow): Promise<void> {
   const now = new Date();
   await db
     .insert(chatwootLinksTable)

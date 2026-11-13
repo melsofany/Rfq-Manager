@@ -23,13 +23,19 @@ const h = vi.hoisted(() => ({
   linkRows: [] as Array<Record<string, unknown>>,
   contact: { id: 42 } as { id?: number } | undefined,
   conversation: { id: 7 } as { id?: number } | undefined,
+  /** Every conversation the replay created, so a second run is visible. */
+  conversationsCreated: 0,
+  links: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("../../modules/chatwoot/client", () => ({
   isChatwootConfigured: true,
   findContactByPhone: vi.fn(async () => h.contact),
   createContact: vi.fn(async () => h.contact),
-  createConversation: vi.fn(async () => h.conversation),
+  createConversation: vi.fn(async () => {
+    h.conversationsCreated += 1;
+    return h.conversation;
+  }),
   createMessage: vi.fn(
     async (
       conversationId: number,
@@ -100,7 +106,20 @@ vi.mock("../../shared/logger", () => ({
 
 vi.mock("../../modules/chatwoot/bridge", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, canonicalPhone: (p: string) => p.replace(/\D/g, "") };
+  return {
+    ...actual,
+    canonicalPhone: (p: string) => p.replace(/\D/g, ""),
+    // The replay must PERSIST the conversation it created, or the next run
+    // cannot see it and makes another one.
+    saveLink: vi.fn(async (link: Record<string, unknown>) => {
+      h.links.push(link);
+      h.linkRows.push({
+        conversationId: link.conversationId,
+        phone: link.phone,
+        rfqId: link.rfqId,
+      });
+    }),
+  };
 });
 
 const { backfillPhone, backfillHistory } = await import("../../modules/chatwoot/backfill");
@@ -113,6 +132,8 @@ beforeEach(() => {
   h.linkRows = [];
   h.contact = { id: 42 };
   h.conversation = { id: 7 };
+  h.conversationsCreated = 0;
+  h.links = [];
 });
 
 describe("history replay into the console", () => {
@@ -172,6 +193,31 @@ describe("history replay into the console", () => {
     // Same history again, same process — nothing new may be written.
     await backfillPhone("201001234567", { limit: 50 });
     expect(h.created).toHaveLength(1);
+  });
+
+  it("records the conversation it created, so a re-run does not make a second one", async () => {
+    // Per-message idempotency is NOT enough: if the link is not persisted the
+    // replay cannot see the conversation it just made, so a second run creates
+    // ANOTHER conversation for the same number and files every message into a
+    // fresh thread. The duplicate is the conversation, not the message.
+    h.chatRows = [
+      {
+        id: 11,
+        phone: "201001234567",
+        body: "عرض سعر",
+        direction: "inbound",
+        createdAt: new Date("2026-06-01T09:15:00Z"),
+        waMessageId: "wamid.ABC",
+      },
+    ];
+    await backfillPhone("201001234567", { limit: 50 });
+    expect(h.conversationsCreated).toBe(1);
+    expect(h.links).toHaveLength(1);
+    expect(h.links[0].conversationId).toBe(7);
+
+    // Second run: the link now exists, so no new conversation may be made.
+    await backfillPhone("201001234567", { limit: 50 });
+    expect(h.conversationsCreated).toBe(1);
   });
 
   it("falls back to our own row id when WhatsApp gave no message id", async () => {
