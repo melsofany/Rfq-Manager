@@ -2311,7 +2311,7 @@ async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise
  * the message itself; two copies of this mapping would drift and the same
  * message would read differently depending on which path consumed it.
  */
-function describeInboundBody(msg: ServerMessage): {
+export function describeInboundBody(msg: ServerMessage): {
   body: string;
   mediaId: string | null;
   mediaType: string | null;
@@ -2388,10 +2388,28 @@ function describeInboundBody(msg: ServerMessage): {
             `${it.quantity ?? "1"} × ${it.product_retailer_id ?? "منتج"}${it.item_price ? ` (${it.currency ?? ""} ${it.item_price})` : ""}`,
         )
         .join("\n");
+  } else if (msg.type === "reaction" && msg.reaction) {
+    // A reaction is a reply to a message, not a message. Rendering the raw type
+    // as text put the literal words «رسالة من نوع: reaction» in the operator's
+    // inbox; the emoji and the message it answers are what they can act on.
+    const emoji = msg.reaction.emoji ?? "";
+    body = emoji ? `↩️ تفاعل ${emoji}` : "↩️ تفاعل على رسالة";
   } else if (msg.type === "system" && msg.system) {
-    body = `ℹ️ ${msg.system.body ?? msg.system.type ?? "رسالة نظام"}`;
+    // `??` is wrong here: WhatsApp sends an EMPTY STRING, not undefined, so
+    // `"" ?? fallback` is `""` and the operator gets a bare «ℹ️ » with nothing
+    // after it. Pick the first non-blank value instead.
+    const sys = [msg.system.body, msg.system.type].find((v) => (v ?? "").trim());
+    body = `ℹ️ ${sys ?? "رسالة نظام من واتساب"}`;
+  } else if (msg.type === "system") {
+    body = "ℹ️ رسالة نظام من واتساب";
+  } else if (msg.type === "unsupported") {
+    body = "⚠️ نوع رسالة غير مدعوم من واتساب (لم يُقرأ محتواها)";
   } else {
-    body = `[رسالة من نوع: ${msg.type}]`;
+    // NEVER put the raw type token in the body. It is our own diagnostic and it
+    // reached the operator as a message («الرساله مش واضحه؟» was a reply to it).
+    // Say that something arrived and could not be interpreted — which is the
+    // truth, and is actionable — instead of naming an internal enum.
+    body = "⚠️ رسالة غير مفهومة — أرسل نصًا أو مرفقًا";
   }
   return { body, mediaId, mediaType, mimeType, filename };
 }
