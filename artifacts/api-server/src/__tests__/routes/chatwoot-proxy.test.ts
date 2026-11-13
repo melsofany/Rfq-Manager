@@ -42,6 +42,15 @@ function upstreamHandler(req: http.IncomingMessage, res: http.ServerResponse) {
   } else if (req.url === "/cable") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ path: req.url, host: req.headers.host }));
+  } else if (req.url === "/auth/sign_in") {
+    // The SSO exchange. Echoes method + body so the test can prove the token
+    // actually reached Chatwoot rather than being swallowed by a fallback.
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ method: req.method, body }));
+    });
   } else if (req.url === "/app/echo") {
     // Reflect method + body so a POST body can be proven forwarded intact.
     let body = "";
@@ -87,7 +96,13 @@ beforeAll(async () => {
   app.use(express.static("."));
   // Anything the console does NOT own answers as the SPA would, so a request
   // the proxy wrongly claimed is visible as the wrong body rather than a 404.
-  app.use((_req, res) => res.status(200).type("html").send("<html>SPA</html>"));
+  //
+  // GET-only, exactly like `app.ts`. A fallback that also answered POST hid a
+  // real defect: `POST /auth/sign_in` — the call that CONSUMES the SSO token —
+  // was 404 in production while this test passed, because production's
+  // catch-all is `app.get("*")` and Express answers an unmatched POST with 404.
+  // A regex, not `"*"`: Express 5 rejects the bare star as a route path.
+  app.get(/.*/, (_req, res) => res.status(200).type("html").send("<html>SPA</html>"));
   appServer = http.createServer(app);
   await new Promise<void>((r) => appServer.listen(0, "127.0.0.1", r));
   gatewayUrl = `http://127.0.0.1:${(appServer.address() as AddressInfo).port}`;
@@ -220,6 +235,35 @@ describe("path handling", () => {
   it("leaves the app's own routes to the app", async () => {
     const res = await fetch(`${gatewayUrl}/dashboard`);
     expect(await res.text()).toContain("SPA");
+  });
+});
+
+describe("SSO", () => {
+  it("forwards POST /auth/sign_in end to end, body intact", async () => {
+    // The console's SSO link carries email + sso_auth_token to /app/login, and
+    // the dashboard POSTs them to /auth/sign_in — where Chatwoot consumes the
+    // token. When that POST did not reach Chatwoot the console fell back to its
+    // login FORM, so an operator saw a password prompt instead of being signed
+    // in. Asserting the function table alone would not have caught it: the
+    // request has to be shown arriving.
+    const res = await fetch(`${gatewayUrl}/auth/sign_in`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "*/*" },
+      body: JSON.stringify({ email: "a@b.c", sso_auth_token: "tok-123" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { method: string; body: string };
+    expect(body.method).toBe("POST");
+    expect(body.body).toContain("sso_auth_token");
+    expect(body.body).toContain("tok-123");
+  });
+
+  it("does not answer an unclaimed POST with the SPA", async () => {
+    // The negative control for the fallback above: a POST the console does not
+    // own must NOT be swallowed by a catch-all, which is how the SSO 404 was
+    // masked in the first place.
+    const res = await fetch(`${gatewayUrl}/definitely-not-ours`, { method: "POST" });
+    expect(res.status).toBe(404);
   });
 });
 
