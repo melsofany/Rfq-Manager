@@ -5146,3 +5146,61 @@ Chatwoot يستخرج رقم الحساب من **موضع** المقطع في ا
   التطبيق — لا تحاول التحقق منها مباشرة.
 - `action_cable.disable_request_forgery_protection = true` في Chatwoot، فالـWebSocket
   يقبل أصل نطاقنا بلا إعداد إضافي.
+
+## Chatwoot console: two defects that each made it silently unusable
+
+### The WebSocket relay wrote the handshake to the wrong peer
+
+`relayWebSocket(req, socket, head, cfg)` receives `socket` = the BROWSER's
+connection and opens `up` = the upstream's. It built the request line and headers
+from the browser's request — including the gateway credential the console's gate
+requires — and then wrote them to `socket`, i.e. back down the browser's own
+connection. Measured live: the upstream got a bare TCP connection with no request
+line, never answered, and the browser reported
+`WebSocket connection to 'wss://…/cable' failed` on repeat. The browser's bytes
+still reached the upstream through `socket.pipe(up)` but WITHOUT the credential,
+so the gate refused them with its 404 — two symptoms, one transposed argument.
+Writing to `up` fixes both. `head` belongs to the upstream stream for the same
+reason.
+
+**Why nothing caught it**: the HTTP half of the proxy was covered and worked;
+nothing exercised the upgrade at all. `chatwoot-websocket-gateway.test.ts` now
+drives a REAL upgrade through a real gateway running `relayWebSocket` to a real
+upstream and asserts on the arriving bytes. Restoring `socket.write` fails 3 of 4.
+
+**A WebSocket test must not be written against a hand-rolled `IncomingMessage`.**
+The first three attempts passed a fake request to a `net` server and never
+reached the relay: Node does not emit `upgrade` without the real upgrade headers,
+and a socket already talking to the upstream cannot also be the relay's inbound
+duplex. Drive it end to end (client → gateway → upstream) or it proves nothing.
+
+### The console started empty because the history was never imported
+
+The live mirror only fires when a message ARRIVES, so a console installed today
+shows only what happened after today. Production held **7,851 messages across 414
+numbers** from June onward; `chatwoot_links` held **4** conversations. «المحادثات
+القديمة مش موجودة» was not a UI bug.
+
+**The REST API is sufficient — do not reach into Chatwoot's database.**
+`Messages::MessageBuilder#message_params` reads `external_created_at` and
+`source_id` straight off the request, so a replay keeps the ORIGINAL timestamp and
+carries the original id. `chatwoot-cortoba`'s Rails importer writes through the
+models, which is the only way to set a message id, but this process has no
+credentials for that database and the coupling breaks on Chatwoot's next upgrade.
+
+**`source_id` is INDEXED, NOT UNIQUE.** Chatwoot accepts a duplicate without
+complaint, so a replay MUST look it up before inserting or a second run doubles
+every thread — invisible until someone counts. Without `external_created_at` a
+replay stamps "now" and three months of history reads as one burst.
+
+`POST /api/chatwoot/backfill` is admin/manager, batched and resumable
+(`nextCursor` + `stoppedBy`), read-only on Cortoba's tables. The console page
+carries the button, because **an endpoint only `curl` can reach is an endpoint
+that does not exist for the operator who needs it** — and the UI gate is a
+courtesy while the server's `requireRole` is the boundary.
+
+### Phase 6 (supplier bot) was already implemented
+
+`handleSupplierBotMessage` is wired into BOTH webhook paths (`routes.ts:204` and
+`:349`, the same pairing the dispatch-order rule requires), menus live in
+`service.ts`, and two suites cover it. Check before building what exists.
