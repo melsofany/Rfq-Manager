@@ -226,7 +226,17 @@ export async function backfillPhone(
       chatwootSyncedAt: whatsappChatsTable.chatwootSyncedAt,
     })
     .from(whatsappChatsTable)
-    .where(eq(whatsappChatsTable.phone, phone))
+    // Only the messages still owing a replay. Without this the window is the
+    // OLDEST `limit` rows of the number, so a number that already replayed 100
+    // of its 125 messages returns those 100 again, spends the whole batch
+    // skipping them, and the numbers after it are never reached — the batch
+    // reported `phonesConsidered: 20` forever while 414 numbers waited.
+    .where(
+      and(
+        eq(whatsappChatsTable.phone, phone),
+        isNull(whatsappChatsTable.chatwootSyncedAt),
+      ),
+    )
     .orderBy(asc(whatsappChatsTable.id))
     .limit(opts.limit);
 
