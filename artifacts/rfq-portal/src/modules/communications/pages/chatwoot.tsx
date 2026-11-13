@@ -24,6 +24,7 @@ export default function ChatwootInboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [useLegacy, setUseLegacy] = useState(false);
+  const [openingExternal, setOpeningExternal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +75,28 @@ export default function ChatwootInboxPage() {
     };
   }, []);
 
+  // The SSO URL is SINGLE-USE: the iframe consumes its token the moment it
+  // loads. Reusing that same href for the "open in a new tab" link therefore
+  // opens a DEAD link (measured: second consumption → 401), which reads as a
+  // broken console. Mint a FRESH one-time link on click instead.
+  //
+  // A new tab is also the reliable path when third-party cookies are blocked:
+  // the console is then first-party, so its session cookie is accepted.
+  const openExternal = async () => {
+    setOpeningExternal(true);
+    try {
+      const res = await fetch("/api/chatwoot/sso", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { url: string };
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch {
+      // Fall back to the link we already hold rather than doing nothing.
+      window.open(iframeUrl ?? "", "_blank", "noopener,noreferrer");
+    } finally {
+      setOpeningExternal(false);
+    }
+  };
+
   // Chatwoot unavailable (unconfigured OR unreachable) → the proven built-in
   // chat, so the agent always has somewhere to answer suppliers from.
   if (useLegacy) return <WhatsAppPage />;
@@ -88,15 +111,15 @@ export default function ChatwootInboxPage() {
             {t("nav.whatsapp")}
           </h1>
           {iframeUrl && (
-            <a
-              href={iframeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            <button
+              type="button"
+              onClick={openExternal}
+              disabled={openingExternal}
+              className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50 flex items-center gap-1"
             >
               <ExternalLink size={13} />
               {t("whatsapp.openExternal") || "فتح في نافذة منفصلة"}
-            </a>
+            </button>
           )}
         </div>
 

@@ -90,4 +90,50 @@ describe("Chatwoot console page — fallback", () => {
     });
     expect(screen.queryByTestId("builtin-chat")).toBeNull();
   });
+
+  // The SSO token is consumed the moment the iframe loads it (measured against
+  // the deployed console: a second POST /auth/sign_in with the same token → 401).
+  // The "open in a new tab" control therefore MUST NOT reuse the iframe's href —
+  // that link is already dead by the time the user can click it, and the agent
+  // sees a console that "does not open". It has to mint a fresh one-time link.
+  it("mints a FRESH SSO link when opening in a new tab", async () => {
+    const ssoUrls = [
+      "https://cortoba-chatwoot.onrender.com/app/login?sso_auth_token=FIRST",
+      "https://cortoba-chatwoot.onrender.com/app/login?sso_auth_token=SECOND",
+    ];
+    let ssoCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("/api/chatwoot/status")) return jsonResponse({ configured: true });
+      if (url.includes("/api/chatwoot/sso")) {
+        const next = ssoUrls[Math.min(ssoCalls, ssoUrls.length - 1)];
+        ssoCalls += 1;
+        return jsonResponse({ url: next });
+      }
+      return jsonResponse({});
+    });
+
+    const opened: string[] = [];
+    vi.spyOn(window, "open").mockImplementation((url) => {
+      opened.push(String(url));
+      return null;
+    });
+
+    render(<ChatwootInboxPage />);
+
+    // The iframe consumed the first token on load.
+    await waitFor(() => {
+      expect(document.querySelector("iframe")?.getAttribute("src")).toContain("FIRST");
+    });
+
+    const button = await screen.findByRole("button", { name: /openExternal|نافذة/ });
+    button.click();
+
+    await waitFor(() => {
+      expect(opened).toHaveLength(1);
+    });
+    // The point of the guard: the opened link is NOT the consumed iframe link.
+    expect(opened[0]).toContain("SECOND");
+    expect(opened[0]).not.toContain("FIRST");
+  });
 });
