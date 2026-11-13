@@ -57,6 +57,17 @@ services:
       CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
       CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
       CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+      # The console is reachable ONLY through the Cortoba gateway. Leave the
+      # secret empty to disable the gate (upstream behaviour: the console
+      # answers directly); set it — the SAME value on the gateway — to arm it.
+      # A local smoke test needs it set, or the gateway's proxy gets a 404.
+      CORTOBA_GATEWAY_SECRET: ${CORTOBA_GATEWAY_SECRET:-}
+      # Endpoints Meta calls directly cannot carry the gateway header, so they
+      # stay public by path.
+      CORTOBA_GATEWAY_PUBLIC_PATHS: ${CORTOBA_GATEWAY_PUBLIC_PATHS:-}
+      # Allows the console to be framed by the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser refuse the frame.
+      CORTOBA_ALLOW_FRAMING: ${CORTOBA_ALLOW_FRAMING:-}
     restart: "no"
     # The migration + its verification live in ./bin/entrypoint.sh, which Render
     # runs too. Defining the command once is what keeps a local install and a
@@ -131,6 +142,17 @@ services:
       CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
       CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
       CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+      # The console is reachable ONLY through the Cortoba gateway. Leave the
+      # secret empty to disable the gate (upstream behaviour: the console
+      # answers directly); set it — the SAME value on the gateway — to arm it.
+      # A local smoke test needs it set, or the gateway's proxy gets a 404.
+      CORTOBA_GATEWAY_SECRET: ${CORTOBA_GATEWAY_SECRET:-}
+      # Endpoints Meta calls directly cannot carry the gateway header, so they
+      # stay public by path.
+      CORTOBA_GATEWAY_PUBLIC_PATHS: ${CORTOBA_GATEWAY_PUBLIC_PATHS:-}
+      # Allows the console to be framed by the Cortoba app. Without it
+      # Chatwoot's X-Frame-Options makes the browser refuse the frame.
+      CORTOBA_ALLOW_FRAMING: ${CORTOBA_ALLOW_FRAMING:-}
     healthcheck:
       # Two traps this avoids, both observed on the running stack:
       #  * the image ships no `curl` (`/bin/sh: curl: not found`) — `wget` is there;

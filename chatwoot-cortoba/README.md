@@ -210,6 +210,50 @@ docker compose exec web bundle exec rails cortoba:selftest
 must resolve to one value — otherwise a returning supplier is imported twice) and
 that the attribute keys resolve.
 
+## How the console is reached (same-origin, gated)
+
+Chatwoot serves absolute paths (`/vite/assets`, `/api/v1`, `/app`, `/cable`) and
+has no `RAILS_RELATIVE_URL_ROOT`, so it cannot run under a subpath itself. The
+Cortoba gateway therefore does the work: `/whatsapp/console` on the app's origin
+is a reverse proxy in front of this service.
+
+That is not cosmetic. `onrender.com` is on the Public Suffix List, so this
+service and the app are different SITES even though both say `onrender.com`. A
+frame pointed straight at the service is a third-party frame, the browser
+refuses the console's session cookie, and the agent is logged out inside the
+frame forever. Serving the console from the app's origin makes that cookie
+first-party. Render cannot make this service private either (`type` is fixed at
+creation, and the IP allow-list is Enterprise-only), so the wall is the overlay's
+own Rack middleware: a bare 404 with an empty body for anything that does not
+carry `CORTOBA_GATEWAY_SECRET` in the `X-Cortoba-Gateway` header, with Meta's
+webhook paths allow-listed because they cannot carry a header.
+
+Verified on a real stack, not by inspection — `docker compose up`, then:
+
+| Request | Result |
+| --- | --- |
+| `GET /app/login` (direct, no header) | `404`, empty body, no product banner |
+| `GET /` (direct, no header) | `404`, empty body |
+| `GET /api/v1/accounts` (direct, no header) | `404` |
+| `GET /app/login` with the gateway header | `302` (passes through) |
+| `GET /health` (allow-listed) | `200 {"status":"woot"}` |
+| `GET /whatsapp/console/` through the gateway proxy | passes the gate, HTML rewritten with the `<base>` the console's router needs |
+
+Two consequences worth keeping in mind:
+
+- The proxy must reach this service with the gateway header AND the console's
+  own `cw_d_session_info` cookie. Dropping the whole `Cookie` header (the
+  obvious "don't leak a gateway credential" move) logs the agent out of every
+  console API call, because devise-token-auth keeps its credentials in that
+  cookie. Only the app's own `connect.sid` is stripped.
+- Responses must not be forwarded compressed. Passing the caller's
+  `accept-encoding` upstream let the service gzip, and the body then arrived with
+  its `content-encoding` header attached to text a client had already decoded —
+  `Z_DATA_ERROR: incorrect header check`. The proxy asks for `identity`.
+
+ActionCable is relayed over a raw-socket WebSocket upgrade, or the console
+renders but never goes live and silently needs a manual refresh.
+
 ## Operational notes
 
 - **`ENABLE_ACCOUNT_SIGNUP=false`.** Employees sign in to Cortoba; they never get
