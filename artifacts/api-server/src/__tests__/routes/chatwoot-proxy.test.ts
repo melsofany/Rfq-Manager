@@ -168,13 +168,17 @@ describe("cookies", () => {
 });
 
 describe("HTML rewriting", () => {
-  it("rewrites HTML with the base tag but leaves assets alone", async () => {
+  it("rewrites HTML with the base tag AND prefixes root-absolute assets", async () => {
     const res = await fetch(`${gatewayUrl}/whatsapp/console/html`);
     const body = await res.text();
     expect(res.headers.get("content-type")).toContain("text/html");
     expect(body).toContain('<base href="/whatsapp/console/">');
-    // The rewrite is what makes routing work; the asset path is the proxy's job.
-    expect(body).toContain('src="/vite/assets/dashboard.js"');
+    // `<base>` governs RELATIVE urls only. This asset reference is
+    // root-absolute, so it must be prefixed here or the browser fetches it from
+    // the domain root, the SPA fallback answers with index.html, and the console
+    // renders a BLANK PAGE — which is what production did.
+    expect(body).toContain('src="/whatsapp/console/vite/assets/dashboard.js"');
+    expect(body).not.toContain('src="/vite/assets/dashboard.js"');
     expect(body).not.toContain("upstream.example");
   });
 

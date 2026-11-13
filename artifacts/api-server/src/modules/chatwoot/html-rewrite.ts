@@ -2,19 +2,22 @@
  * Rewrites a Chatwoot HTML document so it can be served under a path prefix on
  * OUR origin.
  *
- * Why a document rewrite is enough (measured, not assumed):
+ * Why the document rewrite is required (measured on production, after a blank
+ * page was reported):
  *
- *   - Chatwoot's bundle imports its chunks with RELATIVE specifiers
- *     (`import("./EmojiIconPicker.js")`), so the browser resolves them against
- *     the document's `<base>` — a root-absolute list is not involved.
- *   - The ~20 remaining root-absolute references are `/vite/assets/...`, which
- *     the same proxy serves under the prefix.
- *   - `createWebHistory()` is called with NO argument, which makes vue-router
- *     read `<base href>` from the document. Injecting that tag is therefore the
- *     whole routing fix.
+ *   - `<base href>` fixes RELATIVE urls only. Chatwoot's bundle imports its
+ *     chunks relatively (`import("./EmojiIconPicker.js")`), so those resolve
+ *     correctly against the base — but the entry tags the layout emits are
+ *     ROOT-ABSOLUTE (`/vite/assets/index-<hash>.js`, the favicons,
+ *     `/manifest.json`). A root-absolute url ignores `<base>` and is fetched
+ *     from the domain root, where our SPA fallback answers with `index.html`.
+ *     The browser then parses HTML as JavaScript and renders NOTHING — the
+ *     blank page. So the absolute references must be rewritten here; `<base>`
+ *     alone is not enough.
  *
- * So the bundles are NOT rewritten: re-hashing references the browser already
- * resolves correctly would be the fragile path, not the safe one.
+ * The rewrite is applied to `src`/`href` attributes only, and only when the
+ * value is a site-absolute path — external urls, protocol-relative urls and
+ * fragments are left alone.
  */
 
 export interface HtmlRewriteOptions {
@@ -29,6 +32,26 @@ export function normalisePrefix(prefix: string): string {
   const trimmed = String(prefix ?? "").replace(/\/+$/, "");
   if (!trimmed || trimmed === "/") return "";
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+/**
+ * Prefix every site-absolute `src`/`href`.
+ *
+ * Guarded against the values that must NOT be touched: a protocol-relative
+ * `//host/x`, an absolute url with a scheme, a fragment, and a path already
+ * carrying the prefix (a re-rewrite must be idempotent — a doubled prefix is a
+ * 404, which is the same blank page by a different route).
+ */
+function prefixAbsoluteRefs(html: string, prefix: string): string {
+  if (!prefix) return html;
+  return html.replace(
+    /(\s(?:src|href)\s*=\s*")(\/[^"]*)"/gi,
+    (whole, attr: string, url: string) => {
+      if (url.startsWith("//")) return whole;
+      if (url === prefix || url.startsWith(`${prefix}/`)) return whole;
+      return `${attr}${prefix}${url}"`;
+    },
+  );
 }
 
 /**
@@ -56,17 +79,25 @@ function injectBase(html: string, base: string): string {
  * Point the console at OUR origin's prefix for both transports.
  *
  * `apiHost` and `websocketURL` are NOT emitted by Chatwoot's own layout
- * (verified against the running release: `window.chatwootConfig` carries
- * hostURL/helpCenterURL and no apiHost). Their defaults — `""` and `undefined`
- * — are also correct behind the proxy, since the console genuinely is
- * same-origin. They are injected anyway because they make the deployment
- * self-describing: a reader can see where the console believes its API and
- * socket live instead of inferring it from a default.
+ * (measured against the running release: `window.chatwootConfig` carries
+ * hostURL/helpCenterURL and no apiHost, while the bundle reads
+ * `{apiHost: Pa = ""} = window.chatwootConfig` and builds `baseURL` from it).
+ * Both defaults — `""` and `undefined` — are already correct behind the proxy,
+ * since the console genuinely is same-origin. They are injected anyway so the
+ * deployment is self-describing: a reader sees where the console believes its
+ * API and socket live instead of inferring it from a default.
+ *
+ * `websocketURL` is a `ws://`/`wss://` url when Chatwoot sets one, so it takes
+ * the socket scheme rather than the page's `https://`.
  */
-function injectChatwootConfig(html: string, origin: string): string {
+function injectChatwootConfig(html: string, origin: string, host: string): string {
   const marker = /window\.chatwootConfig\s*=\s*\{/;
   if (!marker.test(html)) return html;
-  return html.replace(marker, (m) => `${m}\n        apiHost: '${origin}',\n        websocketURL: '${origin}',`);
+  const wsOrigin = host.replace(/^http/, "ws");
+  return html.replace(
+    marker,
+    (m) => `${m}\n        apiHost: '${origin}',\n        websocketURL: '${wsOrigin}',`,
+  );
 }
 
 /**
@@ -84,10 +115,20 @@ export function rewriteChatwootHtml(html: string, opts: HtmlRewriteOptions): str
 
   let out = stripBaseTags(html);
   out = injectBase(out, base);
-  out = injectChatwootConfig(out, publicOrigin);
-  // Only when hostURL is actually present. The value is always safe to make
-  // absolute: it is used to BUILD links, never to authorise a request.
+  // MUST run before the config injection: the injected `apiHost` is an
+  // absolute url with a scheme, which the ref rewrite correctly ignores — but
+  // ordering it first keeps that a property of the value, not of the sequence.
+  out = prefixAbsoluteRefs(out, prefix);
+  out = injectChatwootConfig(out, publicOrigin, host);
+  // Only when a value is actually present, and only when it points at the
+  // upstream. `helpCenterURL` is emitted EMPTY on this release; rewriting an
+  // empty value into our origin would silently enable a help-centre link that
+  // the operator never configured.
   out = out.replace(/(hostURL:\s*')[^']*(')/, `$1${publicOrigin}$2`);
-  out = out.replace(/(helpCenterURL:\s*')[^']*(')/, `$1${publicOrigin}$2`);
+  out = out.replace(
+    /(helpCenterURL:\s*')([^']+)(')/,
+    (whole, open: string, url: string, close: string) =>
+      /^https?:\/\//.test(url) ? `${open}${publicOrigin}${close}` : whole,
+  );
   return out;
 }
