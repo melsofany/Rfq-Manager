@@ -527,3 +527,18 @@ describe("init-db migrations", () => {
     expect(literal).not.toContain("CREATE TABLE");
   });
 });
+
+describe("historical diagnostic bodies", () => {
+  it("rewrites the old diagnostic token instead of leaving it in the inbox", async () => {
+    // Rows written by the old fallback carry our own enum as the body
+    // («[رسالة من نوع: system]»), which reached the operator as unreadable text.
+    // The fix must also REPAIR those rows: 23 of them exist in production, and
+    // leaving them means the complaint stays true for old conversations.
+    const src = readFileSync(new URL("../../shared/init-db.ts", import.meta.url), "utf8");
+    const update = src.slice(src.indexOf("UPDATE whatsapp_chats"));
+    expect(update).toContain("رسالة من نوع");
+    expect(update).toContain("ℹ️ رسالة نظام");
+    expect(update).toContain("↩️ تفاعل");
+    expect(update).toContain("غير مدعوم");
+  });
+});
