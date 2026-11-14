@@ -1186,6 +1186,7 @@ async function recordSupplierBotInbound(opts: {
       supplierId: opts.supplierId,
       employeeId: opts.employeeId ?? null,
       employeeName: opts.employeeName ?? null,
+      waMessageId: opts.waMessageId ?? null,
       media: mediaBytes
         ? {
             data: mediaBytes,
@@ -1805,9 +1806,10 @@ async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string 
  * Recording HERE, before any handler is consulted, means a new interceptor
  * cannot be silently invisible. Idempotent on `waMessageId`.
  *
- * This writes the DB row ONLY. The console mirror stays in the handlers, which
- * know the request the message belongs to — mirroring here as well would post
- * every message twice.
+ * This writes the DB row ONLY. Mirroring belongs to the handlers: only they
+ * know which REQUEST the message belongs to, and a conversation is per request
+ * — mirroring here as well would file the same message under a second,
+ * context-free conversation.
  */
 async function recordInboundOnce(phone: string, msg: ServerMessage): Promise<void> {
   if (!msg.id) return;
@@ -2568,6 +2570,7 @@ async function handleInboundMessage(
       rfqId,
       contactName: senderName ?? null,
       supplierId,
+      waMessageId: waMessageId ?? null,
       employeeId: owner.employeeId,
       employeeName: owner.employeeName,
       media: mediaBytes

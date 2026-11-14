@@ -287,3 +287,29 @@ describe("every inbound mirror path carries the attachment", () => {
     expect(routes).not.toMatch(/mirrorInboundMessage\(\{[^}]*\[رد المورد على البند/);
   });
 });
+
+describe("a live inbound message is marked replayed", () => {
+  /**
+   * The backfill selects `chatwoot_synced_at IS NULL`. If a live message is
+   * mirrored but not marked, it stays a permanent candidate for replay — 30
+   * inbound rows were queued on a 7-day window while every outbound row was
+   * marked. The mark must therefore ride on the mirror itself, so a caller
+   * cannot mirror without it.
+   */
+  it("marks the row and passes Chatwoot's dedupe key", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const bridge = readFileSync(join(here, "../../modules/chatwoot/bridge.ts"), "utf8");
+
+    const start = bridge.indexOf("export async function mirrorInboundMessage");
+    const body = bridge.slice(start, bridge.indexOf("\nexport ", start + 10));
+
+    // Chatwoot's own dedupe key — without it a redelivered webhook or a backfill
+    // replay appends a SECOND copy instead of updating.
+    expect(body).toContain("sourceId");
+    // The replayed marker the backfill reads.
+    expect(body).toContain("chatwootSyncedAt");
+  });
+});
