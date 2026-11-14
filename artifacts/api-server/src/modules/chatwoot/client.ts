@@ -180,7 +180,12 @@ export async function createMediaMessage(
   content: string,
   direction: "incoming" | "outgoing",
   media: MirrorMedia,
-  meta: { externalCreatedAt?: string; sourceId?: string } = {},
+  meta: {
+    externalCreatedAt?: string;
+    sourceId?: string;
+    /** Chatwoot's OWN message id to quote — not a WhatsApp id. */
+    inReplyTo?: number | null;
+  } = {},
 ): Promise<ChatwootMessage | undefined> {
   const form = new FormData();
   form.append("content", content ?? "");
@@ -188,6 +193,10 @@ export async function createMediaMessage(
   form.append("private", "false");
   if (meta.externalCreatedAt) form.append("external_created_at", meta.externalCreatedAt);
   if (meta.sourceId) form.append("source_id", meta.sourceId);
+  // A media message can also be a REPLY. Without this, a supplier who answers a
+  // picture with a picture loses the quote — the same defect as the text path,
+  // in the other half of the media branch.
+  if (meta.inReplyTo) form.append("content_attributes[in_reply_to]", String(meta.inReplyTo));
   // A Blob keeps the filename the supplier actually sent, which is what an
   // agent needs when two invoices arrive with the same generic name.
   form.append(
