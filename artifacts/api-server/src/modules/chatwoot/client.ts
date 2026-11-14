@@ -215,14 +215,17 @@ export async function createMessage(
   conversationId: number,
   content: string,
   direction: "incoming" | "outgoing",
-  meta: { externalCreatedAt?: string; sourceId?: string } = {},
+  meta: { externalCreatedAt?: string; sourceId?: string; private?: boolean } = {},
 ): Promise<ChatwootMessage | undefined> {
   const res = await cw(`/conversations/${conversationId}/messages`, {
     method: "POST",
     body: JSON.stringify({
       content,
       message_type: direction,
-      private: false,
+      // A private note is agent-only: Chatwoot never delivers it to the
+      // supplier. Routing writes one so the operator can see WHO took the
+      // thread, which a label cannot express (a label is a reason, not a name).
+      private: meta.private ?? false,
       // Chatwoot's message builder reads these straight off the request
       // (`Messages::MessageBuilder#message_params`), so a historical replay can
       // keep the ORIGINAL time and carry the original id.

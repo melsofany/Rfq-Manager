@@ -345,3 +345,39 @@ describe("attachment urls must point at the gateway", () => {
     }
   });
 });
+
+describe("routing says WHO, not only WHY", () => {
+  /**
+   * Reported live: the activity feed read «Cortoba Admin added cortoba:مندوب
+   * متاح» and nothing named the employee, so the operator could not tell
+   * whether anyone had really been assigned.
+   *
+   * A label expresses a REASON («أول موظف متاح»), not a person. Routing must
+   * therefore also write an agent-only note naming the chosen agent — and it
+   * must be PRIVATE, or the supplier would receive our internal routing.
+   */
+  it("names the chosen agent in a private note", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const bridge = readFileSync(join(here, "../../modules/chatwoot/bridge.ts"), "utf8");
+
+    // The decision must carry a name, or the note cannot be written.
+    expect(bridge, "RoutingDecision needs the agent's name").toContain("agentName");
+    expect(bridge, "the note must be written").toMatch(/أُسندت المحادثة إلى/);
+    expect(bridge, "the routing note must be private").toMatch(/private:\s*true/);
+  });
+
+  it("never sends the routing note to the supplier", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const client = readFileSync(join(here, "../../modules/chatwoot/client.ts"), "utf8");
+
+    // `createMessage` hardcoded `private: false`, so a private note was
+    // impossible. It must honour the caller's flag.
+    expect(client).toMatch(/private:\s*meta\.private\s*\?\?\s*false/);
+  });
+});
