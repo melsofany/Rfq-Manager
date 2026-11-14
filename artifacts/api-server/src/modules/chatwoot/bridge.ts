@@ -673,6 +673,18 @@ export async function mirrorInboundMessage(opts: {
         link.conversationId,
         opts.replyToWaMessageId,
       ).catch(() => null);
+      // Logged because a MISS is invisible otherwise: the reply is still
+      // posted, just unquoted, and the console gives no hint that the link was
+      // dropped. A quoted reply is now the normal case, so a persistent miss
+      // here is the signal that Chatwoot changed how it stores `source_id`.
+      logger.info(
+        {
+          conversationId: link.conversationId,
+          replyTo: opts.replyToWaMessageId,
+          resolved: inReplyTo,
+        },
+        "Chatwoot: reply quote resolved",
+      );
     }
     const meta = { sourceId: opts.waMessageId ?? undefined, inReplyTo };
     const msg = opts.media
