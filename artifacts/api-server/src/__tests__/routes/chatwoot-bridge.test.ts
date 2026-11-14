@@ -309,7 +309,8 @@ describe("a live inbound message is marked replayed", () => {
     // Chatwoot's own dedupe key — without it a redelivered webhook or a backfill
     // replay appends a SECOND copy instead of updating.
     expect(body).toContain("sourceId");
-    // The replayed marker the backfill reads.
-    expect(body).toContain("chatwootSyncedAt");
+    // The replayed marker the backfill reads lives in `markReplayed` — the ONE
+    // implementation. Asserting an inline copy here is what let a path skip it.
+    expect(body).toContain("markReplayed");
   });
 });

@@ -832,3 +832,39 @@ describe("recording before dispatch must not cancel the mirror", () => {
     expect(body).toContain("mirrorInboundMessage");
   });
 });
+
+describe("every inbound path is terminal for the backfill", () => {
+  /**
+   * The backfill replays rows where `chatwoot_synced_at IS NULL`, so a path that
+   * records a message and never marks it replays FOREVER. Measured live: 15
+   * unmarked inbound rows in one hour, and one of three test messages mirrored.
+   *
+   * Two endings, one per path shape:
+   *   - MIRRORED -> `mirrorInboundMessage` / `mirrorSystemNote` marks the row;
+   *   - NOT MIRRORED (the rep bot is an INTERNAL chat, not a supplier
+   *     conversation) -> `markInboundHandled` marks it, or it becomes a phantom
+   *     staff thread.
+   */
+  it("marks the representative path and carries the id into every mirror", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    // Both dispatch points must mark the rep branch.
+    const repBranches = routes.split("handleRepMessage(").slice(1);
+    const marked = repBranches.filter((b) => b.slice(0, 400).includes("markInboundHandled"));
+    expect(marked.length).toBeGreaterThanOrEqual(2);
+
+    // EVERY mirror must carry the id, or its row is never marked replayed.
+    const inbound = routes.match(/await mirrorInboundMessage\(\{[\s\S]*?\n    \}\)/g) ?? [];
+    const notes = routes.match(/await mirrorSystemNote\(\{[\s\S]*?\n  \}\)/g) ?? [];
+    expect(inbound.length + notes.length).toBeGreaterThanOrEqual(4);
+    for (const call of [...inbound, ...notes]) {
+      expect(call, "a mirror without waMessageId leaves its row replayable").toContain(
+        "waMessageId",
+      );
+    }
+  });
+});
