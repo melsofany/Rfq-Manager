@@ -773,3 +773,36 @@ describe("the bot ROUTES, it does not collect data (operator correction)", () =>
     expect(routes).not.toMatch(/sendSupplierRequestConfirmed\(\s*phone,\s*chosen/);
   });
 });
+
+describe("a handler that consumes a message must record it", () => {
+  /**
+   * The webhook tries handlers in order and the first one to return `true` owns
+   * the message — `handleInboundMessage` (which persists) never sees it. So any
+   * interceptor must persist the message itself.
+   *
+   * Found live: `handleSupplierRequestPick` returned `true` for a request pick
+   * without recording it, so the console showed the menu opening and then
+   * nothing. The supplier looked as if they had gone silent at the exact moment
+   * they chose a request — the most important tap in the flow.
+   */
+  it("records the message inside handleSupplierRequestPick", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    const start = routes.indexOf("async function handleSupplierRequestPick");
+    expect(start).toBeGreaterThan(0);
+    // The handler ends at the next top-level `async function` — bounded so a
+    // later recording call cannot satisfy this by accident.
+    const rest = routes.slice(start);
+    const next = rest.indexOf("\nasync function", 1);
+    const body = next > 0 ? rest.slice(0, next) : rest;
+
+    expect(body).toContain("recordSupplierBotInbound");
+    // …and it must happen BEFORE the mirror, or the console thread is built on
+    // a message the database never received.
+    expect(body.indexOf("recordSupplierBotInbound")).toBeLessThan(body.indexOf("mirrorSystemNote"));
+  });
+});

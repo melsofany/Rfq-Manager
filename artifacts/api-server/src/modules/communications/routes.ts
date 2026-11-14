@@ -1071,6 +1071,21 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
     return true;
   }
 
+  // This handler runs BEFORE the bot and consumes the tap, so it must record it
+  // itself. Without this the pick never reaches `whatsapp_chats` — the console
+  // shows a menu opening and then nothing, which reads as the supplier having
+  // gone silent. The generic handler cannot do it: we returned `true` first.
+  await recordSupplierBotInbound({
+    phone,
+    waMessageId: msg.id,
+    msg,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    rfqId: chosen.rfqId,
+    employeeId: chosen.employeeId,
+    employeeName: chosen.employeeName,
+  });
+
   // Point the conversation at the chosen request so the reply that follows is
   // filed there, and tell the supplier who is handling it.
   await mirrorInboundMessage({
