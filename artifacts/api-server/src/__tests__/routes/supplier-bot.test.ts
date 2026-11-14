@@ -868,3 +868,50 @@ describe("every inbound path is terminal for the backfill", () => {
     }
   });
 });
+
+describe("a hand-off must be recorded, not just announced", () => {
+  /**
+   * Reported live: the supplier picked a request, the bot answered «تم ربط
+   * محادثتك بالطلب … أرسل عرضك هنا مباشرة», and then asked them to pick the
+   * request AGAIN on the next message.
+   *
+   * The pick wrote nothing, so `loadSession` returned null on the following
+   * message and the free-text branch reopened the menu — swallowing exactly the
+   * message the bot had just invited. An invitation the bot does not honour is
+   * worse than no invitation: the supplier re-picks, and the quote never
+   * arrives.
+   */
+  it("records the hand-off and lets the invited reply through", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    const pick = routes.slice(
+      routes.indexOf("async function handleSupplierRequestPick"),
+      routes.indexOf("async function handleSupplierRequestPick") + 2600,
+    );
+    // The pick must persist the hand-off, or the next message starts over.
+    expect(pick, "the pick must save the session").toContain("saveSession");
+    expect(pick, "the hand-off needs its own step").toContain("handed_off");
+
+    // And the free-text branch must stand aside once handed off, or the reply
+    // the bot invited is answered with the menu again.
+    expect(routes).toContain('session?.step === "handed_off"');
+  });
+
+  it("keeps the step ladder total for the hand-off step", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const bot = readFileSync(join(here, "../../modules/communications/supplier-bot.ts"), "utf8");
+
+    // `stepPrompt` is a switch over BotStep: a new member with no case is a
+    // compile error, and an unhandled one at runtime would send an empty
+    // question. Assert the case exists so the ladder stays explicit.
+    expect(bot).toContain('"handed_off"');
+    expect(bot).toContain('case "handed_off"');
+  });
+});

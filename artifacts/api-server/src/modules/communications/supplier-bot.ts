@@ -243,7 +243,21 @@ export async function supplierMayAnswer(
 
 /** The meaning of a free-text message the supplier just sent. */
 export type BotStep =
-  "await_price" | "await_delivery" | "await_origin" | "await_brand" | "await_notes";
+  | "await_price"
+  | "await_delivery"
+  | "await_origin"
+  | "await_brand"
+  | "await_notes"
+  /**
+   * The supplier chose a request and the bot handed the thread to the employee.
+   * The conversation is now a HUMAN chat: the bot must not answer it again.
+   *
+   * Without this the pick left no trace, so the next free-text message — the
+   * quote the bot had just invited («أرسل عرضك هنا مباشرة») — reopened the menu
+   * instead of reaching the employee, and the supplier had to re-pick the
+   * request every time. The invitation was never honoured.
+   */
+  | "handed_off";
 
 export interface SessionState {
   phone: string;
@@ -385,6 +399,10 @@ export function stepPrompt(step: BotStep, itemLabel: string): string {
       return `🏷️ العلامة التجارية للبند:\n${itemLabel}\n\nاكتب العلامة، أو «تخطي».`;
     case "await_notes":
       return `📝 ملاحظات إضافية للبند:\n${itemLabel}\n\nاكتب ملاحظتك، أو «تخطي».`;
+    // Not a question: the thread is with the employee. Asking nothing is the
+    // correct answer, and the empty string keeps the ladder total.
+    case "handed_off":
+      return "";
   }
 }
 

@@ -1092,7 +1092,16 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
     waMessageId: msg.id,
   });
   // The pick CONFIRMS THE HAND-OFF, not a data-entry session: the bot's job is
-  // to route the supplier to the employee who owns the request.
+  // to route the supplier to the employee who owns the request. Recording it is
+  // what makes the hand-off real — the invitation below («أرسل عرضك هنا
+  // مباشرة») is only honoured if the bot knows to stay out of the thread.
+  await saveSession({
+    phone,
+    supplierId: supplier.id,
+    rfqId: chosen.rfqId,
+    rfqItemId: null,
+    step: "handed_off",
+  });
   const chosenItems = await listSupplierRequestItems(supplier.id, chosen.rfqId);
   await sendSupplierRequestHandedOff(
     phone,
@@ -1276,6 +1285,12 @@ export async function handleSupplierBotMessage(
   // rather than letting it fall through to the generic handler, which would
   // look like the bot ignoring the tap.
   if (!isBotPayload && !text) return false;
+
+  // After a hand-off the thread belongs to the employee. The supplier was told
+  // to send the quote HERE, so answering with the menu would swallow exactly
+  // the message the bot asked for — and force a fresh request pick every time.
+  // Explicit taps still work, so the supplier can reopen the bot on purpose.
+  if (!isBotPayload && session?.step === "handed_off") return false;
 
   // We are about to consume this message, so the generic handler will never see
   // it — record it ourselves, once, for every branch below.

@@ -97,8 +97,17 @@ services:
           type: keyvalue
           name: cortoba-chatwoot-redis
           property: connectionString
+      # The GATEWAY's public origin, NOT this service's own hostname.
+      #
+      # `routes.default_url_options` takes this value and Chatwoot builds
+      # ABSOLUTE attachment urls from it. Pointing it at this service made every
+      # image load from a host the browser cannot reach: the console is served
+      # through the Cortoba gateway and this service sits behind the overlay's
+      # private gate, so the request was refused and the console showed
+      # «Loading failed» for a file that was on disk the whole time. The url
+      # must be the origin the BROWSER uses.
       - key: FRONTEND_URL
-        value: https://cortoba-chatwoot.onrender.com
+        value: https://cortoba-rfq.onrender.com
       - key: SECRET_KEY_BASE
         generateValue: true
       - key: CORTOBA_APP_URL
@@ -173,8 +182,10 @@ services:
           type: keyvalue
           name: cortoba-chatwoot-redis
           property: connectionString
+      # Same reason as the web service: absolute attachment urls must point at
+      # the gateway, which is the only origin the browser can reach.
       - key: FRONTEND_URL
-        value: https://cortoba-chatwoot.onrender.com
+        value: https://cortoba-rfq.onrender.com
       - key: SECRET_KEY_BASE
         fromService:
           type: web

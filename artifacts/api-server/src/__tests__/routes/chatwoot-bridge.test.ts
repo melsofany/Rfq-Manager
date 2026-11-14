@@ -314,3 +314,34 @@ describe("a live inbound message is marked replayed", () => {
     expect(body).toContain("markReplayed");
   });
 });
+
+describe("attachment urls must point at the gateway", () => {
+  /**
+   * Reported live as «Loading failed» on a supplier's image.
+   *
+   * The file was on disk the whole time. `routes.default_url_options` takes
+   * FRONTEND_URL and Chatwoot builds ABSOLUTE attachment urls from it, so
+   * pointing it at the console's OWN hostname made the browser fetch from a
+   * host it cannot reach — the console is served through the gateway and the
+   * console service sits behind the overlay's private gate.
+   *
+   * The rule: the value is the origin the BROWSER uses, not the service's own.
+   */
+  it("points FRONTEND_URL at the gateway in the deployment manifest", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const yaml = readFileSync(join(here, "../../../../../chatwoot-cortoba/render.yaml"), "utf8");
+
+    // Every FRONTEND_URL must be the gateway origin. The console's own hostname
+    // is unreachable from the browser, which is the defect.
+    const values = [...yaml.matchAll(/key: FRONTEND_URL\s*\n\s*value: (\S+)/g)].map((m) => m[1]);
+    expect(values.length).toBeGreaterThanOrEqual(2); // web + worker
+    for (const v of values) {
+      expect(v, "FRONTEND_URL must be the gateway the browser reaches").not.toContain(
+        "cortoba-chatwoot",
+      );
+    }
+  });
+});
