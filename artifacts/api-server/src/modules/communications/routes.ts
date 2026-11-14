@@ -196,6 +196,8 @@ router.get("/webhook/whatsapp", (req, res): void => {
 Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
   try {
     const msg = message as unknown as ServerMessage;
+    // Record FIRST, before any handler can own (and consume) the message.
+    if (msg.type !== "reaction") await recordInboundOnce(from, msg);
     if (msg.type === "reaction") {
       await handleReactionWebhook(from, msg);
     } else if (await handleAiAssistantMessage(from, msg as unknown as WaInboundMessage)) {
@@ -341,6 +343,7 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       const from = contact?.wa_id ?? message.from;
       const name = contact?.profile?.name;
 
+      if (message.type !== "reaction") await recordInboundOnce(from, message);
       if (message.type === "reaction") {
         await handleReactionWebhook(from, message);
       } else if (await handleAiAssistantMessage(from, message as unknown as WaInboundMessage)) {
@@ -1072,21 +1075,6 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
     return true;
   }
 
-  // This handler runs BEFORE the bot and consumes the tap, so it must record it
-  // itself. Without this the pick never reaches `whatsapp_chats` — the console
-  // shows a menu opening and then nothing, which reads as the supplier having
-  // gone silent. The generic handler cannot do it: we returned `true` first.
-  await recordSupplierBotInbound({
-    phone,
-    waMessageId: msg.id,
-    msg,
-    supplierId: supplier.id,
-    supplierName: supplier.name,
-    rfqId: chosen.rfqId,
-    employeeId: chosen.employeeId,
-    employeeName: chosen.employeeName,
-  });
-
   // Point the conversation at the chosen request so the reply that follows is
   // filed there, and tell the supplier who is handling it.
   await mirrorSystemNote({
@@ -1804,6 +1792,55 @@ async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string 
  * normal chat flow. Triggers on: any text, or a list_reply/button_reply with a
  * `rep_` prefix.
  */
+/**
+ * Record EVERY inbound message once, at the dispatch point.
+ *
+ * Every handler the webhook tries before `handleInboundMessage` owns the
+ * message it returns `true` for, so the persisting handler never sees it.
+ * Making each interceptor remember to record itself failed three times in one
+ * session — the bot's media path, the request pick, the representative bot — and
+ * the symptom was identical and misleading every time: the menu appears to work
+ * and then the conversation stops.
+ *
+ * Recording HERE, before any handler is consulted, means a new interceptor
+ * cannot be silently invisible. Idempotent on `waMessageId`.
+ *
+ * This writes the DB row ONLY. The console mirror stays in the handlers, which
+ * know the request the message belongs to — mirroring here as well would post
+ * every message twice.
+ */
+async function recordInboundOnce(phone: string, msg: ServerMessage): Promise<void> {
+  if (!msg.id) return;
+  try {
+    const existing = await db
+      .select({ id: whatsappChatsTable.id })
+      .from(whatsappChatsTable)
+      .where(eq(whatsappChatsTable.waMessageId, msg.id))
+      .limit(1);
+    if (existing.length > 0) return;
+
+    const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
+    const suppliers = await db.select().from(suppliersTable);
+    const matched = suppliers.find((x) => normalizePhone(x.phone ?? "") === normalizePhone(phone));
+
+    await db.insert(whatsappChatsTable).values({
+      waMessageId: msg.id,
+      direction: "inbound",
+      phone,
+      supplierId: matched?.id ?? null,
+      body,
+      mediaId,
+      mediaType,
+      mimeType,
+      filename,
+      isRead: false,
+    });
+    broadcastWaEvent({ type: "new_message", phone });
+  } catch (err) {
+    logger.warn({ err, phone }, "inbound record failed — non-fatal");
+  }
+}
+
 async function handleRepMessage(phone: string, msg: ServerMessage): Promise<boolean> {
   const listId = msg.interactive?.list_reply?.id;
   const buttonId = msg.interactive?.button_reply?.id;

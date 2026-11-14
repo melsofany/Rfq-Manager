@@ -774,35 +774,32 @@ describe("the bot ROUTES, it does not collect data (operator correction)", () =>
   });
 });
 
-describe("a handler that consumes a message must record it", () => {
+describe("inbound messages are recorded at the dispatch point", () => {
   /**
-   * The webhook tries handlers in order and the first one to return `true` owns
-   * the message — `handleInboundMessage` (which persists) never sees it. So any
-   * interceptor must persist the message itself.
+   * Every handler the webhook tries before `handleInboundMessage` owns the
+   * message it returns `true` for, so the persisting handler never sees it.
    *
-   * Found live: `handleSupplierRequestPick` returned `true` for a request pick
-   * without recording it, so the console showed the menu opening and then
-   * nothing. The supplier looked as if they had gone silent at the exact moment
-   * they chose a request — the most important tap in the flow.
+   * Making each interceptor remember to record itself failed THREE times in one
+   * session — the bot's media path, the request pick, and the representative bot
+   * — and the symptom was identical and misleading every time: the menu appears
+   * to work and then the conversation stops. So recording moved to ONE place,
+   * before any handler is consulted.
    */
-  it("records the message inside handleSupplierRequestPick", async () => {
+  it("records before dispatching, on BOTH webhook paths", async () => {
     const { readFileSync } = await import("node:fs");
     const { fileURLToPath } = await import("node:url");
     const { dirname, join } = await import("node:path");
     const here = dirname(fileURLToPath(import.meta.url));
     const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
 
-    const start = routes.indexOf("async function handleSupplierRequestPick");
-    expect(start).toBeGreaterThan(0);
-    // The handler ends at the next top-level `async function` — bounded so a
-    // later recording call cannot satisfy this by accident.
-    const rest = routes.slice(start);
-    const next = rest.indexOf("\nasync function", 1);
-    const body = next > 0 ? rest.slice(0, next) : rest;
+    const calls = routes.match(/await recordInboundOnce\(/g) ?? [];
+    // `Whatsapp.on.message` and `dispatchWebhookPayload` — one call each. A
+    // handler added to one path only is the recorded "dispatch-order" defect.
+    expect(calls.length).toBe(2);
 
-    expect(body).toContain("recordSupplierBotInbound");
-    // …and it must happen BEFORE the mirror, or the console thread is built on
-    // a message the database never received.
-    expect(body.indexOf("recordSupplierBotInbound")).toBeLessThan(body.indexOf("mirrorSystemNote"));
+    // The recorder must be idempotent on the WhatsApp message id, or a
+    // redelivered webhook doubles the thread.
+    const rec = routes.slice(routes.indexOf("async function recordInboundOnce"));
+    expect(rec.slice(0, 900)).toContain("waMessageId");
   });
 });
