@@ -22,6 +22,7 @@ import {
   sentLogTable,
   rfqTable,
   employeesTable,
+  whatsappChatsTable,
 } from "@workspace/db";
 import { and, eq, ne, ilike } from "drizzle-orm";
 import { logger } from "../../shared/logger";
@@ -564,6 +565,9 @@ export async function mirrorInboundMessage(opts: {
   employeeName?: string | null;
   /** A file the supplier sent, already downloaded from WhatsApp. */
   media?: MirrorMedia | null;
+  /** WhatsApp message id — used as Chatwoot's dedupe key AND to mark the row
+   *  replayed, so the backfill never posts it a second time. */
+  waMessageId?: string | null;
 }): Promise<void> {
   try {
     const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
@@ -576,10 +580,23 @@ export async function mirrorInboundMessage(opts: {
     // A file goes up as multipart; the text alone would leave the console
     // showing «مرفق» with nothing behind it — the recorded reason the old
     // system was abandoned.
+    // `sourceId` is Chatwoot's OWN dedupe key (`messages.source_id`): a
+    // redelivered webhook or a backfill replay then updates instead of appending
+    // a second copy. Without it the console shows the same message twice.
+    const meta = { sourceId: opts.waMessageId ?? undefined };
     const msg = opts.media
-      ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media)
-      : await createMessage(link.conversationId, opts.body, "incoming");
+      ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media, meta)
+      : await createMessage(link.conversationId, opts.body, "incoming", meta);
     rememberOwnMessage(msg?.id);
+    // Mark the row replayed. The backfill selects `chatwoot_synced_at IS NULL`,
+    // so leaving this unwritten makes every live message a permanent candidate
+    // for replay — 30 inbound rows were queued on a 7-day window.
+    if (opts.waMessageId) {
+      await db
+        .update(whatsappChatsTable)
+        .set({ chatwootSyncedAt: new Date() })
+        .where(eq(whatsappChatsTable.waMessageId, opts.waMessageId));
+    }
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (inbound) failed — non-fatal");
   }
