@@ -1,9 +1,10 @@
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   db,
   whatsappChatsTable,
   suppliersTable,
   chatwootLinksTable,
+  sentLogTable,
 } from "@workspace/db";
 import { logger } from "../../shared/logger";
 import { canonicalPhone, saveLink } from "./bridge";
@@ -92,14 +93,33 @@ async function supplierNameForPhone(
   return hit ? { id: hit.id, name: hit.name } : null;
 }
 
-/** The most recent RFQ we know this number was contacted about. */
+/**
+ * The most recent RFQ we know this number was contacted about.
+ *
+ * The link table is the FIRST source, but it is only populated for a phone we
+ * have already filed a request for — on a fresh console it is empty for every
+ * number, so relying on it alone stamped all 414 conversations with `rfqId: 0`
+ * and the console could not answer «which request is this?». The supplier's own
+ * `sent_log` is the authority: it is the record of which requests we actually
+ * sent them.
+ */
 async function rfqIdForPhone(phone: string): Promise<number | null> {
   const rows = await db
     .select({ rfqId: chatwootLinksTable.rfqId })
     .from(chatwootLinksTable)
     .where(and(eq(chatwootLinksTable.phone, phone), gt(chatwootLinksTable.rfqId, 0)))
     .limit(1);
-  return rows[0]?.rfqId ?? null;
+  if (rows[0]?.rfqId) return rows[0].rfqId;
+
+  const supplier = await supplierNameForPhone(phone);
+  if (!supplier) return null;
+  const sent = await db
+    .select({ rfqId: sentLogTable.rfqId })
+    .from(sentLogTable)
+    .where(eq(sentLogTable.supplierId, supplier.id))
+    .orderBy(desc(sentLogTable.id))
+    .limit(1);
+  return sent[0]?.rfqId ?? null;
 }
 
 /**
