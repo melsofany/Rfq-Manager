@@ -139,6 +139,8 @@ export const ROUTE_LABEL_UNASSIGNED = "cortoba:بلا مسؤول";
 export interface RoutingDecision {
   agentId: number | null;
   reason: "owner" | "online" | "supervisor" | "unassigned";
+  /** The chosen agent's display name, for the agent-only routing note. */
+  agentName?: string | null;
   label: string;
 }
 
@@ -166,19 +168,36 @@ export interface RoutingDecision {
 export async function pickAssignee(opts: {
   ownerAgentId?: number | null;
   ownerAvailable?: boolean;
+  /** The owner's display name, used when the agent list does not carry it. */
+  ownerName?: string | null;
 }): Promise<RoutingDecision> {
   const agents = await listAgents();
   if (agents.length === 0) return { agentId: null, reason: "unassigned", label: ROUTE_LABEL_UNASSIGNED };
 
   if (opts.ownerAgentId != null && opts.ownerAvailable !== false) {
-    return { agentId: opts.ownerAgentId, reason: "owner", label: ROUTE_LABEL_OWNER };
+    const owner = agents.find((a) => a.id === opts.ownerAgentId);
+    return {
+      agentId: opts.ownerAgentId,
+      reason: "owner",
+      label: ROUTE_LABEL_OWNER,
+      agentName: owner?.name ?? opts.ownerName ?? null,
+    };
   }
 
   const online = agents.find((a) => a.availability_status === "online");
-  if (online?.id) return { agentId: online.id, reason: "online", label: ROUTE_LABEL_ONLINE };
+  if (online?.id) {
+    return { agentId: online.id, reason: "online", label: ROUTE_LABEL_ONLINE, agentName: online.name };
+  }
 
   const admin = agents.find((a) => a.role === "administrator");
-  if (admin?.id) return { agentId: admin.id, reason: "supervisor", label: ROUTE_LABEL_SUPERVISOR };
+  if (admin?.id) {
+    return {
+      agentId: admin.id,
+      reason: "supervisor",
+      label: ROUTE_LABEL_SUPERVISOR,
+      agentName: admin.name,
+    };
+  }
 
   return { agentId: null, reason: "unassigned", label: ROUTE_LABEL_UNASSIGNED };
 }
@@ -224,7 +243,7 @@ export async function applyConversationOwnership(
 
     // Decide who actually gets it: the owner when they have an account, else
     // someone online, else an administrator, else nobody (and say so).
-    const decision = await pickAssignee({ ownerAgentId });
+    const decision = await pickAssignee({ ownerAgentId, ownerName: opts.employeeName });
 
     // The label is the visible audit trail of that decision. A failure to label
     // is not a failure to route, so it is attempted before the assignment and
@@ -238,6 +257,30 @@ export async function applyConversationOwnership(
     }
 
     const assigned = await assignConversation(conversationId, decision.agentId);
+
+    // Say WHO took the thread, as an agent-only note. The label carries the
+    // REASON («مندوب متاح») but not a name, so the activity feed read
+    // «added cortoba:مندوب متاح» and the operator could not tell whether anyone
+    // had actually been assigned. A private note is never delivered to the
+    // supplier, so this costs nothing on the WhatsApp side.
+    const who = decision.agentName ?? "موظف";
+    const why =
+      decision.reason === "owner"
+        ? "المسؤول عن طلب التسعير"
+        : decision.reason === "online"
+          ? "أول موظف متاح"
+          : "المشرف";
+    // Best-effort, and a SYNCHRONOUS throw must be contained too: an
+    // unavailable `createMessage` would otherwise abort the whole routing and
+    // leave the thread unassigned — the note is the least important part of it.
+    try {
+      await createMessage(conversationId, `👤 أُسندت المحادثة إلى: ${who} (${why})`, "outgoing", {
+        private: true,
+      });
+    } catch {
+      // The note is advisory; routing already succeeded.
+    }
+
     // Report failure so the caller does not cache a half-done result and leave
     // the thread unassigned forever.
     return attributesOk && labelled && assigned;
