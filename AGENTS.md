@@ -4692,6 +4692,54 @@ Postgres حقيقي.
   «هل كلتاهما تجمّعان بنفس الطريقة؟» — هنا كانت القائمة تجمع والتفاصيل لا تجمع،
   فبدت القائمة سليمة والتفاصيل مكسورة.
 
+## Chatwoot live verification — the replay's five real defects (this session)
+
+Verified **from scratch** against production, not from prior reports. The
+console, the agent UI and the supplier bot are live; the defects below were all
+found by replaying real data, and each guard is proven to fail against its
+pre-fix code.
+
+- **A conversation the console no longer has must be recreated, not retried.**
+  A stored `chatwoot_links` row pointed at conversation 3, which the console did
+  not have (`404 Resource could not be found`). Every message answered 404, so
+  no row was ever marked replayed, so the same window was re-read forever — it
+  could not progress by retrying, which is why it looked like a hang. The
+  conversation is now verified before use and recreated when gone.
+  **A mock that accepts every send guards nothing** — the backfill mock had to
+  return `undefined` for a message into a dead conversation before the guard
+  could fail at all.
+- **The replay window must ask for the UNREPLAYED rows.** It was the oldest
+  `limit` rows of the number, replayed or not. Number one holds 125 messages,
+  100 already done, so every batch returned those 100, spent its whole budget
+  skipping them, and the 394 numbers behind it were never reached
+  (`phonesConsidered: 20` forever, 4,226 rows waiting). The query now filters
+  `chatwoot_synced_at IS NULL`.
+  **Assert the QUERY, not only the outcome**: a mock that filters by itself
+  hides exactly this defect (the run looked healthy while the SQL read the whole
+  history). `builder()` captures the caller's WHERE and the guard inspects it.
+- **A conversation is filed under the supplier's `sent_log`, not only our link
+  table.** The link table is empty on a fresh console, so 413 of 414
+  conversations carried `rfqId: 0` and the console could not answer «which
+  request is this?». `sent_log` is the authority for which requests we actually
+  sent them.
+- **Phone normalisation is the whole contact path.** Three separate defects
+  (`createContact(name, phone)` argument swap; a local `010…` number where
+  E.164 was required; Cairo landlines `02…` unhandled) each broke contact
+  creation or matching. `canonicalPhone` is the ONE rule — never re-derive it.
+- **Result, verified live**: 7,950/7,950 messages replayed (0 pending), **414
+  conversations**, 0 errors, and the console loads inside Cortoba with the SSO
+  cookie planted (`_chatwoot_session`, no second login). The SSO URL must be
+  re-pointed at OUR origin (`sameOriginConsolePath`) — `onrender.com` is a
+  public suffix, so the console's own host is a DIFFERENT site and its cookie is
+  rejected.
+- **Supplier bot isolation verified live**: `supplierMayAnswer` reads `sent_log`
+  on `(supplierId, rfqId)`, so a request sent to another supplier answers
+  `{ok:false, reason:"not_sent_to_supplier"}` and its items read as `[]`. An RFQ
+  goes to SEVERAL suppliers, so another supplier's open request is NOT
+  automatically foreign — a test built on that premise proves nothing.
+- Run the suite with `env -i PATH="$PATH" HOME="$HOME"`: exported
+  `SMTP_*`/`AI_*`/`GOOGLE_*`/`CHATWOOT_*` fail unrelated tests.
+
 ## Chatwoot is an agent console on an API channel — never a WhatsApp channel
 
 Replacing the hand-built `/whatsapp` page (2453 lines) with Chatwoot failed once
