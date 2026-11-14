@@ -385,6 +385,33 @@ export async function openPricingRequestsForSupplier(supplierId: number): Promis
 }
 
 /**
+ * The employee responsible for one request sent to one supplier.
+ *
+ * The bot needs this to hand a conversation over: the same `sent_log` row that
+ * authorises the supplier also names the owner. A missing owner is not an error
+ * — it means the request was sent without an employee attached, and the reply
+ * still belongs in the thread.
+ */
+export async function responsibleEmployeeFor(
+  supplierId: number,
+  rfqId: number,
+): Promise<{ employeeId: number | null; employeeName: string | null } | null> {
+  try {
+    const [row] = await db
+      .select({ employeeId: sentLogTable.employeeId, employeeName: employeesTable.name })
+      .from(sentLogTable)
+      .leftJoin(employeesTable, eq(sentLogTable.employeeId, employeesTable.id))
+      .where(and(eq(sentLogTable.supplierId, supplierId), eq(sentLogTable.rfqId, rfqId)))
+      .limit(1);
+    if (!row) return null;
+    return { employeeId: row.employeeId ?? null, employeeName: row.employeeName ?? null };
+  } catch (err) {
+    logger.warn({ err, supplierId, rfqId }, "Chatwoot: responsible-employee lookup failed");
+    return null;
+  }
+}
+
+/**
  * Decide which request an inbound supplier message answers.
  *
  * Order matters. An explicit request number in the text is authoritative — the

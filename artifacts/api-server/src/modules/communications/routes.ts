@@ -40,6 +40,7 @@ import {
   formatQty as formatWaQty,
   sendSupplierRequestPicker,
   sendSupplierRequestConfirmed,
+  sendSupplierRequestHandedOff,
   sendSupplierBotMainMenu,
   sendSupplierBotRequestList,
   sendSupplierBotItemList,
@@ -82,6 +83,7 @@ import {
   mirrorInboundMessage,
   mirrorOutboundMessage,
   openPricingRequestsForSupplier,
+  responsibleEmployeeFor,
   pickRequestFromText,
   supplierByPhone,
 } from "../chatwoot/bridge";
@@ -1079,7 +1081,15 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
     employeeId: chosen.employeeId,
     employeeName: chosen.employeeName,
   });
-  await sendSupplierRequestConfirmed(phone, chosen.internalRfqNo, chosen.employeeName);
+  // The pick CONFIRMS THE HAND-OFF, not a data-entry session: the bot's job is
+  // to route the supplier to the employee who owns the request.
+  const chosenItems = await listSupplierRequestItems(supplier.id, chosen.rfqId);
+  await sendSupplierRequestHandedOff(
+    phone,
+    chosen.internalRfqNo,
+    chosen.employeeName,
+    chosenItems.length,
+  );
   broadcastWaEvent({ type: "new_message", phone });
   return true;
 }
@@ -1385,53 +1395,30 @@ export async function handleSupplierBotMessage(
         return true;
       }
 
-      if (head === "sup_avail") {
-        const itemId = Number(a);
-        const available = b === "1";
-        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
-        await upsertDraft(supplier.id, session.rfqId, itemId, {
-          availability: available ? "available" : "unavailable",
-        });
-        if (!available) {
-          // «غير متاح» ends the item — there is nothing to price. Say so and
-          // return to the list, where the item now reads as answered.
-          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
-          await sendWhatsAppText(phone, "تم تسجيل أن البند غير متاح. اختر بنداً آخر أو أرسل الرد.");
-          await sendSupplierBotItemList(
-            phone,
-            await rfqNoOf(session.rfqId),
-            items.map((it) => ({
-              id: it.id,
-              label: itemLabel(it),
-              qty: it.qty,
-              uom: it.uom,
-              answered:
-                it.draft?.availability === "unavailable" ||
-                (it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0),
-            })),
-            1,
-          );
-          await saveSession({
-            phone,
-            supplierId: supplier.id,
-            rfqId: session.rfqId,
-            rfqItemId: null,
-            step: null,
-          });
-          return true;
-        }
-        // Available → ask for the price, the one field that makes it an offer.
-        await saveSession({
+      if (head === "sup_send_offer") {
+        // The bot ROUTES; it does not collect the quote. Tapping a request used
+        // to open a per-item wizard («متاح؟ / السعر؟ / مدة التوريد؟») that asked
+        // the supplier for the figures the responsible employee negotiates —
+        // and left the answer outside the console thread, which is where the
+        // employee works. Both buttons now hand the conversation over.
+        if (!session?.rfqId) return true;
+        const rfqNo = await rfqNoOf(session.rfqId);
+        const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+        const owner = await responsibleEmployeeFor(supplier.id, session.rfqId);
+        const note = b === "0" ? "غير متاح" : "متاح";
+        // The tap itself is part of the conversation, so it is mirrored — the
+        // employee sees the supplier answered, not just that a menu was opened.
+        await mirrorInboundMessage({
           phone,
-          supplierId: supplier.id,
+          body: `[رد المورد على البند: ${note}]`,
           rfqId: session.rfqId,
-          rfqItemId: itemId,
-          step: "await_price",
+          supplierId: supplier.id,
+          employeeId: owner?.employeeId ?? null,
+          employeeName: owner?.employeeName ?? null,
         });
-        await sendWhatsAppText(
-          phone,
-          stepPrompt("await_price", await itemLabelOf(session.rfqId, itemId)),
-        );
+        await sendSupplierRequestHandedOff(phone, rfqNo, owner?.employeeName ?? null, items.length);
+        broadcastWaEvent({ type: "new_message", phone });
+        await clearSession(phone);
         return true;
       }
 
