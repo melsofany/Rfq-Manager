@@ -2485,28 +2485,33 @@ async function handleInboundMessage(
     return normalized === phone || normalized.endsWith(phone) || phone.endsWith(normalized);
   });
 
+  // `recordInboundOnce` runs before dispatch and has usually written the row
+  // already. Returning here would skip the MIRROR — so the console would show
+  // nothing at all, which is the opposite of the point. The row is inserted
+  // only when absent; the mirror below always runs.
   const existing = await db
     .select({ id: whatsappChatsTable.id })
     .from(whatsappChatsTable)
     .where(eq(whatsappChatsTable.waMessageId, waMessageId))
     .limit(1);
-  if (existing.length > 0) return;
 
-  await db.insert(whatsappChatsTable).values({
-    waMessageId,
-    direction: "inbound",
-    phone,
-    supplierId: matchedSupplier?.id ?? null,
-    body,
-    // Meta sends the contact's WhatsApp profile name on every inbound message.
-    contactName: senderName?.trim() || null,
-    mediaId,
-    mediaType,
-    mimeType,
-    filename,
-    replyToMessageId: msg.context?.id ?? null,
-    isRead: false,
-  });
+  if (existing.length === 0) {
+    await db.insert(whatsappChatsTable).values({
+      waMessageId,
+      direction: "inbound",
+      phone,
+      supplierId: matchedSupplier?.id ?? null,
+      body,
+      // Meta sends the contact's WhatsApp profile name on every inbound message.
+      contactName: senderName?.trim() || null,
+      mediaId,
+      mediaType,
+      mimeType,
+      filename,
+      replyToMessageId: msg.context?.id ?? null,
+      isRead: false,
+    });
+  }
 
   try {
     await Whatsapp.markAsRead(phoneID, waMessageId);

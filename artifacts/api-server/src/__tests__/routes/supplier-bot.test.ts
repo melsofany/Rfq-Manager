@@ -803,3 +803,32 @@ describe("inbound messages are recorded at the dispatch point", () => {
     expect(rec.slice(0, 900)).toContain("waMessageId");
   });
 });
+
+describe("recording before dispatch must not cancel the mirror", () => {
+  /**
+   * Found live, and it was MY regression: once `recordInboundOnce` writes the
+   * row before dispatch, `handleInboundMessage` found it already present and
+   * returned early — so the MIRROR never ran and the console showed NOTHING.
+   * Three live messages were stored and zero were mirrored (0/3 marked synced).
+   *
+   * The early return must therefore guard only the INSERT, never the mirror.
+   */
+  it("does not return early when the row already exists", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    const start = routes.indexOf("async function handleInboundMessage");
+    const rest = routes.slice(start);
+    const next = rest.indexOf("\nasync function", 1);
+    const body = next > 0 ? rest.slice(0, next) : rest;
+
+    // The dedupe lookup may gate the insert, but nothing may `return` before
+    // the mirror — otherwise a pre-recorded message is never mirrored.
+    const earlyReturn = /if \(existing\.length > 0\) return;/.test(body);
+    expect(earlyReturn, "an early return skips the console mirror").toBe(false);
+    expect(body).toContain("mirrorInboundMessage");
+  });
+});
