@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   db,
   whatsappChatsTable,
+  whatsappMediaTable,
   suppliersTable,
   chatwootLinksTable,
   sentLogTable,
@@ -11,10 +12,12 @@ import { canonicalPhone, saveLink } from "./bridge";
 import {
   createContact,
   createConversation,
+  createMediaMessage,
   createMessage,
   findContactByPhone,
   getConversationContactPhone,
   listMessageSourceIds,
+  findMessageIdBySourceId,
   isChatwootConfigured,
 } from "./client";
 
@@ -241,6 +244,15 @@ export async function backfillPhone(
       direction: whatsappChatsTable.direction,
       createdAt: whatsappChatsTable.createdAt,
       waMessageId: whatsappChatsTable.waMessageId,
+      // The FILE is needed to replay a media message. Without it the backfill
+      // can only post the «[صورة مرسلة]» placeholder as text — so a picture
+      // whose live upload failed could never be recovered, and the console kept
+      // a text stub where the supplier had sent an image.
+      mediaId: whatsappChatsTable.mediaId,
+      mediaType: whatsappChatsTable.mediaType,
+      mimeType: whatsappChatsTable.mimeType,
+      filename: whatsappChatsTable.filename,
+      replyToMessageId: whatsappChatsTable.replyToMessageId,
       // Read on every row: a replayed message must never be re-scanned, or the
       // number is replayed from its beginning on every run.
       chatwootSyncedAt: whatsappChatsTable.chatwootSyncedAt,
@@ -298,24 +310,53 @@ export async function backfillPhone(
     }
 
     const body = (row.body ?? "").trim();
-    if (!body) {
-      // A media-only message has no text. Chatwoot renders an empty bubble
-      // poorly, so say what it was instead of sending nothing. Marked too:
-      // there is nothing to retry, and leaving it unmarked stalls the cursor.
+    // A message with NOTHING — no text and no file — is not replayable: marked
+    // so it stops being a candidate, because an unmarked row stalls the cursor.
+    // A message with a FILE is replayable even when its text is empty, so the
+    // skip must test both, not just the text.
+    if (!body && !row.mediaId) {
       await markChatSynced(row.id);
       skipped += 1;
       continue;
     }
 
-    const msg = await createMessage(
-      conversationId,
-      body,
-      row.direction === "inbound" ? "incoming" : "outgoing",
-      {
-        externalCreatedAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
-        sourceId,
-      },
-    );
+    // A stored file travels with the message. The bytes live in our own
+    // `whatsapp_media` table, so a replay needs no call to Meta (whose media
+    // expires after 30 days) — the file survives as long as the row does.
+    let media: { data: Buffer; mimeType: string; filename: string; kind: string } | null = null;
+    if (row.mediaId) {
+      const [stored] = await db
+        .select({
+          data: whatsappMediaTable.data,
+          mimeType: whatsappMediaTable.mimeType,
+          filename: whatsappMediaTable.filename,
+        })
+        .from(whatsappMediaTable)
+        .where(eq(whatsappMediaTable.waMediaId, row.mediaId))
+        .limit(1);
+      if (stored?.data) {
+        media = {
+          data: stored.data as Buffer,
+          mimeType: stored.mimeType ?? row.mimeType ?? "application/octet-stream",
+          filename: stored.filename ?? row.filename ?? `whatsapp-${row.mediaType ?? "file"}`,
+          kind: row.mediaType ?? "file",
+        };
+      }
+    }
+
+    // Resolve the quote the same way the live path does: Chatwoot links a reply
+    // by its OWN id, and the WhatsApp id we store is not one it knows.
+    let inReplyTo: number | null = null;
+    if (row.replyToMessageId) {
+      inReplyTo = await findMessageIdBySourceId(conversationId, row.replyToMessageId).catch(
+        () => null,
+      );
+    }
+    const meta = { externalCreatedAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined, sourceId, inReplyTo };
+
+    const msg = media
+      ? await createMediaMessage(conversationId, body, row.direction === "inbound" ? "incoming" : "outgoing", media, meta)
+      : await createMessage(conversationId, body, row.direction === "inbound" ? "incoming" : "outgoing", meta);
     if (msg) {
       // Mark only AFTER Chatwoot accepted it: marking first would drop a
       // message that the API then refused.
