@@ -437,3 +437,29 @@ describe("an inbound row has ONE description, shared by both writers", () => {
     expect(client, "the quote must be sent as content_attributes").toContain("in_reply_to");
   });
 });
+
+describe("the quote is sent the way Chatwoot reads it", () => {
+  /**
+   * Chatwoot links a reply through `content_attributes.in_reply_to`, holding its
+   * OWN message id. Sending the WhatsApp id there — or sending it as a
+   * top-level field — is accepted by the API and then ignored, which looks
+   * exactly like the reply arriving unquoted.
+   */
+  it("sends content_attributes.in_reply_to, not a bare field", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const client = readFileSync(join(here, "../../modules/chatwoot/client.ts"), "utf8");
+
+    const body = client.slice(
+      client.indexOf("export async function createMessage"),
+      client.indexOf("export async function createMessage") + 1400,
+    );
+    expect(body, "the quote must ride in content_attributes").toMatch(
+      /content_attributes:\s*\{\s*in_reply_to/,
+    );
+    // A bare `in_reply_to` at the top level would be ignored by the builder.
+    expect(body).not.toMatch(/^\s*in_reply_to:\s*meta/m);
+  });
+});
