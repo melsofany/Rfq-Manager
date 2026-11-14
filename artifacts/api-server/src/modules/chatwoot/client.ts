@@ -60,9 +60,9 @@ export interface ChatwootMessage {
   attachments?: Array<{ id?: number; file_type?: string; data_url?: string }>;
 }
 
-async function cw(path: string, init: RequestInit = {}): Promise<Response> {
+async function cwOnce(path: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), CW_TIMEOUT_MS);
   try {
     return await fetch(`${CHATWOOT_URL}/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}${path}`, {
       ...init,
@@ -80,6 +80,48 @@ async function cw(path: string, init: RequestInit = {}): Promise<Response> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * One attempt is not enough on the free tier.
+ *
+ * Chatwoot SUSPENDS after ~15 minutes idle and the first request then waits
+ * 30-50 seconds for it to boot, answering 502/503 meanwhile. A single 15s
+ * attempt therefore fails EVERY cold upload — measured live: a supplier's image
+ * reached the console as «[صورة مرسلة]» text while the reply right after it
+ * (Chatwoot awake by then) arrived normally, which reads as a random defect and
+ * is really a race with the wake-up.
+ *
+ * Retrying a 5xx and a network error turns that cold start into a slower
+ * success. Both body shapes used here (a JSON string, a FormData) are
+ * re-sendable, so a retry re-uses them safely.
+ */
+const CW_ATTEMPTS = 4;
+const CW_TIMEOUT_MS = 20_000;
+
+async function cw(path: string, init: RequestInit = {}): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < CW_ATTEMPTS; attempt++) {
+    try {
+      const res = await cwOnce(path, init);
+      // A 5xx is the console booting. Anything else — including 4xx — is the
+      // real answer and must be returned so the caller can act on it.
+      if (res.status < 500 || attempt === CW_ATTEMPTS - 1) return res;
+      logger.warn(
+        { status: res.status, attempt: attempt + 1, path },
+        "Chatwoot: 5xx — retrying (the console is likely waking up)",
+      );
+    } catch (err) {
+      lastErr = err;
+      if (attempt === CW_ATTEMPTS - 1) throw err;
+      logger.warn(
+        { err, attempt: attempt + 1, path },
+        "Chatwoot: network error — retrying",
+      );
+    }
+    await new Promise((r) => setTimeout(r, 1_500 * (attempt + 1)));
+  }
+  throw lastErr ?? new Error("Chatwoot: unreachable after retries");
 }
 
 /** Find a contact by exact phone number. Chatwoot's search is fuzzy, so we

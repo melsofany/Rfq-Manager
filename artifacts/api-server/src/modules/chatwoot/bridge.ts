@@ -691,7 +691,20 @@ export async function mirrorInboundMessage(opts: {
       ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media, meta)
       : await createMessage(link.conversationId, opts.body, "incoming", meta);
     rememberOwnMessage(msg?.id);
-    await markReplayed(opts.waMessageId);
+    // Mark replayed ONLY when the console actually accepted the message.
+    // `createMediaMessage` answers `undefined` on failure (it does not throw),
+    // and the backfill only revisits rows whose `chatwoot_synced_at` is NULL —
+    // so marking a FAILED upload made the loss permanent and invisible: the
+    // console kept showing «[صورة مرسلة]» text for a picture and nothing ever
+    // retried it. Leaving it unmarked keeps it eligible for the next backfill.
+    if (msg?.id) {
+      await markReplayed(opts.waMessageId);
+    } else {
+      logger.warn(
+        { phone: opts.phone, waMessageId: opts.waMessageId, hasMedia: Boolean(opts.media) },
+        "Chatwoot mirror (inbound): not delivered — left unmarked for retry",
+      );
+    }
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (inbound) failed — non-fatal");
   }
@@ -727,7 +740,17 @@ export async function mirrorSystemNote(opts: {
       sourceId: opts.waMessageId ?? undefined,
     });
     rememberOwnMessage(msg?.id);
-    await markReplayed(opts.waMessageId);
+    // Same rule as the inbound path: only a DELIVERED note may be marked.
+    // `createMessage` also answers `undefined` on failure, and an unmarked row
+    // is what lets the backfill try again.
+    if (msg?.id) {
+      await markReplayed(opts.waMessageId);
+    } else {
+      logger.warn(
+        { phone: opts.phone, waMessageId: opts.waMessageId },
+        "Chatwoot mirror (system note): not delivered — left unmarked for retry",
+      );
+    }
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (system note) failed — non-fatal");
   }
