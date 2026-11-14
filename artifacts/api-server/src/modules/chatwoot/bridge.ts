@@ -555,6 +555,39 @@ async function ensureConversation(
 }
 
 /** Mirror a supplier message into Chatwoot. Called from our inbound webhook. */
+/**
+ * Mark a stored inbound row as replayed.
+ *
+ * The backfill selects `chatwoot_synced_at IS NULL`, so an unmarked row is a
+ * permanent candidate for replay — the supplier's message would appear a second
+ * time with no new message on their phone. Called on a SUCCESSFUL mirror only:
+ * a failed mirror must leave the row unmarked so the backfill retries it.
+ */
+async function markReplayed(waMessageId?: string | null): Promise<void> {
+  if (!waMessageId) return;
+  try {
+    await db
+      .update(whatsappChatsTable)
+      .set({ chatwootSyncedAt: new Date() })
+      .where(eq(whatsappChatsTable.waMessageId, waMessageId));
+  } catch (err) {
+    logger.warn({ err, waMessageId }, "Chatwoot mirror: could not mark a message replayed");
+  }
+}
+
+/**
+ * Mark a recorded inbound row as handled WITHOUT mirroring it.
+ *
+ * An internal chat (the representative bot) is not a supplier conversation, so
+ * it does not belong in the console — but the backfill selects
+ * `chatwoot_synced_at IS NULL`, so leaving it unmarked makes it a permanent
+ * replay candidate and the console fills with phantom threads for staff.
+ * Recorded is not the same as mirrored; both must be terminal.
+ */
+export async function markInboundHandled(waMessageId?: string | null): Promise<void> {
+  await markReplayed(waMessageId);
+}
+
 export async function mirrorInboundMessage(opts: {
   phone: string;
   body: string;
@@ -588,15 +621,7 @@ export async function mirrorInboundMessage(opts: {
       ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media, meta)
       : await createMessage(link.conversationId, opts.body, "incoming", meta);
     rememberOwnMessage(msg?.id);
-    // Mark the row replayed. The backfill selects `chatwoot_synced_at IS NULL`,
-    // so leaving this unwritten makes every live message a permanent candidate
-    // for replay — 30 inbound rows were queued on a 7-day window.
-    if (opts.waMessageId) {
-      await db
-        .update(whatsappChatsTable)
-        .set({ chatwootSyncedAt: new Date() })
-        .where(eq(whatsappChatsTable.waMessageId, opts.waMessageId));
-    }
+    await markReplayed(opts.waMessageId);
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (inbound) failed — non-fatal");
   }
@@ -618,6 +643,8 @@ export async function mirrorSystemNote(opts: {
   supplierId?: number | null;
   employeeId?: number | null;
   employeeName?: string | null;
+  /** The inbound message this note belongs to — marks its row replayed. */
+  waMessageId?: string | null;
 }): Promise<void> {
   try {
     const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
@@ -626,8 +653,11 @@ export async function mirrorSystemNote(opts: {
       employeeName: opts.employeeName ?? null,
     });
     if (!link?.conversationId) return;
-    const msg = await createMessage(link.conversationId, opts.body, "incoming");
+    const msg = await createMessage(link.conversationId, opts.body, "incoming", {
+      sourceId: opts.waMessageId ?? undefined,
+    });
     rememberOwnMessage(msg?.id);
+    await markReplayed(opts.waMessageId);
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (system note) failed — non-fatal");
   }
