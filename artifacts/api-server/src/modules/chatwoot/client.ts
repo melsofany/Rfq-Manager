@@ -215,7 +215,13 @@ export async function createMessage(
   conversationId: number,
   content: string,
   direction: "incoming" | "outgoing",
-  meta: { externalCreatedAt?: string; sourceId?: string; private?: boolean } = {},
+  meta: {
+    externalCreatedAt?: string;
+    sourceId?: string;
+    private?: boolean;
+    /** Chatwoot's OWN message id to quote — not a WhatsApp id. */
+    inReplyTo?: number | null;
+  } = {},
 ): Promise<ChatwootMessage | undefined> {
   const res = await cw(`/conversations/${conversationId}/messages`, {
     method: "POST",
@@ -226,6 +232,9 @@ export async function createMessage(
       // supplier. Routing writes one so the operator can see WHO took the
       // thread, which a label cannot express (a label is a reason, not a name).
       private: meta.private ?? false,
+      // A quoted reply. Chatwoot expects its OWN message id here, so the caller
+      // resolves the WhatsApp id to it first (see findMessageIdBySourceId).
+      ...(meta.inReplyTo ? { content_attributes: { in_reply_to: meta.inReplyTo } } : {}),
       // Chatwoot's message builder reads these straight off the request
       // (`Messages::MessageBuilder#message_params`), so a historical replay can
       // keep the ORIGINAL time and carry the original id.
@@ -316,6 +325,32 @@ export async function findMessageBySourceId(
   if (!res.ok) return undefined;
   const data = (await res.json()) as { payload?: ChatwootMessage[] };
   return (data.payload ?? []).find((m) => m.source_id === sourceId);
+}
+
+/**
+ * Chatwoot's internal id of a message we mirrored, found by the WhatsApp id we
+ * stored as its `source_id`.
+ *
+ * Needed to QUOTE a reply: Chatwoot links a reply by its OWN message id
+ * (`in_reply_to`), which it assigns on insert — the WhatsApp id we hold is not
+ * one it recognises. The newest page is scanned first because a reply always
+ * follows the message it answers.
+ */
+export async function findMessageIdBySourceId(
+  conversationId: number,
+  sourceId: string,
+  maxPages = 5,
+): Promise<number | null> {
+  for (let page = 1; page <= maxPages; page += 1) {
+    const res = await cw(`/conversations/${conversationId}/messages?page=${page}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { payload?: ChatwootMessage[] };
+    const rows = data.payload ?? [];
+    const hit = rows.find((m) => m.source_id === sourceId);
+    if (hit?.id) return hit.id;
+    if (rows.length < 20) return null;
+  }
+  return null;
 }
 
 export async function listAgents(): Promise<ChatwootAgent[]> {

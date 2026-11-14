@@ -381,3 +381,59 @@ describe("routing says WHO, not only WHY", () => {
     expect(client).toMatch(/private:\s*meta\.private\s*\?\?\s*false/);
   });
 });
+
+describe("an inbound row has ONE description, shared by both writers", () => {
+  /**
+   * Reported live: a supplier replied to an image and the operator saw the
+   * reply without the quote. Measured: 51 inbound messages on 2026-11-14 with
+   * ZERO reply links, against 2 of 6 the day before.
+   *
+   * Cause: `recordInboundOnce` runs first (so no handler can swallow a message)
+   * and wrote a row WITHOUT `reply_to_message_id`; `handleInboundMessage` then
+   * saw the row present, skipped its own insert, and the link was lost. Two
+   * writers of one row drifted — the field existed in one and not the other.
+   */
+  it("builds inbound values in ONE place", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    // The shared builder must exist and carry the reply link.
+    const builder = routes.slice(
+      routes.indexOf("function inboundChatValues"),
+      routes.indexOf("function inboundChatValues") + 1400,
+    );
+    expect(builder, "the builder must carry the reply link").toContain("replyToMessageId");
+    expect(builder, "the builder must carry the contact name").toContain("contactName");
+
+    // BOTH writers must go through it — a literal insert with its own field list
+    // is exactly how the two drifted apart.
+    // Outbound rows have their own shape and are out of scope; the INBOUND
+    // writers are the pair that drifted.
+    const inboundInserts = [
+      ...routes.matchAll(/insert\(whatsappChatsTable\)[\s\S]{0,40}?values\(([\s\S]{0,120})/g),
+    ].filter((m) => m[1].includes("inboundChatValues") || m[1].includes('direction: "inbound"'));
+    expect(inboundInserts.length).toBeGreaterThanOrEqual(2);
+    for (const m of inboundInserts) {
+      expect(m[1], "every inbound insert must use the shared builder").toContain(
+        "inboundChatValues",
+      );
+    }
+  });
+
+  it("mirrors the quote so the console shows the same reply", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const bridge = readFileSync(join(here, "../../modules/chatwoot/bridge.ts"), "utf8");
+    const client = readFileSync(join(here, "../../modules/chatwoot/client.ts"), "utf8");
+
+    expect(bridge, "the mirror must accept a reply target").toContain("replyToWaMessageId");
+    // Chatwoot quotes by its OWN message id, so the WhatsApp id must be resolved.
+    expect(client).toContain("findMessageIdBySourceId");
+    expect(client, "the quote must be sent as content_attributes").toContain("in_reply_to");
+  });
+});
