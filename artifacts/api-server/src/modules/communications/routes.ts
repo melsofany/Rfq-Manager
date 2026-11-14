@@ -1897,7 +1897,7 @@ async function recordInboundOnce(
   }
 }
 
-async function handleRepMessage(phone: string, msg: ServerMessage): Promise<boolean> {
+export async function handleRepMessage(phone: string, msg: ServerMessage): Promise<boolean> {
   const listId = msg.interactive?.list_reply?.id;
   const buttonId = msg.interactive?.button_reply?.id;
   const payload = listId ?? buttonId ?? "";
@@ -1916,6 +1916,15 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
   // rep is defined from here on.
 
   if (isText && !isRepPayload) {
+    // A number that is BOTH a registered rep and a SUPPLIER is in a two-way
+    // business conversation: what they write has to reach the shared inbox,
+    // where an employee answers it. The bot still owns explicit `rep_` taps
+    // below and still answers media with its menu, but it must not swallow the
+    // text — it was eating exactly the messages the employee was waiting for.
+    //
+    // A rep-only number keeps the menu-on-any-text entry point, which is how
+    // the bot is opened at all.
+    if (await supplierByPhone(phone)) return false;
     const counts = await countRepTasks(phone);
     await sendRepMainMenu(phone, counts);
     return true;
