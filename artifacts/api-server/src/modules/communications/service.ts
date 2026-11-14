@@ -1569,6 +1569,35 @@ export async function sendWhatsAppText(phone: string, text: string): Promise<str
  */
 
 /** The bot's entry menu — the three things a supplier can do. */
+/**
+ * The supplier picked a request: confirm the HAND-OFF, not a data-entry flow.
+ *
+ * The bot routes a supplier to the employee who owns the request; the quote
+ * itself is a conversation between them. An earlier version opened a per-item
+ * price wizard, which asked the supplier for prices the employee is supposed to
+ * negotiate — and left the reply outside the console thread.
+ */
+export async function sendSupplierRequestHandedOff(
+  phone: string,
+  rfqNo: string,
+  employeeName: string | null,
+  itemCount: number,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const who = employeeName ? `الموظف المسؤول: ${employeeName}` : "سيتم تحويلك للموظف المسؤول";
+  const body =
+    `✅ تم ربط محادثتك بالطلب ${rfqNo}\n` +
+    `${who}\n\n` +
+    `عدد بنود الطلب: ${itemCount}\n\n` +
+    `أرسل عرضك هنا مباشرة (نصًا أو ملف PDF/صورة) وسيصل للموظف المسؤول داخل النظام.`;
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, new Text(body));
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
 export async function sendSupplierBotMainMenu(
   phone: string,
   name?: string | null,
@@ -1734,9 +1763,13 @@ export async function sendSupplierBotItemDetail(
     item.referencePrice ? `السعر المرجعي: ${item.referencePrice}` : null,
   ].filter(Boolean);
   const message = new Interactive(
+    // Two actions, neither of which collects data: send the quote into the
+    // thread, or go back. The bot's job is to route the supplier to the
+    // employee who owns the request — the price is negotiated between them, so
+    // asking for it here produced an answer the employee could not act on and
+    // that never reached the console thread.
     new ActionButtons(
-      new Button(`sup_avail:${item.id}:1`, "متاح ✓"),
-      new Button(`sup_avail:${item.id}:0`, "غير متاح ✗"),
+      new Button(`sup_send_offer:${item.id}`, "إرسال عرضي"),
       new Button("sup_back:items", "رجوع"),
     ),
     new Body(`${lines.join("\n")}\n\nهل هذا البند متاح للتوريد؟`),

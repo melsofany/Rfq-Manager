@@ -698,3 +698,78 @@ describe("kill-switch", () => {
     expect(src).toMatch(/process\.env\.SUPPLIER_BOT_ENABLED\s*!==\s*"false"/);
   });
 });
+
+describe("the bot ROUTES, it does not collect data (operator correction)", () => {
+  /**
+   * The operator's correction, in full: «البوت للاختيار والإسناد فقط — لا
+   * يُدخل أسعارًا ولا أي بيانات». An earlier flow asked the supplier for
+   * availability, price, delivery days, origin, brand and notes, then wrote the
+   * answers as a draft offer.
+   *
+   * That is wrong twice over: it asks the supplier for the figures the
+   * responsible EMPLOYEE negotiates, and it keeps the answer outside the console
+   * thread — which is where the employee actually works. The bot's job is to
+   * route the supplier to that employee and hand the thread over.
+   *
+   * This guard is source-level on purpose: the wizard's helpers still exist
+   * (deleting them is riskier than leaving them unreachable), so what must be
+   * pinned is that NO path can enter the wizard.
+   */
+  it("cannot enter a data-entry step from any button", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    // Nothing may set the session step to a data-entry state. The only writers
+    // of `step` are the wizard's own transitions; if none remains, the wizard is
+    // unreachable whatever its handlers still contain.
+    const stepWrites = routes.match(/step:\s*["']await_/g) ?? [];
+    expect(stepWrites).toEqual([]);
+
+    // The item's action button must offer the hand-off, not an availability
+    // question — the first rung of the removed wizard.
+    expect(routes).not.toContain("sup_avail:");
+  });
+
+  it("every bot button has a handler (a button nobody handles is dead)", async () => {
+    // The button and its handler live in two different files, so renaming one
+    // leaves a control the supplier can tap and nothing happens — silent from
+    // the outside, because the webhook still returns 200. This guard compares
+    // the payloads the service SENDS with the prefixes the router HANDLES.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const service = readFileSync(join(here, "../../modules/communications/service.ts"), "utf8");
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    const sent = new Set<string>();
+    for (const m of service.matchAll(/["'`]((?:sup|rfq_pick)_[a-z_]+):/g)) sent.add(m[1]);
+    expect(sent.size).toBeGreaterThan(3);
+
+    const handled = new Set<string>();
+    for (const m of routes.matchAll(/head === "([a-z_]+)"/g)) handled.add(m[1]);
+    for (const m of routes.matchAll(/payload\.startsWith\("([a-z_]+):"\)/g)) handled.add(m[1]);
+
+    const dead = [...sent].filter((p) => !handled.has(p));
+    expect(dead).toEqual([]);
+  });
+
+  it("hands the conversation to the responsible employee, not to a price prompt", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    // The hand-off names the owner from the sent-log row, and mirrors the tap so
+    // the employee sees the supplier's choice inside the thread.
+    expect(routes).toContain("responsibleEmployeeFor");
+    expect(routes).toContain("sendSupplierRequestHandedOff");
+    // Choosing a request must ALSO confirm the hand-off (it used to open the
+    // wizard's first step).
+    expect(routes).not.toMatch(/sendSupplierRequestConfirmed\(\s*phone,\s*chosen/);
+  });
+});
