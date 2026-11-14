@@ -32,6 +32,7 @@ import {
   createContact,
   createConversation,
   createMessage,
+  findMessageIdBySourceId,
   getConversationContactPhone,
   findAgentByEmail,
   createAgent,
@@ -644,6 +645,10 @@ export async function mirrorInboundMessage(opts: {
   /** WhatsApp message id — used as Chatwoot's dedupe key AND to mark the row
    *  replayed, so the backfill never posts it a second time. */
   waMessageId?: string | null;
+  /** WhatsApp id of the message this one replies to, when the supplier quoted
+   *  one. Mirrored so the console shows the SAME quoted reply the Cortoba chat
+   *  shows — a reply that loses its quote reads as an unrelated message. */
+  replyToWaMessageId?: string | null;
 }): Promise<void> {
   try {
     const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
@@ -659,7 +664,17 @@ export async function mirrorInboundMessage(opts: {
     // `sourceId` is Chatwoot's OWN dedupe key (`messages.source_id`): a
     // redelivered webhook or a backfill replay then updates instead of appending
     // a second copy. Without it the console shows the same message twice.
-    const meta = { sourceId: opts.waMessageId ?? undefined };
+    // Resolve the QUOTE first: Chatwoot links a reply by its OWN message id,
+    // and the WhatsApp id we hold is not one it knows. A miss simply posts an
+    // unquoted message — the reply itself must never be lost to a lookup.
+    let inReplyTo: number | null = null;
+    if (opts.replyToWaMessageId) {
+      inReplyTo = await findMessageIdBySourceId(
+        link.conversationId,
+        opts.replyToWaMessageId,
+      ).catch(() => null);
+    }
+    const meta = { sourceId: opts.waMessageId ?? undefined, inReplyTo };
     const msg = opts.media
       ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media, meta)
       : await createMessage(link.conversationId, opts.body, "incoming", meta);

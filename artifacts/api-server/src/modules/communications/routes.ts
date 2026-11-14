@@ -198,7 +198,7 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
   try {
     const msg = message as unknown as ServerMessage;
     // Record FIRST, before any handler can own (and consume) the message.
-    if (msg.type !== "reaction") await recordInboundOnce(from, msg);
+    if (msg.type !== "reaction") await recordInboundOnce(from, msg, name);
     if (msg.type === "reaction") {
       await handleReactionWebhook(from, msg);
     } else if (await handleAiAssistantMessage(from, msg as unknown as WaInboundMessage)) {
@@ -347,7 +347,7 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       const from = contact?.wa_id ?? message.from;
       const name = contact?.profile?.name;
 
-      if (message.type !== "reaction") await recordInboundOnce(from, message);
+      if (message.type !== "reaction") await recordInboundOnce(from, message, name);
       if (message.type === "reaction") {
         await handleReactionWebhook(from, message);
       } else if (await handleAiAssistantMessage(from, message as unknown as WaInboundMessage)) {
@@ -1172,18 +1172,19 @@ async function recordSupplierBotInbound(opts: {
         .limit(1);
       // Idempotent: a redelivered webhook must not double the thread.
       if (existing.length === 0) {
-        await db.insert(whatsappChatsTable).values({
-          waMessageId: opts.waMessageId,
-          direction: "inbound",
-          phone: opts.phone,
-          supplierId: opts.supplierId,
-          body,
-          mediaId,
-          mediaType,
-          mimeType,
-          filename,
-          isRead: false,
-        });
+        // Same shared builder as the other two inbound writers. This path used
+        // to write its own field list and therefore dropped `reply_to_message_id`
+        // and the contact name — the third copy of one row description.
+        await db
+          .insert(whatsappChatsTable)
+          .values(
+            inboundChatValues(
+              opts.phone,
+              opts.msg,
+              opts.supplierName ?? null,
+              opts.supplierId ?? null,
+            ),
+          );
       }
     }
     // The bot path must carry the FILE too, for the same reason the generic
@@ -1833,7 +1834,48 @@ async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string 
  * — mirroring here as well would file the same message under a second,
  * context-free conversation.
  */
-async function recordInboundOnce(phone: string, msg: ServerMessage): Promise<void> {
+/**
+ * The ONE description of what an inbound row holds.
+ *
+ * There are TWO writers for an inbound message — this early recorder and the
+ * main `handleInboundMessage` — and they drifted: the early one wrote a row
+ * WITHOUT `reply_to_message_id`, so the later writer saw the row already
+ * present, skipped its own insert, and the reply link was lost. Measured live:
+ * 51 inbound messages on 2026-11-14 with 0 reply links, against 2 of 6 the day
+ * before.
+ *
+ * A field added to one writer but not the other disappears silently, so both
+ * now build their values here. Add new inbound fields HERE, never at a call
+ * site.
+ */
+function inboundChatValues(
+  phone: string,
+  msg: ServerMessage,
+  senderName?: string | null,
+  supplierId: number | null = null,
+): typeof whatsappChatsTable.$inferInsert {
+  const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
+  return {
+    waMessageId: msg.id,
+    direction: "inbound",
+    phone,
+    supplierId,
+    body,
+    contactName: senderName?.trim() || null,
+    mediaId,
+    mediaType,
+    mimeType,
+    filename,
+    replyToMessageId: msg.context?.id ?? null,
+    isRead: false,
+  };
+}
+
+async function recordInboundOnce(
+  phone: string,
+  msg: ServerMessage,
+  senderName?: string | null,
+): Promise<void> {
   if (!msg.id) return;
   try {
     const existing = await db
@@ -1843,22 +1885,12 @@ async function recordInboundOnce(phone: string, msg: ServerMessage): Promise<voi
       .limit(1);
     if (existing.length > 0) return;
 
-    const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
     const suppliers = await db.select().from(suppliersTable);
     const matched = suppliers.find((x) => normalizePhone(x.phone ?? "") === normalizePhone(phone));
 
-    await db.insert(whatsappChatsTable).values({
-      waMessageId: msg.id,
-      direction: "inbound",
-      phone,
-      supplierId: matched?.id ?? null,
-      body,
-      mediaId,
-      mediaType,
-      mimeType,
-      filename,
-      isRead: false,
-    });
+    await db
+      .insert(whatsappChatsTable)
+      .values(inboundChatValues(phone, msg, senderName, matched?.id ?? null));
     broadcastWaEvent({ type: "new_message", phone });
   } catch (err) {
     logger.warn({ err, phone }, "inbound record failed — non-fatal");
@@ -2520,21 +2552,11 @@ async function handleInboundMessage(
     .limit(1);
 
   if (existing.length === 0) {
-    await db.insert(whatsappChatsTable).values({
-      waMessageId,
-      direction: "inbound",
-      phone,
-      supplierId: matchedSupplier?.id ?? null,
-      body,
-      // Meta sends the contact's WhatsApp profile name on every inbound message.
-      contactName: senderName?.trim() || null,
-      mediaId,
-      mediaType,
-      mimeType,
-      filename,
-      replyToMessageId: msg.context?.id ?? null,
-      isRead: false,
-    });
+    // One description of an inbound row, shared with `recordInboundOnce`, so a
+    // field can never be written by one path and dropped by the other.
+    await db
+      .insert(whatsappChatsTable)
+      .values(inboundChatValues(phone, msg, senderName, matchedSupplier?.id ?? null));
   }
 
   try {
@@ -2598,6 +2620,9 @@ async function handleInboundMessage(
       contactName: senderName ?? null,
       supplierId,
       waMessageId: waMessageId ?? null,
+      // Quote the message the supplier replied to, exactly as the Cortoba chat
+      // does. Without it a reply reads in the console as an unrelated message.
+      replyToWaMessageId: msg.context?.id ?? null,
       employeeId: owner.employeeId,
       employeeName: owner.employeeName,
       media: mediaBytes
