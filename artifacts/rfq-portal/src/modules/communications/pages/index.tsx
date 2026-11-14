@@ -818,9 +818,46 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const selectedChat = chats.find((c) => c.phone === selected);
   const displayName = selectedChat ? chatLabel(selectedChat) : selected || "";
 
-  function getReplyBody(waMessageId: string): string {
-    const msg = messages.find((m) => m.waMessageId === waMessageId);
-    return msg?.body ?? "(رسالة غير موجودة)";
+  function getReplyMessage(waMessageId: string): Message | undefined {
+    return messages.find((m) => m.waMessageId === waMessageId);
+  }
+
+  /**
+   * The quoted message's visible content.
+   *
+   * A media message stores a PLACEHOLDER as its body («[صورة مرسلة]»), so
+   * quoting the body alone showed the operator that the reply answered
+   * «[صورة مرسلة]» — a description of a picture instead of the picture. The
+   * quote now renders the image itself, which is what makes it recognisable.
+   */
+  function ReplyQuoteContent({ waMessageId }: { waMessageId: string }) {
+    const target = getReplyMessage(waMessageId);
+    if (!target) return <p className="text-xs text-muted-foreground">(رسالة غير موجودة)</p>;
+    if (target.mediaId && target.mediaType === "image") {
+      return (
+        <img
+          src={`/api/whatsapp/media/${target.mediaId}`}
+          alt="الصورة المردود عليها"
+          className="max-h-24 max-w-[120px] rounded object-cover border border-border/60"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      );
+    }
+    if (target.mediaId) {
+      return (
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <FileText size={11} className="flex-shrink-0" />
+          {target.filename || (target.mediaType === "audio" ? "رسالة صوتية" : "مرفق")}
+        </span>
+      );
+    }
+    return (
+      <p className="text-xs text-muted-foreground truncate" dir="auto">
+        {target.body}
+      </p>
+    );
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -1201,9 +1238,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                 <p className="text-[10px] font-bold text-green-700 mb-0.5">
                                   ردًا على رسالة
                                 </p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {getReplyBody(msg.replyToMessageId)}
-                                </p>
+                                <ReplyQuoteContent waMessageId={msg.replyToMessageId} />
                               </div>
                             )}
 
