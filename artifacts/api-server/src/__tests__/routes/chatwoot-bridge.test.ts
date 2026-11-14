@@ -463,3 +463,29 @@ describe("the quote is sent the way Chatwoot reads it", () => {
     expect(body).not.toMatch(/^\s*in_reply_to:\s*meta/m);
   });
 });
+
+describe("a media reply is quoted too", () => {
+  /**
+   * The text path was fixed first; a supplier who answers a PICTURE with a
+   * PICTURE goes through `createMediaMessage`, which had no quote support at
+   * all. Same defect, other half of the media branch — the class, not the case.
+   */
+  it("sends the quote on the multipart media path", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const client = readFileSync(join(here, "../../modules/chatwoot/client.ts"), "utf8");
+
+    const media = client.slice(
+      client.indexOf("export async function createMediaMessage"),
+      client.indexOf("export async function createMessage"),
+    );
+    expect(media, "the multipart path must accept a quote").toContain("inReplyTo");
+    // The multipart body is FormData, so the field must be appended, not sent
+    // as a JSON key.
+    expect(media, "the quote must be appended to the form").toMatch(
+      /form\.append\(\s*"content_attributes\[in_reply_to\]"/,
+    );
+  });
+});
