@@ -20,10 +20,12 @@ const h = vi.hoisted(() => ({
   created: [] as Array<Record<string, unknown>>,
   contactArgs: { name: "", phone: "" },
   lastWhere: undefined as unknown,
+  lastFrom: undefined as unknown,
   conversationExists: "201000000000" as string | null,
   seenSourceIds: new Set<string>(),
   chatRows: [] as Array<Record<string, unknown>>,
   supplierRows: [] as Array<Record<string, unknown>>,
+  sentLogRows: [] as Array<Record<string, unknown>>,
   linkRows: [] as Array<Record<string, unknown>>,
   contact: { id: 42 } as { id?: number } | undefined,
   conversation: { id: 7 } as { id?: number } | undefined,
@@ -92,8 +94,23 @@ function builder(rows: Array<Record<string, unknown>>) {
     h.lastWhere = arg;
     return q;
   };
-  q.then = (resolve: (v: unknown) => unknown) => resolve(rows);
+  // Two different queries select the same `{ rfqId }` shape — the link lookup
+  // and the supplier's `sent_log` — so the FROM table is what tells them apart.
+  q.from = (t: unknown) => {
+    h.lastFrom = t;
+    q.__from = t;
+    return q;
+  };
+  q.then = (resolve: (v: unknown) => unknown) => resolve(rowsFor(q.__from, rows));
   return q;
+}
+
+/** Resolve a builder's rows, honouring the table the caller selected FROM. */
+function rowsFor(from: unknown, rows: Array<Record<string, unknown>>) {
+  if (from && typeof from === "object" && (from as { __table?: string }).__table === "sent_log") {
+    return h.sentLogRows;
+  }
+  return rows;
 }
 
 /** Does a drizzle predicate ask for NULLs in `chatwoot_synced_at`? */
@@ -130,6 +147,7 @@ vi.mock("@workspace/db", () => ({
     }),
   },
   whatsappChatsTable: {
+    __table: "whatsapp_chats",
     id: "id",
     phone: "phone",
     body: "body",
@@ -138,8 +156,10 @@ vi.mock("@workspace/db", () => ({
     waMessageId: "wa_message_id",
     chatwootSyncedAt: "chatwoot_synced_at",
   },
-  suppliersTable: { id: "id", name: "name", phone: "phone" },
+  suppliersTable: { __table: "suppliers", id: "id", name: "name", phone: "phone" },
+  sentLogTable: { __table: "sent_log", id: "id", supplierId: "supplier_id", rfqId: "rfq_id" },
   chatwootLinksTable: {
+    __table: "chatwoot_links",
     phone: "phone",
     rfqId: "rfq_id",
     conversationId: "conversation_id",
@@ -179,6 +199,7 @@ beforeEach(() => {
   h.seenSourceIds = new Set();
   h.chatRows = [];
   h.supplierRows = [];
+  h.sentLogRows = [];
   h.linkRows = [];
   h.contact = { id: 42 };
   h.conversation = { id: 7 };
@@ -186,6 +207,7 @@ beforeEach(() => {
   h.links = [];
   h.contactArgs = { name: "", phone: "" };
   h.lastWhere = undefined;
+  h.lastFrom = undefined;
   h.conversationExists = "201000000000";
 });
 
@@ -282,6 +304,32 @@ describe("history replay into the console", () => {
     // The already-replayed row never enters the window (the query filters it),
     // so it is not counted as a skip and the budget is not spent on it.
     expect(res.skipped).toBe(0);
+  });
+
+  it("files the conversation under the supplier's own request, not 0", async () => {
+    // THE DEFECT THAT LEFT 413 OF 414 CONVERSATIONS WITH `rfqId: 0`. The link
+    // table is empty on a fresh console, and it was the ONLY source, so every
+    // replayed conversation arrived unfiled and the console could not answer
+    // "which request is this?". The supplier's `sent_log` is the authority.
+    h.chatRows = [
+      {
+        id: 301,
+        phone: "201001234567",
+        body: "سعر الحربة",
+        direction: "inbound",
+        createdAt: new Date("2026-06-02T09:00:00Z"),
+        waMessageId: "w301",
+        chatwootSyncedAt: null,
+      },
+    ];
+    h.linkRows = []; // nothing filed yet — the fresh-console case
+    h.supplierRows = [{ id: 167, name: "هاي فولت", phone: "201001234567" }];
+    h.sentLogRows = [{ rfqId: 777 }];
+    await backfillPhone("201001234567", { limit: 10 });
+    // The conversation is created against the supplier's request, and the link
+    // row records it so the console can show the RFQ number.
+    const saved = h.links.find((l) => l.phone === "201001234567");
+    expect(saved?.rfqId).toBe(777);
   });
 
   it("does not spend the batch re-reading messages it already replayed", async () => {
