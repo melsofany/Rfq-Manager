@@ -2501,6 +2501,13 @@ async function handleInboundMessage(
         needsPick = open.length > 1;
       }
     }
+    // The FILE travels with the message. Without it the console showed a text
+    // stub for every attachment, which is the recorded reason the previous
+    // WhatsApp screen was abandoned: the agent could read "the supplier sent a
+    // file" but never open it.
+    const mediaBytes = mediaId
+      ? await downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream")
+      : null;
     await mirrorInboundMessage({
       phone,
       body,
@@ -2509,6 +2516,14 @@ async function handleInboundMessage(
       supplierId,
       employeeId: owner.employeeId,
       employeeName: owner.employeeName,
+      media: mediaBytes
+        ? {
+            data: mediaBytes,
+            mimeType: mimeType ?? "application/octet-stream",
+            filename: filename ?? `whatsapp-${mediaType ?? "file"}`,
+            kind: mediaType ?? null,
+          }
+        : null,
     });
     // Several open requests and no number given: ask which one instead of
     // guessing. The reply lands in an unlabelled thread until they pick.
@@ -2522,25 +2537,29 @@ async function handleInboundMessage(
 }
 
 // ─── Background: download + store media binary ─────────────────────────
-async function downloadAndStoreMedia(mediaId: string, fallbackMime: string): Promise<void> {
+async function downloadAndStoreMedia(
+  mediaId: string,
+  fallbackMime: string,
+): Promise<Buffer | null> {
   try {
-    // Skip if already cached
+    // Already cached: hand the bytes back so a caller that NEEDS them (the
+    // console mirror) does not download the same file twice.
     const existing = await db
-      .select({ waMediaId: whatsappMediaTable.waMediaId })
+      .select({ data: whatsappMediaTable.data })
       .from(whatsappMediaTable)
       .where(eq(whatsappMediaTable.waMediaId, mediaId))
       .limit(1);
-    if (existing.length > 0) return;
+    if (existing.length > 0) return (existing[0].data as Buffer) ?? null;
 
     const metaRes = await Whatsapp.$$apiFetch$$(
       `https://graph.facebook.com/${WA_API_VERSION}/${mediaId}`,
     );
-    if (!metaRes.ok) return;
+    if (!metaRes.ok) return null;
     const metaData = (await metaRes.json()) as { url?: string; mime_type?: string };
-    if (!metaData.url) return;
+    if (!metaData.url) return null;
 
     const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
-    if (!mediaRes.ok) return;
+    if (!mediaRes.ok) return null;
     const buffer = Buffer.from(await mediaRes.arrayBuffer());
 
     await db
@@ -2553,8 +2572,10 @@ async function downloadAndStoreMedia(mediaId: string, fallbackMime: string): Pro
       .onConflictDoNothing();
 
     logger.info({ mediaId, bytes: buffer.length }, "WhatsApp media cached to DB");
+    return buffer;
   } catch (err) {
     logger.warn({ err, mediaId }, "Background media cache failed (non-critical)");
+    return null;
   }
 }
 

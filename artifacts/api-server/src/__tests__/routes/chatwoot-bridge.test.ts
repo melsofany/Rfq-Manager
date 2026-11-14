@@ -194,3 +194,55 @@ describe("Chatwoot bridge — own-message dedup", () => {
     expect(bridge.isOwnChatwootMessage(123456)).toBe(false);
   });
 });
+
+describe("Chatwoot media mirror — an attachment must arrive as a FILE", () => {
+  // The recorded reason the previous WhatsApp screen was abandoned: an agent
+  // could read "the supplier sent a file" but never open it, because the mirror
+  // posted TEXT ONLY. `createMessage` cannot carry bytes — the console's
+  // MessageBuilder reads uploaded `attachments[]`, which means multipart.
+  it("posts a file as multipart, never as JSON", async () => {
+    process.env.CHATWOOT_URL = "https://cw.example.com";
+    process.env.CHATWOOT_ACCOUNT_ID = "1";
+    process.env.CHATWOOT_API_TOKEN = "tok";
+
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ id: 7 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const { createMediaMessage } = await import("../../modules/chatwoot/client");
+      const msg = await createMediaMessage(3, "عرض سعر", "incoming", {
+        data: Buffer.from("%PDF-1.4 invoice"),
+        mimeType: "application/pdf",
+        filename: "عرض.pdf",
+        kind: "document",
+      });
+      expect(msg?.id).toBe(7);
+
+      const call = calls.find((c) => c.url.includes("/messages"));
+      expect(call).toBeDefined();
+      const body = call!.init.body as FormData;
+      expect(body).toBeInstanceOf(FormData);
+      // The boundary is the runtime's; forcing JSON here makes the console
+      // reject the upload.
+      const headers = call!.init.headers as Record<string, string>;
+      expect(headers["Content-Type"]).toBeUndefined();
+      expect(headers.api_access_token).toBe("tok");
+
+      const file = body.get("attachments[]") as File;
+      expect(file).toBeInstanceOf(Blob);
+      expect(file.type).toBe("application/pdf");
+      expect(await file.text()).toBe("%PDF-1.4 invoice");
+      expect(body.get("content")).toBe("عرض سعر");
+      expect(body.get("message_type")).toBe("incoming");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});

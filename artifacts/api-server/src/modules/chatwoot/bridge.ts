@@ -38,6 +38,8 @@ import {
   assignConversation,
   setConversationCustomAttributes,
   addConversationLabels,
+  createMediaMessage,
+  type MirrorMedia,
 } from "./client";
 
 export { isChatwootConfigured };
@@ -533,6 +535,8 @@ export async function mirrorInboundMessage(opts: {
   supplierId?: number | null;
   employeeId?: number | null;
   employeeName?: string | null;
+  /** A file the supplier sent, already downloaded from WhatsApp. */
+  media?: MirrorMedia | null;
 }): Promise<void> {
   try {
     const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
@@ -542,7 +546,12 @@ export async function mirrorInboundMessage(opts: {
       employeeName: opts.employeeName ?? null,
     });
     if (!link?.conversationId) return;
-    const msg = await createMessage(link.conversationId, opts.body, "incoming");
+    // A file goes up as multipart; the text alone would leave the console
+    // showing «مرفق» with nothing behind it — the recorded reason the old
+    // system was abandoned.
+    const msg = opts.media
+      ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media)
+      : await createMessage(link.conversationId, opts.body, "incoming");
     rememberOwnMessage(msg?.id);
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (inbound) failed — non-fatal");
