@@ -82,6 +82,7 @@ import { guardFor } from "../../shared/permissions";
 import {
   mirrorInboundMessage,
   mirrorOutboundMessage,
+  mirrorSystemNote,
   openPricingRequestsForSupplier,
   responsibleEmployeeFor,
   pickRequestFromText,
@@ -1073,7 +1074,7 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
 
   // Point the conversation at the chosen request so the reply that follows is
   // filed there, and tell the supplier who is handling it.
-  await mirrorInboundMessage({
+  await mirrorSystemNote({
     phone,
     body: `[اختيار الطلب ${chosen.internalRfqNo}]`,
     rfqId: chosen.rfqId,
@@ -1167,6 +1168,13 @@ async function recordSupplierBotInbound(opts: {
         });
       }
     }
+    // The bot path must carry the FILE too, for the same reason the generic
+    // inbound path does: a supplier who sends their quote as a PDF while the
+    // bot is open would otherwise reach the console as a text stub. One
+    // mirror, two entry points — the attachment travels on both.
+    const mediaBytes = mediaId
+      ? await downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream")
+      : null;
     await mirrorInboundMessage({
       phone: opts.phone,
       body,
@@ -1175,6 +1183,14 @@ async function recordSupplierBotInbound(opts: {
       supplierId: opts.supplierId,
       employeeId: opts.employeeId ?? null,
       employeeName: opts.employeeName ?? null,
+      media: mediaBytes
+        ? {
+            data: mediaBytes,
+            mimeType: mimeType ?? "application/octet-stream",
+            filename: filename ?? `whatsapp-${mediaType ?? "file"}`,
+            kind: mediaType ?? null,
+          }
+        : null,
     });
   } catch (err) {
     logger.warn(
@@ -1284,10 +1300,9 @@ export async function handleSupplierBotMessage(
             phone,
             "كيفية الاستخدام:\n" +
               "1) اضغط «طلبات التسعير» لعرض طلباتكم المفتوحة.\n" +
-              "2) اختر الطلب ثم البند.\n" +
-              "3) أدخل السعر والبيانات المطلوبة.\n" +
-              "4) كرر لكل بند ثم اضغط «إرسال الرد».\n\n" +
-              "يمكنكم استكمال الرد في أي وقت — يُحفظ تلقائياً.",
+              "2) اختر الطلب المطلوب — وسيتم تحويلك للموظف المسؤول عنه.\n" +
+              "3) أرسل عرضك في المحادثة مباشرة (نصًا أو ملف PDF أو صورة).\n\n" +
+              "الموظف المسؤول يستلم عرضك داخل النظام ويتابع معك.",
           );
           return true;
         }
@@ -1408,7 +1423,7 @@ export async function handleSupplierBotMessage(
         const note = b === "0" ? "غير متاح" : "متاح";
         // The tap itself is part of the conversation, so it is mirrored — the
         // employee sees the supplier answered, not just that a menu was opened.
-        await mirrorInboundMessage({
+        await mirrorSystemNote({
           phone,
           body: `[رد المورد على البند: ${note}]`,
           rfqId: session.rfqId,

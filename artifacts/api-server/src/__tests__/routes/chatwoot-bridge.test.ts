@@ -246,3 +246,44 @@ describe("Chatwoot media mirror — an attachment must arrive as a FILE", () => 
     }
   });
 });
+
+describe("every inbound mirror path carries the attachment", () => {
+  /**
+   * The console mirror has TWO entry points — the generic inbound handler and
+   * the supplier-bot recorder — and they are easy to fix one at a time. That is
+   * exactly what happened: the generic path was taught to carry files while the
+   * bot's recorder still posted text, so a supplier who sent their quote as a
+   * PDF while the bot menu was open reached the console as a stub.
+   *
+   * A green test on one path proves nothing about the other, so this guard
+   * enumerates the CALLS to `mirrorInboundMessage` in the source and requires
+   * every one of them to pass `media`.
+   */
+  it("passes media at every mirrorInboundMessage call site", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, join } = await import("node:path");
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, "../../modules/communications/routes.ts"), "utf8");
+
+    const calls: string[] = [];
+    let idx = 0;
+    while ((idx = routes.indexOf("mirrorInboundMessage({", idx)) !== -1) {
+      // Take a bounded window: enough for a call's arguments, small enough that
+      // two adjacent calls cannot bleed into each other.
+      calls.push(routes.slice(idx, idx + 1200));
+      idx += 1;
+    }
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+
+    const withoutMedia = calls.filter((c) => !/\bmedia\s*:/.test(c));
+    expect(withoutMedia).toEqual([]);
+
+    // A synthetic note (a button tap, a request pick) carries no file and must
+    // NOT use the media path — it has its own function. One function serving
+    // both is what let a real attachment post as plain text.
+    expect(routes).toContain("mirrorSystemNote({");
+    expect(routes).not.toMatch(/mirrorInboundMessage\(\{[^}]*\[اختيار الطلب/);
+    expect(routes).not.toMatch(/mirrorInboundMessage\(\{[^}]*\[رد المورد على البند/);
+  });
+});

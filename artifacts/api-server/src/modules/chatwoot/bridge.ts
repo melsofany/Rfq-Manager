@@ -585,6 +585,37 @@ export async function mirrorInboundMessage(opts: {
   }
 }
 
+/**
+ * Mirror a SYSTEM note — a synthetic marker for something that happened in the
+ * bot (a button tap, a request pick), not a message the supplier typed.
+ *
+ * Kept separate from `mirrorInboundMessage` on purpose. A real inbound message
+ * can carry a file and MUST be mirrored through the media path; a tap never
+ * can. One function serving both is how the bot's recorder came to post text
+ * for a message that had a PDF attached.
+ */
+export async function mirrorSystemNote(opts: {
+  phone: string;
+  body: string;
+  rfqId?: number | null;
+  supplierId?: number | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
+}): Promise<void> {
+  try {
+    const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
+      supplierId: opts.supplierId ?? null,
+      employeeId: opts.employeeId ?? null,
+      employeeName: opts.employeeName ?? null,
+    });
+    if (!link?.conversationId) return;
+    const msg = await createMessage(link.conversationId, opts.body, "incoming");
+    rememberOwnMessage(msg?.id);
+  } catch (err) {
+    logger.warn({ err, phone: opts.phone }, "Chatwoot mirror (system note) failed — non-fatal");
+  }
+}
+
 /** Mirror a message WE sent into Chatwoot, so agents see the full thread. */
 export async function mirrorOutboundMessage(opts: {
   phone: string;
