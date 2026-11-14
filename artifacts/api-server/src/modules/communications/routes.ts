@@ -81,6 +81,7 @@ import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
 import {
   mirrorInboundMessage,
+  markInboundHandled,
   mirrorOutboundMessage,
   mirrorSystemNote,
   openPricingRequestsForSupplier,
@@ -204,6 +205,10 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
       // Allowlisted admin/manager AI assistant owns this message.
       logger.info({ from }, "AI assistant message handled");
     } else if (await handleRepMessage(from, msg)) {
+      // The representative bot is an INTERNAL chat, not a supplier
+      // conversation: it is recorded but not mirrored. It must still be marked
+      // handled, or the backfill replays it into the console forever.
+      await markInboundHandled(msg.id);
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
     } else if (await handleSupplierBotMessage(from, msg)) {
@@ -350,6 +355,7 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
         // Allowlisted admin/manager AI assistant owns this message.
         logger.info({ from }, "AI assistant message handled");
       } else if (await handleRepMessage(from, message)) {
+        await markInboundHandled(message.id);
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
       } else if (await handleSupplierBotMessage(from, message)) {
@@ -1084,6 +1090,7 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
     supplierId: supplier.id,
     employeeId: chosen.employeeId,
     employeeName: chosen.employeeName,
+    waMessageId: msg.id,
   });
   // The pick CONFIRMS THE HAND-OFF, not a data-entry session: the bot's job is
   // to route the supplier to the employee who owns the request.
@@ -1433,6 +1440,7 @@ export async function handleSupplierBotMessage(
           supplierId: supplier.id,
           employeeId: owner?.employeeId ?? null,
           employeeName: owner?.employeeName ?? null,
+          waMessageId: msg.id,
         });
         await sendSupplierRequestHandedOff(phone, rfqNo, owner?.employeeName ?? null, items.length);
         broadcastWaEvent({ type: "new_message", phone });
