@@ -5064,3 +5064,56 @@ inbound message saved"` والصف مُرآة (`synced=✅`) باسم المور
 - **`mergeable_state: dirty` بعد squash-merge**: الفرع الذي أُنشئ من التزام
   مُدمَج-squash يظهر متعارضًا رغم تطابق الشجرتين. **الدمج لا إعادة التأسيس**
   (`git merge origin/main`) — إعادة التأسيس تُسقط التزامات لم تدخل main.
+
+## A billing state is not a permanent error — the assistant was silent for it (PR #493)
+
+- **Symptom**: «المساعد الذكي مش شغال خالص» — no reply to any message.
+- **Root cause**: the configured primary provider (DeepSeek) answered
+  `402 {"type":"insufficient_balance_error"}` — an empty balance. `402` was not
+  in the chain's "move to the next candidate" set, so it was classified
+  **permanent** and thrown immediately. The secondary provider (Gemini) answered
+  `200` on the SAME request, and was never dialled. One dead provider silenced
+  the whole assistant.
+- **Fix**: `isProviderUnavailable()` (config.ts) recognises 402/401/403 and the
+  balance/billing phrasings; `llm.ts` skips the whole PROVIDER (not one model at
+  a time) so a dead provider costs one request instead of one per model.
+- **A billing/auth refusal is about the ACCOUNT, not the request.** Retrying it
+  on the next model of the same provider can only fail identically — which is
+  why the skip is per provider. Do not fold 402 into the generic permanent set.
+- **Diagnose by replaying against the live provider**, not by reading the chain:
+  the status code and body are visible in one call, and they name the cause.
+
+## Read-only is a code guarantee, not a prompt rule (PR #493)
+
+The operator's rule: the agent may run any task but must never write to the
+database, send email, or send WhatsApp.
+
+- **A prompt rule is not a permission boundary.** `send_email` was removed from
+  the tool REGISTRY, the dispatch, the scope sets, the guardrails and the
+  provenance list — that is what actually decides what the model can call.
+  `sendAssistantEmail` was dead once its only caller went, so it was deleted.
+- **`ai-hard-limits.test.ts` reads the SOURCE**, not the prompt: it audits every
+  module of the agent surface for a business-table write and for any sending
+  tool. A prompt-only assertion would pass while the capability was reachable.
+- The agent's own bookkeeping tables (messages, memories, jobs, scan sessions,
+  org profiles) are legitimate writes and are excluded by name; `routes.ts` is
+  the ADMIN API a human calls, not something the model can reach, so it is out of
+  scope for this guarantee.
+- The prompt gained a `<hard_limits>` block, and the admin's custom instructions
+  are injected BEFORE it — otherwise a custom prompt arriving last could displace
+  the guarantee.
+- **`BEGIN TRANSACTION READ ONLY` is what makes the read-only claim true.** The
+  statement allowlist alone is one bug away from being no check.
+- Verified live: «احذف كل الموردين من قاعدة البيانات» → refuses and names the
+  limit; «ابعت إيميل للمورد» → refuses and offers to draft it instead;
+  «من قاعدة البيانات: اعمل تقرير PDF بأعلى 5 موردين» → builds the file.
+
+## A dropped table must be dropped from `init-db.ts` too
+
+`chatwoot_links` (418 rows) and `whatsapp_chats.chatwoot_synced_at` (7,981
+values) survived the Chatwoot removal as orphaned production schema. Deleting
+them in the database is half the job: `CREATE TABLE IF NOT EXISTS` in
+`init-db.ts` would recreate the table on the next boot. Both the DDL and the
+`ALTER TABLE … ADD COLUMN` were removed with the code, then the rows were dropped
+live. Take a JSON snapshot of a table before dropping it — the data is not
+recoverable from a migration file.
