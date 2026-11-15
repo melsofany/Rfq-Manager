@@ -23,12 +23,6 @@ import { verifySenderIdentity } from "./shared/mail-identity";
 import { logReadMailboxes } from "./modules/ai-assistant/mailboxes";
 import { logProviderCapacity } from "./modules/ai-assistant/config";
 import { engineName } from "./modules/ai-assistant/engine";
-import {
-  relayWebSocket,
-  chatwootProxyMount,
-  chatwootProxyTarget,
-  chatwootOwnsPath,
-} from "./modules/chatwoot/proxy";
 import type { Request } from "express";
 
 const rawPort = process.env["PORT"];
@@ -167,31 +161,4 @@ initDb()
       logger.error({ err }, "Failed to start server");
       process.exit(1);
     });
-
-    // ─── Chatwoot ActionCable relay ──────────────────────────────────────────
-    //
-    // The console opens a WebSocket for live message delivery. Without this the
-    // console still renders, but an agent would have to refresh to see a
-    // supplier's reply — the console would look healthy while failing to be
-    // live, which is the failure mode that is hardest to notice.
-    const wsTarget = chatwootProxyTarget();
-    const wsMount = chatwootProxyMount();
-    if (wsTarget && wsMount) {
-      server.on("upgrade", (req, socket, head) => {
-        const url = req.url ?? "";
-        // Match the SAME path space the HTTP proxy owns. A naive
-        // `${wsMount}/` prefix test is correct only while the mount is a
-        // sub-path: at the root it becomes `//` and matches nothing, so the
-        // console would render but never receive a live message.
-        if (!chatwootOwnsPath(new URL(url, "http://localhost").pathname)) {
-          // Not ours: leave the socket alone for any other listener.
-          return;
-        }
-        relayWebSocket(req as unknown as Request, socket, head, {
-          target: wsTarget,
-          prefix: wsMount,
-        });
-      });
-      logger.info({ at: wsMount }, "Chatwoot websocket relay armed");
-    }
   });

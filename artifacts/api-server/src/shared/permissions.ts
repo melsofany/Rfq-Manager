@@ -255,7 +255,6 @@ export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> =
   "/sync": { read: ["analytics"], write: ["analytics"] },
   "/audit": { read: ["audit"], write: ["audit"] },
   "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
-  "/chatwoot": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
   "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant:edit"] },
   "/integrations": { read: ["integrations"], write: ["integrations:edit"] },
   "/backup": { read: ["backup"], write: ["backup:edit"] },

@@ -42,7 +42,6 @@ import {
 } from "../../shared/supplier-registration";
 import { createRegistrationRequest } from "../users/supplier-registration";
 import { guardFor } from "../../shared/permissions";
-import { mirrorOutboundMessage } from "../chatwoot/bridge";
 import { loadFieldOpsSettings } from "../field-ops/service";
 
 const router = Router();
@@ -931,12 +930,6 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
             mediaType: "document",
             filename: `PO-${poNo}.pdf`,
             isRead: true,
-          });
-          void mirrorOutboundMessage({
-            phone: chatPhone,
-            body: `[أمر شراء PDF: ${poNo}]`,
-            supplierId,
-            employeeName: req.session?.employeeName ?? null,
           });
         } catch (saveErr) {
           req.log.error(
