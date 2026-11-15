@@ -632,6 +632,21 @@ export async function markInboundHandled(waMessageId?: string | null): Promise<v
   await markReplayed(waMessageId);
 }
 
+/**
+ * The caption a supplier typed with a file, or "" when they typed none.
+ *
+ * Our stored body prefixes every media message with a bracketed placeholder
+ * («[صورة مرسلة] — <caption>»), so the caption is whatever follows the marker.
+ * Returning "" for a file with no caption is deliberate: Chatwoot renders an
+ * attachment on its own, and an empty string keeps the console clean. The
+ * placeholder is OUR bookkeeping for the Cortoba screen, not a message.
+ */
+export function captionOf(body: string | null | undefined): string {
+  const raw = (body ?? "").trim();
+  const marker = /^\[[^\]]*\]\s*(?:—|-)?\s*/;
+  return raw.replace(marker, "").trim();
+}
+
 export async function mirrorInboundMessage(opts: {
   phone: string;
   body: string;
@@ -687,8 +702,15 @@ export async function mirrorInboundMessage(opts: {
       );
     }
     const meta = { sourceId: opts.waMessageId ?? undefined, inReplyTo };
+    // A FILE carries its own content. The stored body is a PLACEHOLDER
+    // («[صورة مرسلة]», «[مستند: …]»), and posting it as the message text made the
+    // console show the description NEXT TO the picture — which reads as "just
+    // text" and is why the operator reported the image as missing while the
+    // attachment was present all along. Only a real caption belongs in the
+    // content; the placeholder must never travel to the console.
+    const caption = opts.media ? captionOf(opts.body) : opts.body;
     const msg = opts.media
-      ? await createMediaMessage(link.conversationId, opts.body, "incoming", opts.media, meta)
+      ? await createMediaMessage(link.conversationId, caption, "incoming", opts.media, meta)
       : await createMessage(link.conversationId, opts.body, "incoming", meta);
     rememberOwnMessage(msg?.id);
     // Mark replayed ONLY when the console actually accepted the message.
