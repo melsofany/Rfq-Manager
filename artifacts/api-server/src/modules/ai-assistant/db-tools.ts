@@ -41,6 +41,7 @@ import {
   dataEntrySessionsTable,
 } from "@workspace/db";
 import { and, or, ilike, desc, asc, count, sql, gte, eq, inArray } from "drizzle-orm";
+import { expandSearchTerms } from "./search-terms";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { logger } from "../../shared/logger";
@@ -492,8 +493,14 @@ export async function queryRecords(opts: {
     /** True once we have at least one way to match the term. */
     let canMatch = false;
 
+    // The operator writes Arabic; the descriptions imported from the customer's
+    // ERP are English (and vice versa). `ilike '%حراري%'` can never match
+    // `CABLE`, which is why «سلك حراري 10ملم» reported "not found" over 186
+    // CABLE rows. Every known counterpart is an ALTERNATIVE (OR) — a row holding
+    // the English word and a row holding the Arabic one are both answers.
+    const terms = expandSearchTerms(term);
     const direct = spec.search.filter((c) => columns[c]);
-    const directParts = direct.map((c) => ilike(columns[c], `%${term}%`));
+    const directParts = direct.flatMap((c) => terms.map((t) => ilike(columns[c], `%${t}%`)));
     if (directParts.length) {
       orParts.push(or(...directParts) as SQL);
       matchedOn.push(...direct.map((c) => `${opts.table}.${c}`));
