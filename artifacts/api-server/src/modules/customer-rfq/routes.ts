@@ -848,17 +848,11 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
             customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
             employeeId: customerRfqItemAssignmentsTable.employeeId,
             employeeName: employeesTable.name,
-            categoryId: customerRfqItemAssignmentsTable.categoryId,
-            categoryName: itemCategoriesTable.name,
           })
           .from(customerRfqItemAssignmentsTable)
           .leftJoin(
             employeesTable,
             eq(customerRfqItemAssignmentsTable.employeeId, employeesTable.id),
-          )
-          .leftJoin(
-            itemCategoriesTable,
-            eq(customerRfqItemAssignmentsTable.categoryId, itemCategoriesTable.id),
           )
           .where(
             and(
