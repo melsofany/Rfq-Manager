@@ -21,21 +21,21 @@ const NOON = new Date(2026, 10, 15, 12, 0, 0); // 15 Nov 2026, local
 describe("isOpenRequest", () => {
   it("keeps every in-progress stage open", () => {
     for (const stage of ["received", "supplier_priced", "customer_priced", "po_issued"] as const) {
-      expect(isOpenRequest(stage, null)).toBe(true);
+      expect(isOpenRequest({ stage: stage, deliveredPct: null })).toBe(true);
     }
   });
 
   it("closes only the terminal stages", () => {
-    expect(isOpenRequest("failed", 0)).toBe(false);
-    expect(isOpenRequest("expired", null)).toBe(false);
+    expect(isOpenRequest({ stage: "failed", deliveredPct: 0 })).toBe(false);
+    expect(isOpenRequest({ stage: "expired", deliveredPct: null })).toBe(false);
   });
 
   it("closes a request only when every PO'd item was delivered", () => {
-    expect(isOpenRequest("delivered", 100)).toBe(false);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: 100 })).toBe(false);
     // The customer is still owed goods — the request is not finished.
-    expect(isOpenRequest("delivered", 40)).toBe(true);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: 40 })).toBe(true);
     // A missing share must never be read as «complete».
-    expect(isOpenRequest("delivered", null)).toBe(true);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: null })).toBe(true);
   });
 
   it("keeps a fully-delivered request open while it still has un-ordered items", () => {
@@ -43,26 +43,50 @@ describe("isOpenRequest", () => {
     // ONLY, so CRFQ-2026-004391 (37 live items, 4 on a PO) reads «نجح بالكامل»
     // the moment its 4 ordered items land — hiding 33 items of outstanding work
     // from the queue with no trace.
-    expect(isOpenRequest("delivered", 100, 33)).toBe(true);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: 100, unresolvedItems: 33 })).toBe(
+      true,
+    );
     // Same request once every item has been ordered and delivered.
-    expect(isOpenRequest("delivered", 100, 0)).toBe(false);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: 100, unresolvedItems: 0 })).toBe(
+      false,
+    );
   });
 
   it("defaults the un-ordered count to zero so callers that have not counted still work", () => {
-    expect(isOpenRequest("delivered", 100)).toBe(false);
-    expect(isOpenRequest("po_issued", null)).toBe(true);
+    expect(isOpenRequest({ stage: "delivered", deliveredPct: 100 })).toBe(false);
+    expect(isOpenRequest({ stage: "po_issued", deliveredPct: null })).toBe(true);
+  });
+
+  it("closes a request whose close date has passed", () => {
+    // The operator's own definition: «مش هنقدر نقدم بيه عرض سعر للعميل». A passed
+    // close date ends the request whatever progress it reached — reported live on
+    // 26R012682, which closed 2026-10-17 and still listed as open.
+    expect(isOpenRequest({ stage: "received", deliveredPct: null, closePassed: true })).toBe(false);
+    // Even with items still un-ordered: the chance to quote is gone.
+    expect(
+      isOpenRequest({
+        stage: "delivered",
+        deliveredPct: 50,
+        unresolvedItems: 33,
+        closePassed: true,
+      }),
+    ).toBe(false);
+    // A today or future close date is untouched.
+    expect(isOpenRequest({ stage: "received", deliveredPct: null, closePassed: false })).toBe(true);
+    // An absent close date cannot close anything by itself.
+    expect(isOpenRequest({ stage: "received", deliveredPct: null })).toBe(true);
   });
 
   it("does not resurrect a request the rules already judged terminal", () => {
     // A `failed`/`expired` request is over however many items it left un-ordered;
     // `unresolvedItems` must not override a terminal verdict.
-    expect(isOpenRequest("failed", 0, 5)).toBe(false);
-    expect(isOpenRequest("expired", null, 5)).toBe(false);
+    expect(isOpenRequest({ stage: "failed", deliveredPct: 0, unresolvedItems: 5 })).toBe(false);
+    expect(isOpenRequest({ stage: "expired", deliveredPct: null, unresolvedItems: 5 })).toBe(false);
   });
 
   it("treats an unknown or absent stage as not open rather than guessing", () => {
-    expect(isOpenRequest(null, null)).toBe(false);
-    expect(isOpenRequest(undefined, null)).toBe(false);
+    expect(isOpenRequest({ stage: null, deliveredPct: null })).toBe(false);
+    expect(isOpenRequest({ stage: undefined, deliveredPct: null })).toBe(false);
   });
 });
 

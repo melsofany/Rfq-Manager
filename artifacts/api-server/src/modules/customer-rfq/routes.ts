@@ -791,29 +791,33 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 // and the employees responsible for their items. Read-only and derived on every
 // call (nothing stored), so it can never drift from the requests themselves.
 //
-// The window is BOUNDED on both sides by `days` (default 30, max 365): from
-// `today - days` through `today + days`. An unbounded list reported every
-// request back to 2024 — 1,474 overdue rows on live data — which reads as a
-// total while being an arbitrary page. The rows that close BEFORE the window
-// are counted and returned as `window.olderNotShown`, so a bounded view never
-// claims to be the whole set. `includeUndated` decides whether the few requests
-// without a close date are listed (they are open but have no deadline).
+// A close date that has PASSED means no quote can be submitted any more, so such
+// a request is NOT listed by default: `days` is the look-ahead window only
+// (`today` … `today + days`). Bounding it backwards too was a defect — a request
+// that closed 29 days ago fell inside `today - 30` and appeared as «open» with a
+// negative countdown, which reads as work still available. `includeOverdue=true`
+// lists them on request, each labelled «انتهى موعد الإغلاق», and the count left
+// out is returned as `hiddenOverdue` so a bounded view never claims to be the
+// whole set. Requests with no close date are listed only when `includeUndated`.
 router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise<void> => {
   const q = req.query as Record<string, string>;
   const days = Math.min(Math.max(parseInt(String(q.days ?? "30"), 10) || 30, 1), 365);
   const includeUndated = q.includeUndated === "true";
+  const includeOverdue = q.includeOverdue === "true";
   const onlyUnassigned = q.onlyUnassigned === "true";
 
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const today = new Date();
   const todayStr = iso(today);
-  const fromDate = new Date(today);
-  fromDate.setDate(fromDate.getDate() - days);
-  const fromStr = iso(fromDate);
   const horizon = new Date(today);
   horizon.setDate(horizon.getDate() + days);
   const horizonStr = iso(horizon);
+  // With overdue included the lower bound is a bounded history window; without
+  // it the bound is TODAY, so a passed close date can never appear.
+  const past = new Date(today);
+  past.setDate(past.getDate() - days);
+  const fromStr = includeOverdue ? iso(past) : todayStr;
 
   const inWindow = and(
     gte(customerRfqsTable.expiryDate, fromStr),
@@ -826,14 +830,22 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
       .from(customerRfqsTable)
       .where(includeUndated ? or(inWindow, isNull(customerRfqsTable.expiryDate)) : inWindow)
       .orderBy(asc(customerRfqsTable.expiryDate)),
-    // Disclosed, not hidden: how many requests close BEFORE the window. Without
-    // this number the page silently presents a bounded slice as the whole set.
+    // Disclosed, not hidden: how many requests fall BEFORE the lower bound.
+    // With `includeOverdue` off that bound is TODAY, so this is exactly the set
+    // of requests whose close date has passed — the same set the toggle reveals
+    // and the same set the rules now close on. One query, so the number the page
+    // shows and the rows the toggle produces cannot disagree (the first cut used
+    // a weaker second filter and under-reported by 3,088 rows on live data).
     db
       .select({ olderCnt: sql<number>`count(*)` })
       .from(customerRfqsTable)
       .where(lt(customerRfqsTable.expiryDate, fromStr)),
   ]);
   const olderNotShown = Number(olderRow?.olderCnt ?? 0) || 0;
+  // A passed close date means no quote can be submitted, so those requests are
+  // left out by default and counted here. With `includeOverdue` on they are the
+  // rows being shown, so nothing is hidden.
+  const hiddenOverdue = includeOverdue ? 0 : olderNotShown;
 
   const ids = rows.map((r) => r.rfq.id);
   const { itemsByRfq, supplierPricedItemIds, poRowsByItem, supplierRejectedItemIds } =
@@ -888,7 +900,25 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
       // delivered reads «نجح بالكامل» while 33 items were never ordered — and
       // would vanish from the queue with the work still owed.
       const unorderedItems = rfqItems.filter((i) => !poRowsByItem.has(i.id)).length;
-      if (!isOpenRequest(status.stage, status.deliveredPct, unorderedItems)) return null;
+      // `isOpenRequest` is the ONE definition of open-for-quoting: a passed close
+      // date closes a request. `includeOverdue` asks a DIFFERENT question — «show
+      // me the ones that closed on the date, to review them» — so it re-evaluates
+      // the same facts with the date removed, rather than weakening the rule for
+      // every caller. The row keeps `closePassed`, so it is labelled as finished.
+      const baseFacts = { stage: status.stage, deliveredPct: status.deliveredPct };
+      const remainingDays = daysUntil(r.rfq.expiryDate);
+      const closePassed = remainingDays != null && remainingDays < 0;
+      const stillOpen = isOpenRequest({
+        ...baseFacts,
+        unresolvedItems: unorderedItems,
+        closePassed,
+      });
+      const openButForTheDate = isOpenRequest({
+        ...baseFacts,
+        unresolvedItems: unorderedItems,
+        closePassed: false,
+      });
+      if (!(includeOverdue ? openButForTheDate : stillOpen)) return null;
 
       // Assigned employees across the request's items, deduped, with the count
       // of items each one owns. The operator asked to see WHO the items are
@@ -915,7 +945,6 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
       const assignees = [...byEmployee.values()].sort((a, b) => b.itemCount - a.itemCount);
       if (onlyUnassigned && unassignedItems === 0) return null;
 
-      const remainingDays = daysUntil(r.rfq.expiryDate);
       return {
         id: r.rfq.id,
         internalNo: r.rfq.internalNo,
@@ -930,6 +959,8 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
         // Items with no customer PO yet — the part `deliveredPct` cannot see.
         unorderedItems,
         remainingDays,
+        closePassed,
+        closePassedLabel: closePassed ? "انتهى موعد الإغلاق" : null,
         urgency: urgencyOf(remainingDays),
         remainingLabel: remainingLabel(remainingDays),
         requestStatus: status,
@@ -953,6 +984,7 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
     window: {
       days,
       includeUndated,
+      includeOverdue,
       from: fromStr,
       to: horizonStr,
       today: todayStr,
@@ -960,6 +992,10 @@ router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise
       // «هناك N طلب أقدم غير معروض» instead of presenting a bounded slice as
       // the whole set.
       olderNotShown,
+      // Requests whose close date has PASSED and which are left out because
+      // `includeOverdue` is off. A passed close date means no quote can be
+      // submitted any more, so these are history, not outstanding work.
+      hiddenOverdue,
     },
   });
 });
