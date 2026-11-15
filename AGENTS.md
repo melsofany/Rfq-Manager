@@ -5172,3 +5172,44 @@ from the prompt, and both come from prompts that hold up under long tool runs
 - **A guard whose limit moves to fit the change guards nothing.** The +500 is
   documented in `ai-prompt-budget.test.ts` and is explicitly a ceiling for
   growth, not a target to fill.
+
+## The operator writes Arabic; the catalogue is English — search both (fix/ai-bilingual-search)
+
+Live report: «أنا كتبت بالعربي، المفروض هو يدور بالعربي والانجليزي». The question
+was «سلك حراري ١٠ملم» and the answer was «لم أعثر على صنف».
+
+- **The query was correct; the vocabulary was missing.** `ilike '%حراري%'` can
+  never match `CABLE`. Production `customer_po_items` holds **186 `CABLE` rows,
+  370 `HEAT` rows, 8 `THERMAL`** — including `DRAIN HEATING ELEMENT 5 MT. CABLE
+  220V` — because the descriptions are imported from the customer's ERP in
+  English, while the hand-entered rows are Arabic (`لفه سلك شعر السويدى ... كابل
+  3*6`). **Both languages live in one column**, so a search must reach across.
+- **`search-terms.ts` is the one vocabulary map**, `expandSearchTerms()` the one
+  entry point, used by BOTH `queryRecords` (db-tools) and the SQL aggregate
+  (`sql-registry`). Two copies of a translation table drift apart silently.
+- **The terms are OR-ed, never AND-ed**: a row holding the English word and a row
+  holding the Arabic one are both answers. AND-ing them returns nothing, which is
+  the bug being fixed.
+- **Never loosen the input into its bare words.** «سلك حراري» must NOT become
+  `%سلك%`, which matches «سلك شعر السويدى» — a wire, but not a thermal one. Only
+  the CROSS-LANGUAGE counterpart is added. A wrong answer is worse than the
+  missing one being fixed, and this was caught by the test written first.
+- **A unit is not a discriminator — measured, not assumed.** On production `M`
+  matches **79%** of `customer_po_items` (substring of MM, MODEL, MADE), `W` 57%,
+  `V` 50%, `MM` 11%. OR-ing one turns the search into the whole table. The unit
+  map was removed and the guard rejects it **by name** (`MM` is only 2 characters
+  and `AC` is a legitimate short target, so a length rule would be wrong).
+- **Vocabulary is read from the data, not a dictionary**: the English side is the
+  top-40 tokens of the real column, the Arabic side the Arabic tokens that occur
+  there. A word the data never uses only widens the search for nothing. Same
+  reason there is no translation API call — it would spend the quota whose
+  exhaustion is this assistant's recorded failure mode, and it would be
+  non-deterministic.
+- **Arabic-Indic digits are converted** (`١٠` → `10`): the operator types them.
+- **Verified live end-to-end** (production DB + live provider): the agent
+  answered «سلك حراري ١٠ملم» with `THERMAL SOFT STRANDED WIRE 10 SQ. MM`,
+  `Line Item 5720.003.GENRAL.0010`, both customer orders and the supplier PO —
+  and correctly separated «مكرونة حراري» (heat-shrink tubing) as a different
+  item. Before the fix the same question returned nothing.
+- Tests: `ai-search-terms.test.ts` (15). **2337 api-server tests** pass; tsc +
+  repo-wide prettier clean.

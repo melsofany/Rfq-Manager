@@ -31,6 +31,7 @@
  */
 import { getPool } from "@workspace/db";
 import { logger } from "../../shared/logger";
+import { expandSearchTerms } from "./search-terms";
 
 /** Hard ceiling on rows one aggregate returns, so a query cannot exhaust memory. */
 export const MAX_AGGREGATE_ROWS = 20_000;
@@ -289,8 +290,16 @@ export async function aggregateCustomerPoItems(
     where.push(`p.po_date < $${params.length}`);
   }
   if (opts.match) {
-    params.push(`%${opts.match}%`);
-    where.push(`(i.description ilike $${params.length} or i.part_no ilike $${params.length})`);
+    // The operator writes Arabic; the ERP-imported descriptions are English.
+    // One `ilike '%حراري%'` cannot match `CABLE`, so a known counterpart is
+    // OR-ed in — every term is an alternative, never a conjunction.
+    const parts: string[] = [];
+    for (const t of expandSearchTerms(opts.match)) {
+      params.push(`%${t}%`);
+      const ph = `$${params.length}`;
+      parts.push(`i.description ilike ${ph}`, `i.part_no ilike ${ph}`);
+    }
+    where.push(`(${parts.join(" or ")})`);
   }
 
   const whereSql = where.length ? `where ${where.join(" and ")}` : "";
