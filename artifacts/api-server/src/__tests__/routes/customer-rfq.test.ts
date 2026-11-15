@@ -30,6 +30,7 @@ const customerRfqsTbl = {
   customerRfqNumber: "customerRfqNo",
   createdAt: "createdAt",
   id: "id",
+  expiryDate: "expiryDate",
 };
 const rfqTable = { _: "supplierRfqs", customerRfqNo: "customerRfqNo", id: "id" };
 const itemsTable = {
@@ -207,6 +208,18 @@ let supplierCategoryRows: Array<{ name: string }> = [];
 // actionable filter is applied in SQL (not only in JS after a LIMIT).
 let reviewWhereCond: any = null;
 
+// «الطلبات المفتوحة»: the header rows the bounded query returns (the route
+// chains .where(...).orderBy(...) — see the mock's customerRfqs branch) and the
+// open assignment periods for their items.
+let openRequestRows: any[] = [];
+let openAssignmentRows: any[] = [];
+let openSupplierRows: any[] = [];
+// Requests closing BEFORE the shown window — disclosed, never hidden.
+let openOlderNotShown = 0;
+// The WHERE the open-requests query built, so a guard can prove the close-date
+// window is applied in SQL rather than by loading every request.
+let openRequestWhereCond: any = null;
+
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
 function chainable(value: any, methods: Record<string, any> = {}): any {
@@ -278,6 +291,15 @@ const dbMock: any = {
       }
       // rfq list/detail (select {rfq: ...} or bare select)
       if (table === customerRfqsTbl) {
+        // «الطلبات المفتوحة» window disclosure: select({olderCnt: count(*)})
+        // .from(customerRfqs).where(lt(expiryDate, from)) — the requests that
+        // close BEFORE the shown window. No orderBy, so without this branch it
+        // would fall through to the bare detail row and report 0.
+        if (arg && typeof arg === "object" && "olderCnt" in arg) {
+          return chainable([{ olderCnt: openOlderNotShown }], {
+            where: vi.fn(() => chainable([{ olderCnt: openOlderNotShown }])),
+          });
+        }
         // Bare select() (no arg) returns bare rows — used by PATCH to read the
         // existing + updated row directly. select({rfq:...}) wraps in {rfq:...}.
         const bare = arg === undefined;
@@ -291,7 +313,17 @@ const dbMock: any = {
         return chainable(wrapped, {
           // list chains .orderBy; detail chains .where
           orderBy: vi.fn(() => chainable(listRows)),
-          where: vi.fn(() => chainable(wrapped)),
+          where: vi.fn((cond: any) =>
+            // The open-requests query is the ONLY one that chains .where().orderBy()
+            // on this table, so ordering after the filter is what identifies it —
+            // and it is where the close-date window must be recorded for the guard.
+            chainable(wrapped, {
+              orderBy: vi.fn(() => {
+                openRequestWhereCond = cond;
+                return chainable(openRequestRows);
+              }),
+            }),
+          ),
           limit: vi.fn(() => chainable(wrapped)),
         });
       }
@@ -424,6 +456,17 @@ const dbMock: any = {
           leftJoin: vi.fn(() => chainable(allPoViews)),
         });
       }
+      // «الطلبات المفتوحة»: the supplier line status for the request's PO items,
+      // used to mark a request failed when a receipt was rejected. Keyed on
+      // `acceptedQty`, which only this lookup selects.
+      if (
+        table === (tables as any).purchaseOrderItemsTable &&
+        arg &&
+        typeof arg === "object" &&
+        "acceptedQty" in arg
+      ) {
+        return chainable(openSupplierRows, { where: vi.fn(() => chainable(openSupplierRows)) });
+      }
       // Sheet-view supplier cost: select({...}).from(purchaseOrderItems).where()
       if (
         table === (tables as any).purchaseOrderItemsTable &&
@@ -547,6 +590,23 @@ const dbMock: any = {
         return chainable(itemCategoryRows, {
           where: vi.fn(() => chainable(itemCategoryRows)),
           orderBy: vi.fn(() => chainable(itemCategoryRows)),
+        });
+      }
+      // «الطلبات المفتوحة»: the open assignment period per item, joined to the
+      // employee and the category. The route chains two leftJoins before the
+      // where, so the mock must expose both — a missing method throws inside the
+      // route and surfaces as a 500 that says nothing about the cause.
+      if (table === (tables as any).customerRfqItemAssignmentsTable) {
+        const withWhere = () =>
+          chainable(openAssignmentRows, { where: vi.fn(() => chainable(openAssignmentRows)) });
+        return chainable(openAssignmentRows, {
+          where: vi.fn(() => chainable(openAssignmentRows)),
+          leftJoin: vi.fn(() =>
+            chainable(openAssignmentRows, {
+              leftJoin: vi.fn(withWhere),
+              where: vi.fn(() => chainable(openAssignmentRows)),
+            }),
+          ),
         });
       }
       // Category-management: employee_categories owner resolution.
@@ -680,6 +740,9 @@ vi.mock("drizzle-orm", () => ({
   or: vi.fn((...a: any[]) => a),
   isNotNull: vi.fn((c: any) => c),
   ne: vi.fn((...a: any[]) => a),
+  lte: vi.fn((col: any, val: any) => ({ __op: "lte", col, val })),
+  gte: vi.fn((col: any, val: any) => ({ __op: "gte", col, val })),
+  lt: vi.fn((col: any, val: any) => ({ __op: "lt", col, val })),
   sql: Object.assign(
     vi.fn((strings: any, ...values: any[]) => ({ __op: "sql", strings, values })),
     { raw: vi.fn() },
@@ -758,6 +821,11 @@ beforeEach(() => {
   reviewCatalogueRows = [];
   supplierCategoryRows = [];
   reviewWhereCond = null;
+  openRequestRows = [];
+  openAssignmentRows = [];
+  openSupplierRows = [];
+  openOlderNotShown = 0;
+  openRequestWhereCond = null;
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -2882,5 +2950,439 @@ describe("GET /api/customer-rfq/classification-review-queue (بنود تحتاج
     // actionable, and a queue that never empties is one nobody reads.
     expect(res.body.count).toBe(0);
     expect(res.body.items).toEqual([]);
+  });
+});
+
+describe("GET /api/customer-rfq/open-requests", () => {
+  // A request whose close date is `days` away, with one open item.
+  function openRequest(id: number, days: number, over: Record<string, any> = {}) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+    return {
+      rfq: {
+        ...insertedRfq,
+        id,
+        internalNo: `CRFQ-${id}`,
+        customerRfqNo: `CRFQ-2026-00000${id}`,
+        customerName: "عميل تجريبي",
+        entryDate: "2026-01-01",
+        expiryDate: iso,
+        status: "sent",
+        isCancelled: false,
+        ...over,
+      },
+    };
+  }
+
+  it("returns an open request with its countdown and assigned employees", async () => {
+    openRequestRows = [openRequest(1, 3)];
+    detailItems = [
+      {
+        id: 10,
+        customerRfqId: 1,
+        partNo: "P1",
+        lineItem: "A1",
+        description: "بند أول",
+        uom: "pc",
+        qty: "3",
+        unitPrice: "10",
+        isCancelled: false,
+      },
+      {
+        id: 11,
+        customerRfqId: 1,
+        partNo: "P2",
+        lineItem: "A2",
+        description: "بند ثانٍ",
+        uom: "pc",
+        qty: "2",
+        unitPrice: null,
+        isCancelled: false,
+      },
+    ];
+    openAssignmentRows = [
+      {
+        customerRfqItemId: 10,
+        employeeId: 5,
+        employeeName: "أحمد",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+      {
+        customerRfqItemId: 11,
+        employeeId: 5,
+        employeeName: "أحمد",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    const row = res.body.rows[0];
+    expect(row.internalNo).toBe("CRFQ-1");
+    expect(row.remainingDays).toBe(3);
+    expect(row.urgency).toBe("soon");
+    expect(row.remainingLabel).toBe("متبقي 3 أيام");
+    expect(row.itemCount).toBe(2);
+    expect(row.assignees).toEqual([{ employeeId: 5, employeeName: "أحمد", itemCount: 2 }]);
+    expect(row.assignedItemCount).toBe(2);
+    expect(row.unassignedItemCount).toBe(0);
+    expect(res.body.totals).toMatchObject({ count: 1, soon: 1, overdue: 0, items: 2 });
+  });
+
+  it("counts the items with no responsible employee instead of hiding them", async () => {
+    openRequestRows = [openRequest(2, 10)];
+    detailItems = [
+      {
+        id: 20,
+        customerRfqId: 2,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: false,
+      },
+      {
+        id: 21,
+        customerRfqId: 2,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: false,
+      },
+    ];
+    openAssignmentRows = [
+      {
+        customerRfqItemId: 20,
+        employeeId: 7,
+        employeeName: "منى",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].assignedItemCount).toBe(1);
+    expect(res.body.rows[0].unassignedItemCount).toBe(1);
+    expect(res.body.totals.unassignedItems).toBe(1);
+    // The employee must appear with the count of the items they actually own.
+    expect(res.body.rows[0].assignees).toEqual([
+      { employeeId: 7, employeeName: "منى", itemCount: 1 },
+    ]);
+  });
+
+  it("reports an overdue request as overdue, not as calm", async () => {
+    openRequestRows = [openRequest(3, -4)];
+    detailItems = [
+      {
+        id: 30,
+        customerRfqId: 3,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].remainingDays).toBe(-4);
+    expect(res.body.rows[0].urgency).toBe("overdue");
+    expect(res.body.rows[0].remainingLabel).toBe("متأخر 4 أيام");
+    expect(res.body.totals.overdue).toBe(1);
+  });
+
+  it("drops a request the customer is no longer owed anything on", async () => {
+    // Every PO'd item delivered → the derived status is `delivered` at 100%.
+    openRequestRows = [openRequest(4, 5)];
+    detailItems = [
+      {
+        id: 40,
+        customerRfqId: 4,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "2",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    poItemRows = [
+      {
+        customerRfqItemId: 40,
+        customerPoItemId: 400,
+        qty: "2",
+        totalDeliveredQty: "2",
+        totalRejectedByCustomerQty: "0",
+        deliveryStatus: "delivered",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toEqual([]);
+    expect(res.body.totals.count).toBe(0);
+  });
+
+  it("keeps a PARTIALLY delivered request open", async () => {
+    // The customer is still owed goods, so the request is not finished — a
+    // request dropped here is work nobody sees again.
+    openRequestRows = [openRequest(5, 2)];
+    detailItems = [
+      {
+        id: 50,
+        customerRfqId: 5,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "2",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    poItemRows = [
+      {
+        customerRfqItemId: 50,
+        customerPoItemId: 500,
+        qty: "2",
+        totalDeliveredQty: "1",
+        totalRejectedByCustomerQty: "0",
+        deliveryStatus: "partial",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    expect(res.body.rows[0].requestStatus.deliveredPct).toBe(0);
+  });
+
+  it("excludes a request that failed (rejected delivery, nothing delivered)", async () => {
+    openRequestRows = [openRequest(6, 1)];
+    detailItems = [
+      {
+        id: 60,
+        customerRfqId: 6,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    poItemRows = [
+      {
+        customerRfqItemId: 60,
+        customerPoItemId: 600,
+        qty: "1",
+        totalDeliveredQty: "0",
+        totalRejectedByCustomerQty: "1",
+        deliveryStatus: "rejected",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toEqual([]);
+  });
+
+  it("applies the close-date window in SQL, not after loading every request", async () => {
+    // The defect this guards: filtering 4,700 requests in JS. The mock serves
+    // whatever rows it is given, so the only way to assert the bound is to read
+    // the built WHERE — a route that loads everything would still pass a
+    // rows-based assertion on a small fixture.
+    openRequestRows = [openRequest(7, 3)];
+    detailItems = [];
+    await request(testApp).get("/api/customer-rfq/open-requests?days=30");
+    expect(openRequestWhereCond).not.toBeNull();
+    const cond = JSON.stringify(openRequestWhereCond);
+    expect(cond).toContain("expiryDate");
+    // BOTH bounds: a window with no lower bound reported 1,474 overdue rows on
+    // live data and read as a total.
+    expect(cond).toContain("lte");
+    expect(cond).toContain("gte");
+  });
+
+  it("discloses the requests that close before the window instead of hiding them", async () => {
+    openRequestRows = [openRequest(11, 3)];
+    detailItems = [
+      {
+        id: 110,
+        customerRfqId: 11,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: false,
+      },
+    ];
+    openOlderNotShown = 1372;
+    const res = await request(testApp).get("/api/customer-rfq/open-requests?days=30");
+    expect(res.status).toBe(200);
+    // A bounded list must never present itself as the whole set.
+    expect(res.body.window.olderNotShown).toBe(1372);
+    expect(res.body.window.from).toBeTruthy();
+    expect(res.body.window.today).toBeTruthy();
+    expect(res.body.rows).toHaveLength(1);
+  });
+
+  it("filters to requests with unassigned items when asked", async () => {
+    openRequestRows = [openRequest(8, 3), openRequest(9, 4)];
+    detailItems = [
+      {
+        id: 80,
+        customerRfqId: 8,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: false,
+      },
+      {
+        id: 90,
+        customerRfqId: 9,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: false,
+      },
+    ];
+    openAssignmentRows = [
+      {
+        customerRfqItemId: 80,
+        employeeId: 5,
+        employeeName: "أحمد",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests?onlyUnassigned=true");
+    expect(res.status).toBe(200);
+    expect(res.body.rows.map((r: any) => r.id)).toEqual([9]);
+  });
+
+  it("ignores an item cancelled on the request when counting what is owed", async () => {
+    openRequestRows = [openRequest(10, 6)];
+    detailItems = [
+      {
+        id: 100,
+        customerRfqId: 10,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+      {
+        id: 101,
+        customerRfqId: 10,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        isCancelled: true,
+      },
+    ];
+    openAssignmentRows = [
+      {
+        customerRfqItemId: 100,
+        employeeId: 5,
+        employeeName: "أحمد",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+      {
+        customerRfqItemId: 101,
+        employeeId: 6,
+        employeeName: "سارة",
+        categoryId: 3,
+        categoryName: "كهرباء",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    // A cancelled line is not work anyone owes, so it must not inflate the
+    // item count nor the responsibility of the employee it used to belong to.
+    expect(res.body.rows[0].itemCount).toBe(1);
+    expect(res.body.rows[0].assignees).toEqual([
+      { employeeId: 5, employeeName: "أحمد", itemCount: 1 },
+    ]);
+  });
+
+  it("keeps a request whose ordered items are delivered but which still has un-ordered items", async () => {
+    // The end-to-end shape of the live defect: 3 live items, 1 on a PO, that one
+    // delivered → «نجح بالكامل», while 2 items were never ordered at all.
+    openRequestRows = [openRequest(12, 5)];
+    detailItems = [
+      {
+        id: 120,
+        customerRfqId: 12,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "2",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+      {
+        id: 121,
+        customerRfqId: 12,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+      {
+        id: 122,
+        customerRfqId: 12,
+        partNo: "P3",
+        lineItem: "A3",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    poItemRows = [
+      {
+        customerRfqItemId: 120,
+        customerPoItemId: 1200,
+        qty: "2",
+        totalDeliveredQty: "2",
+        totalRejectedByCustomerQty: "0",
+        deliveryStatus: "delivered",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    expect(res.body.rows[0].requestStatus.stage).toBe("delivered");
+    expect(res.body.rows[0].requestStatus.deliveredPct).toBe(100);
+    // …and it is still OPEN, with the un-ordered items disclosed.
+    expect(res.body.rows[0].unorderedItems).toBe(2);
+    expect(res.body.rows[0].itemCount).toBe(3);
+  });
+
+  it("clamps the window to a sane range instead of trusting the caller", async () => {
+    openRequestRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/open-requests?days=99999");
+    expect(res.status).toBe(200);
+    expect(res.body.window.days).toBe(365);
+    const res2 = await request(testApp).get("/api/customer-rfq/open-requests?days=abc");
+    expect(res2.body.window.days).toBe(30);
   });
 });
