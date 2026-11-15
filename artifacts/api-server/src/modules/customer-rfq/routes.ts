@@ -21,8 +21,24 @@ import {
   customerRfqItemCategoriesTable,
   supplierCategoriesTable,
 } from "@workspace/db";
-import { eq, ilike, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
+import {
+  eq,
+  ilike,
+  inArray,
+  desc,
+  asc,
+  and,
+  isNull,
+  or,
+  isNotNull,
+  sql,
+  ne,
+  lte,
+  gte,
+  lt,
+} from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { daysUntil, isOpenRequest, remainingLabel, urgencyOf } from "./open-requests";
 import {
   ensureCustomerAssignmentsSafe,
   classifyUnclassifiedItems,
@@ -612,34 +628,32 @@ function serialize(r: typeof customerRfqsTable.$inferSelect, itemCount: number) 
   };
 }
 
-// GET /customer-rfq — list with optional search
-router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
-  const { search, status } = req.query as Record<string, string>;
-
-  const rows = await db
-    .select({ rfq: customerRfqsTable })
-    .from(customerRfqsTable)
-    .orderBy(desc(customerRfqsTable.createdAt));
-
-  let filtered = rows;
-  if (status) filtered = filtered.filter((r) => r.rfq.status === status);
-  if (search) {
-    const s = search.toLowerCase();
-    filtered = filtered.filter(
-      (r) =>
-        r.rfq.internalNo.toLowerCase().includes(s) ||
-        r.rfq.customerRfqNo.toLowerCase().includes(s) ||
-        r.rfq.customerName.toLowerCase().includes(s),
-    );
-  }
-
-  const ids = filtered.map((r) => r.rfq.id);
-
-  // Batch-load the items of every listed RFQ so we can compute the per-RFQ
-  // request status without N+1 queries. We fetch: the items themselves (for the
-  // customer-pricing share + partNo/lineItem for the supplier-price lookup),
-  // the per-item counts, the approved offer_items links, and the PO/delivery
-  // rollups — all keyed by customerRfqId.
+/**
+ * Batched milestone context for a set of customer RFQs.
+ *
+ * ONE set of queries for any number of requests, so the list route and the
+ * «الطلبات المفتوحة» route compute their status from the SAME evidence — two
+ * copies of this join is how the tab and the list would start disagreeing about
+ * whether a request is still open.
+ *
+ * The supplier-price lookup deliberately uses the FK-linked batch query only:
+ * the per-item partNo/lineItem legacy fallback is O(N) and hung the list page
+ * once many items lacked the FK.
+ */
+async function loadRequestStatusContext(ids: number[]): Promise<{
+  itemsByRfq: Map<number, (typeof customerRfqItemsTable.$inferSelect)[]>;
+  supplierPricedItemIds: Set<number>;
+  poRowsByItem: Map<
+    number,
+    {
+      qty: string | null;
+      totalDeliveredQty: string | null;
+      totalRejectedByCustomerQty: string | null;
+      deliveryStatus: string;
+    }
+  >;
+  supplierRejectedItemIds: Set<number>;
+}> {
   const allItems =
     ids.length > 0
       ? await db
@@ -653,12 +667,7 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     arr.push(it);
     itemsByRfq.set(it.customerRfqId, arr);
   }
-  const countMap = new Map<number, number>();
-  for (const [rfqId, arr] of itemsByRfq) countMap.set(rfqId, arr.length);
 
-  // 2) supplier-priced: which customer_rfq_item_ids have an approved offer_item.
-  // List path uses only the FK-linked batch query — the per-item legacy
-  // fallback is O(N) and would hang the page for large lists.
   const allItemIds = allItems.map((i) => i.id);
   const supplierPricedItemIds =
     allItemIds.length > 0
@@ -668,8 +677,7 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
         )
       : new Set<number>();
 
-  // 4) PO issued + delivered share across all listed RFQs (single query).
-  let poRowsByItem = new Map<
+  const poRowsByItem = new Map<
     number,
     {
       qty: string | null;
@@ -679,7 +687,6 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     }
   >();
   const supplierRejectedItemIds = new Set<number>();
-  const cpoIdToRfqItem = new Map<number, number>();
   if (allItemIds.length > 0) {
     const poRows = await db
       .select({
@@ -697,12 +704,12 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
           isNotNull(customerPoItemsTable.customerRfqItemId),
         ),
       );
+    const cpoIdToRfqItem = new Map<number, number>();
     const cpoItemIds: number[] = [];
     for (const r of poRows) {
       if (r.customerRfqItemId == null) continue;
       cpoIdToRfqItem.set(r.customerPoItemId, r.customerRfqItemId);
-      const existing = poRowsByItem.get(r.customerRfqItemId);
-      if (!existing) {
+      if (!poRowsByItem.has(r.customerRfqItemId)) {
         poRowsByItem.set(r.customerRfqItemId, {
           qty: r.qty,
           totalDeliveredQty: r.totalDeliveredQty,
@@ -732,6 +739,36 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  return { itemsByRfq, supplierPricedItemIds, poRowsByItem, supplierRejectedItemIds };
+}
+
+// GET /customer-rfq — list with optional search
+router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
+  const { search, status } = req.query as Record<string, string>;
+
+  const rows = await db
+    .select({ rfq: customerRfqsTable })
+    .from(customerRfqsTable)
+    .orderBy(desc(customerRfqsTable.createdAt));
+
+  let filtered = rows;
+  if (status) filtered = filtered.filter((r) => r.rfq.status === status);
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = filtered.filter(
+      (r) =>
+        r.rfq.internalNo.toLowerCase().includes(s) ||
+        r.rfq.customerRfqNo.toLowerCase().includes(s) ||
+        r.rfq.customerName.toLowerCase().includes(s),
+    );
+  }
+
+  const ids = filtered.map((r) => r.rfq.id);
+  const { itemsByRfq, supplierPricedItemIds, poRowsByItem, supplierRejectedItemIds } =
+    await loadRequestStatusContext(ids);
+  const countMap = new Map<number, number>();
+  for (const [rfqId, arr] of itemsByRfq) countMap.set(rfqId, arr.length);
+
   res.json(
     filtered.map((r) => {
       const rfqItems = itemsByRfq.get(r.rfq.id) ?? [];
@@ -745,6 +782,191 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
       return { ...serialize(r.rfq, countMap.get(r.rfq.id) ?? 0), requestStatus: status };
     }),
   );
+});
+
+// GET /customer-rfq/open-requests — الطلبات المفتوحة
+//
+// The requests that still owe work, with the time left until their close date
+// and the employees responsible for their items. Read-only and derived on every
+// call (nothing stored), so it can never drift from the requests themselves.
+//
+// The window is BOUNDED on both sides by `days` (default 30, max 365): from
+// `today - days` through `today + days`. An unbounded list reported every
+// request back to 2024 — 1,474 overdue rows on live data — which reads as a
+// total while being an arbitrary page. The rows that close BEFORE the window
+// are counted and returned as `window.olderNotShown`, so a bounded view never
+// claims to be the whole set. `includeUndated` decides whether the few requests
+// without a close date are listed (they are open but have no deadline).
+router.get("/customer-rfq/open-requests", requireAuth, async (req, res): Promise<void> => {
+  const q = req.query as Record<string, string>;
+  const days = Math.min(Math.max(parseInt(String(q.days ?? "30"), 10) || 30, 1), 365);
+  const includeUndated = q.includeUndated === "true";
+  const onlyUnassigned = q.onlyUnassigned === "true";
+
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = new Date();
+  const todayStr = iso(today);
+  const fromDate = new Date(today);
+  fromDate.setDate(fromDate.getDate() - days);
+  const fromStr = iso(fromDate);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + days);
+  const horizonStr = iso(horizon);
+
+  const inWindow = and(
+    gte(customerRfqsTable.expiryDate, fromStr),
+    lte(customerRfqsTable.expiryDate, horizonStr),
+  );
+
+  const [rows, [olderRow]] = await Promise.all([
+    db
+      .select({ rfq: customerRfqsTable })
+      .from(customerRfqsTable)
+      .where(includeUndated ? or(inWindow, isNull(customerRfqsTable.expiryDate)) : inWindow)
+      .orderBy(asc(customerRfqsTable.expiryDate)),
+    // Disclosed, not hidden: how many requests close BEFORE the window. Without
+    // this number the page silently presents a bounded slice as the whole set.
+    db
+      .select({ olderCnt: sql<number>`count(*)` })
+      .from(customerRfqsTable)
+      .where(lt(customerRfqsTable.expiryDate, fromStr)),
+  ]);
+  const olderNotShown = Number(olderRow?.olderCnt ?? 0) || 0;
+
+  const ids = rows.map((r) => r.rfq.id);
+  const { itemsByRfq, supplierPricedItemIds, poRowsByItem, supplierRejectedItemIds } =
+    await loadRequestStatusContext(ids);
+
+  // Responsibility per item, batched: the OPEN period of every item of every
+  // listed request, with the employee name. One query, never per request.
+  const allItemIds = [...itemsByRfq.values()].flat().map((i) => i.id);
+  const assignmentRows =
+    allItemIds.length > 0
+      ? await db
+          .select({
+            customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
+            employeeId: customerRfqItemAssignmentsTable.employeeId,
+            employeeName: employeesTable.name,
+            categoryId: customerRfqItemAssignmentsTable.categoryId,
+            categoryName: itemCategoriesTable.name,
+          })
+          .from(customerRfqItemAssignmentsTable)
+          .leftJoin(
+            employeesTable,
+            eq(customerRfqItemAssignmentsTable.employeeId, employeesTable.id),
+          )
+          .leftJoin(
+            itemCategoriesTable,
+            eq(customerRfqItemAssignmentsTable.categoryId, itemCategoriesTable.id),
+          )
+          .where(
+            and(
+              inArray(customerRfqItemAssignmentsTable.customerRfqItemId, allItemIds),
+              isNull(customerRfqItemAssignmentsTable.validTo),
+            ),
+          )
+      : [];
+  const assigneeByItem = new Map<number, { employeeId: number; employeeName: string | null }>();
+  for (const a of assignmentRows) {
+    if (a.employeeId == null) continue;
+    if (!assigneeByItem.has(a.customerRfqItemId)) {
+      assigneeByItem.set(a.customerRfqItemId, {
+        employeeId: a.employeeId,
+        employeeName: a.employeeName ?? null,
+      });
+    }
+  }
+
+  const open = rows
+    .map((r) => {
+      const rfqItems = (itemsByRfq.get(r.rfq.id) ?? []).filter((i) => !i.isCancelled);
+      const status = computeListRequestStatus(
+        rfqItems,
+        supplierPricedItemIds,
+        poRowsByItem,
+        supplierRejectedItemIds,
+        r.rfq.expiryDate,
+      );
+      // Live items that never reached a customer PO. `deliveredPct` counts only
+      // the PO'd items, so without this a request whose 4 ordered items were
+      // delivered reads «نجح بالكامل» while 33 items were never ordered — and
+      // would vanish from the queue with the work still owed.
+      const unorderedItems = rfqItems.filter((i) => !poRowsByItem.has(i.id)).length;
+      if (!isOpenRequest(status.stage, status.deliveredPct, unorderedItems)) return null;
+
+      // Assigned employees across the request's items, deduped, with the count
+      // of items each one owns. The operator asked to see WHO the items are
+      // assigned to, so this is the answer and it must not be an approximation.
+      const byEmployee = new Map<
+        number,
+        { employeeId: number; employeeName: string | null; itemCount: number }
+      >();
+      let unassignedItems = 0;
+      for (const it of rfqItems) {
+        const a = assigneeByItem.get(it.id);
+        if (!a) {
+          unassignedItems += 1;
+          continue;
+        }
+        const cur = byEmployee.get(a.employeeId) ?? {
+          employeeId: a.employeeId,
+          employeeName: a.employeeName,
+          itemCount: 0,
+        };
+        cur.itemCount += 1;
+        byEmployee.set(a.employeeId, cur);
+      }
+      const assignees = [...byEmployee.values()].sort((a, b) => b.itemCount - a.itemCount);
+      if (onlyUnassigned && unassignedItems === 0) return null;
+
+      const remainingDays = daysUntil(r.rfq.expiryDate);
+      return {
+        id: r.rfq.id,
+        internalNo: r.rfq.internalNo,
+        customerRfqNo: r.rfq.customerRfqNo,
+        customerName: r.rfq.customerName,
+        entryDate: r.rfq.entryDate,
+        expiryDate: r.rfq.expiryDate,
+        buyerName: r.rfq.buyerName,
+        employeeName: r.rfq.employeeName,
+        status: r.rfq.status,
+        itemCount: rfqItems.length,
+        // Items with no customer PO yet — the part `deliveredPct` cannot see.
+        unorderedItems,
+        remainingDays,
+        urgency: urgencyOf(remainingDays),
+        remainingLabel: remainingLabel(remainingDays),
+        requestStatus: status,
+        assignees,
+        assignedItemCount: rfqItems.length - unassignedItems,
+        unassignedItemCount: unassignedItems,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null);
+
+  res.json({
+    rows: open,
+    totals: {
+      count: open.length,
+      overdue: open.filter((r) => r.urgency === "overdue").length,
+      today: open.filter((r) => r.urgency === "today").length,
+      soon: open.filter((r) => r.urgency === "soon").length,
+      unassignedItems: open.reduce((n, r) => n + r.unassignedItemCount, 0),
+      items: open.reduce((n, r) => n + r.itemCount, 0),
+    },
+    window: {
+      days,
+      includeUndated,
+      from: fromStr,
+      to: horizonStr,
+      today: todayStr,
+      // Requests that close BEFORE the window. Returned so the page can say
+      // «هناك N طلب أقدم غير معروض» instead of presenting a bounded slice as
+      // the whole set.
+      olderNotShown,
+    },
+  });
 });
 
 // Lighter per-RFQ request-status builder for the list view: takes the already-
