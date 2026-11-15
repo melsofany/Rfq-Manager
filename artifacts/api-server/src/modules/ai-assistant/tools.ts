@@ -1259,11 +1259,16 @@ async function executeToolInner(
       case "count_database": {
         if (!ctx.settings.allowDatabase)
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
-        const n = await countRecords({
+        const res = await countRecords({
           table: String(args.table ?? ""),
           sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
+          status: typeof args.status === "string" ? args.status : undefined,
+          distinctStatus: args.distinctStatus === true,
         });
-        return { ok: true, data: { table: args.table, count: n } };
+        // `statuses` is surfaced so the model can map the operator's word
+        // («مفتوح») onto the values that exist (`draft`/`sent`) instead of
+        // reporting the table TOTAL under the question's own word.
+        return { ok: true, data: { table: args.table, ...res } };
       }
       case "system_overview": {
         if (!ctx.settings.allowDatabase)
