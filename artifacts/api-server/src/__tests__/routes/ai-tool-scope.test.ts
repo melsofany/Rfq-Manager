@@ -98,7 +98,6 @@ describe("tool-scope: per-intent catalogue", () => {
       "read_email",
       "get_email_attachment",
       "list_mailboxes",
-      "send_email",
     ]) {
       expect(scoped, t).toContain(t);
     }
@@ -143,7 +142,6 @@ describe("tool-scope: the mail-tool set is the ONE source of truth", () => {
       "read_email",
       "get_email_attachment",
       "list_mailboxes",
-      "send_email",
       "start_census_job",
     ]) {
       expect(EMAIL_TOOL_NAMES.has(t), `${t} must count as a mail read`).toBe(true);

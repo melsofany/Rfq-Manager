@@ -383,6 +383,27 @@ export function isDailyQuotaExhausted(err: unknown): boolean {
   return /per\s*day|perday/i.test(message);
 }
 
+/**
+ * True when the PROVIDER — not the model — cannot serve this request, so the
+ * chain must move on rather than retry or give up.
+ *
+ * Measured live: a DeepSeek key with no balance answers
+ * `402 {"error":{"type":"insufficient_balance_error"}}`, and Gemini answers 403
+ * on a key without the API enabled. Both are PERMANENT for that provider and
+ * IDENTICAL on every model it serves, but the NEXT provider is unaffected — so
+ * treating them as permanent throws away the whole chain and silences the
+ * assistant. The assistant is the product; a billing state on one vendor must
+ * not be a hard outage.
+ */
+export function isProviderUnavailable(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status;
+  if (status === 402 || status === 401 || status === 403) return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /insufficient[ _]balance|insufficient_quota|billing|exceeded your current quota|account is not authorized/i.test(
+    message,
+  );
+}
+
 /** True when a quota error is worth waiting out rather than switching away from. */
 export function isTransientQuota(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);

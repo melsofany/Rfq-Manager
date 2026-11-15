@@ -22,7 +22,6 @@ vi.mock("dns", () => ({
 }));
 
 const { sendPoEmail, sendRfqEmail } = await import("../../shared/email");
-const { sendAssistantEmail } = await import("../../modules/ai-assistant/email");
 
 const SENT_FROM = "procurement@cortoba-supplies.com";
 
@@ -72,12 +71,6 @@ describe("outbound From header is identical across senders", () => {
     expect(mail.from).toBe(`"Cortoba Supplies قرطبة للتوريدات" <${SENT_FROM}>`);
   });
 
-  it("sends the assistant's mail from the SAME identity", async () => {
-    await sendAssistantEmail({ to: "x@y.com", subject: "s", body: "b" });
-    const mail = sendMail.mock.calls[0][0];
-    expect(mail.from).toBe(`"Cortoba Supplies قرطبة للتوريدات" <${SENT_FROM}>`);
-  });
-
   it("points Reply-To at the monitored inbox, not the employee name", async () => {
     // The old code set replyTo to `"<employee>" <senderEmail>`; the employee is
     // not a mailbox, so replies were addressed to a non-existent person.
@@ -86,29 +79,14 @@ describe("outbound From header is identical across senders", () => {
     expect(mail.replyTo).toBe(`"Cortoba Supplies قرطبة للتوريدات" <${SENT_FROM}>`);
     expect(mail.replyTo).not.toContain("Ahmed");
   });
-
-  it("does not let a read mailbox change the sender", async () => {
-    await sendAssistantEmail({ to: "x@y.com", subject: "s", body: "b" });
-    const before = sendMail.mock.calls[0][0].from;
-
-    process.env.IMAP_USER = "info@cortoba-supplies.com";
-    process.env.IMAP_HOST = "imap.gmail.com";
-    sendMail.mockClear();
-
-    await sendAssistantEmail({ to: "x@y.com", subject: "s", body: "b" });
-    expect(sendMail.mock.calls[0][0].from).toBe(before);
-  });
 });
 
 describe("MAIL_READONLY stops every sender", () => {
-  it("refuses the PO, the RFQ, and the assistant alike", async () => {
+  it("refuses the PO and the RFQ", async () => {
     process.env.MAIL_READONLY = "true";
 
     await expect(sendPoEmail(poArgs as never)).rejects.toThrow(/للقراءة فقط/);
     await expect(sendRfqEmail(rfqArgs as never)).rejects.toThrow(/للقراءة فقط/);
-    await expect(sendAssistantEmail({ to: "x@y.com", subject: "s", body: "b" })).rejects.toThrow(
-      /للقراءة فقط/,
-    );
     // Nothing reached the transport at all.
     expect(sendMail).not.toHaveBeenCalled();
   });

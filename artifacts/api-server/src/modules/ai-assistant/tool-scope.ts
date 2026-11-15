@@ -78,7 +78,6 @@ const EMAIL_TOOLS = [
   // Sending is a mail capability too. It is gated in CODE (requires
   // `confirmed:true`), so exposing it in scope is safe — removing it would make
   // "ابعت إيميل لـ EDC" unanswerable in the very scope that names the mail.
-  "send_email",
   // Starting a mail census job IS reading the mail — it just reads it in the
   // background and answers on WhatsApp later. Found live: the model called
   // `start_census_job`, the reply said «بدأت المهمة الجديدة من البريد», and the

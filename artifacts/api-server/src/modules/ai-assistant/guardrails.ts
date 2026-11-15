@@ -177,7 +177,6 @@ export const BREAKER_TOOLS = new Set([
   "get_email_attachment",
   "scan_emails",
   "scan_email_items",
-  "send_email",
   "list_mailboxes",
 ]);
 

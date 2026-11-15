@@ -44,7 +44,6 @@ const NON_SOURCE_TOOLS = new Set([
   "describe_schema",
   "classify_document_number",
   "list_mailboxes",
-  "send_email",
   "generate_pdf",
 ]);
 

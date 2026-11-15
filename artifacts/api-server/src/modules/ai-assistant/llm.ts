@@ -21,6 +21,7 @@ import {
   isDeepSeekEndpoint,
   isGeminiEndpoint,
   isGeminiModelId,
+  isProviderUnavailable,
 } from "./config";
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -368,7 +369,14 @@ export async function chatCompletion(opts: {
   // 429 or 404 on the model means this model is exhausted/unavailable: move on
   // rather than retrying it. Gemini's free tier caps a single model at 20
   // requests/day, so switching is the only way to stay usable.
-  const SWITCH_MODEL = new Set([429, 404]);
+  //
+  // 402/401/403 are the PROVIDER refusing to serve at all — an unpaid balance, a
+  // key without the API enabled. Retrying is pointless AND giving up is wrong:
+  // the next provider in the chain is unaffected. Measured live: a DeepSeek key
+  // with no balance answered 402 on every request, and because 402 was not in
+  // this set the chain threw before Gemini (which worked) was ever dialled —
+  // the assistant answered nothing at all.
+  const SWITCH_MODEL = new Set([429, 404, 402, 401, 403]);
   /**
    * A 429 carrying `retryDelay` is a per-MINUTE limit, not the daily cap — the
    * model recovers in seconds and is usually the better model. Waiting it out
@@ -427,9 +435,16 @@ export async function chatCompletion(opts: {
   const deadlineFor = (provider: ModelProvider) =>
     provider === candidates[0]?.provider && secondaryReserveMs > 0 ? primaryDeadline : deadline;
 
+  // Providers proven unusable DURING THIS CALL. A provider that refuses to serve
+  // (no balance, key not enabled) refuses every one of its models identically,
+  // so the remaining ones are skipped rather than each spending a request and a
+  // slice of the budget to learn the same thing.
+  const unavailableProviders = new Set<ModelProvider>();
+
   try {
     outer: for (const candidate of candidates) {
       const { model, provider } = candidate;
+      if (unavailableProviders.has(provider)) continue outer;
       let waitedForQuota = false;
       const providerDeadline = deadlineFor(provider);
       const modelDeadline = Math.min(Date.now() + perModelMs, providerDeadline);
@@ -469,6 +484,18 @@ export async function chatCompletion(opts: {
               continue outer;
             }
             throw err;
+          }
+
+          if (isProviderUnavailable(err)) {
+            // The provider itself is out (balance/key), so every model it serves
+            // fails identically: move straight to the next provider instead of
+            // spending a per-model slice on each of its models.
+            unavailableProviders.add(provider);
+            logger.warn(
+              { model, provider, status, reason: err.message.slice(0, 160) },
+              "AI assistant: provider unavailable, moving to the next provider",
+            );
+            continue outer;
           }
 
           if (status != null && SWITCH_MODEL.has(status)) {
