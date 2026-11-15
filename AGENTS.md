@@ -5213,6 +5213,7 @@ was «سلك حراري ١٠ملم» and the answer was «لم أعثر على �
   item. Before the fix the same question returned nothing.
 - Tests: `ai-search-terms.test.ts` (15). **2337 api-server tests** pass; tsc +
   repo-wide prettier clean.
+<<<<<<< HEAD
 
 ## Stop fixing one symptom at a time — three DEFECT FAMILIES, not three bugs
 
@@ -5293,3 +5294,5 @@ question named no source — **even when only one source could hold the data**.
   says plainly that no status named «مفتوح» exists, then asks which is meant. That
   is the CORRECT behaviour — the earlier «4,738» was the table total presented
   under the question's own word.
+=======
+>>>>>>> origin/main
