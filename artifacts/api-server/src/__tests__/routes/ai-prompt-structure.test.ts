@@ -88,3 +88,21 @@ describe("agent prompt structure (Manus/same.new style)", () => {
     expect(prompt).toContain("complete=true");
   });
 });
+describe("the failure-recovery sections", () => {
+  it("states that a tool error is not the end of the task", () => {
+    // Added on the operator's report that the agent «فاشل وبيخبط»: a failed
+    // tool call used to end the run. Manus' `<error_handling>` says otherwise.
+    expect(prompt).toContain("<error_handling>");
+    expect(prompt).toContain("</error_handling>");
+    expect(prompt).toContain("خطأ الأداة ليس نهاية المهمة");
+    expect(prompt).toContain("صنّف الخطأ");
+  });
+
+  it("requires a self-check before the final answer", () => {
+    // Devin's rule: verify the work before reporting completion.
+    expect(prompt).toContain("<verify_before_answer>");
+    expect(prompt).toContain("</verify_before_answer>");
+    expect(prompt).toContain("أجبت ما سُئل بالضبط");
+    expect(prompt).toContain("لا كتابة ولا إرسال");
+  });
+});

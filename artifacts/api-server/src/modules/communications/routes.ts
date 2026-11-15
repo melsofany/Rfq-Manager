@@ -74,6 +74,7 @@ import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
 import { handleAiAssistantMessage, type WaInboundMessage } from "../ai-assistant/handler";
+import { isAiAssistantPhone } from "../ai-assistant/config";
 import multer from "multer";
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -1775,6 +1776,11 @@ async function recordInboundOnce(
   senderName?: string | null,
 ): Promise<void> {
   if (!msg.id) return;
+  // A message to the ASSISTANT is private: `/whatsapp` is the shared supplier
+  // inbox, and the operator's own requests and reports must not appear in it.
+  // Checked before the insert (not after dispatch) because this runs before any
+  // handler is consulted.
+  if (await isAiAssistantPhone(phone)) return;
   try {
     const existing = await db
       .select({ id: whatsappChatsTable.id })

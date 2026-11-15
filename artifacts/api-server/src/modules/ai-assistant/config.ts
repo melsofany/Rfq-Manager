@@ -335,6 +335,50 @@ export interface AiAuthorizedUser {
  * Resolve an allowlisted AI user for an incoming phone, verifying the linked
  * employee is still active. Returns null when the number is not authorized.
  */
+/**
+ * True when this phone belongs to an allowlisted, ACTIVE assistant user.
+ *
+ * The webhook records every inbound message in `whatsapp_chats`, which the
+ * `/whatsapp` page renders as the shared supplier inbox — and it records BEFORE
+ * dispatching to a handler, so a message to the ASSISTANT was written there too.
+ * Measured live: four manager numbers (the operator's own) had their private
+ * requests, reports and refusals visible to every employee who opens that page.
+ * The assistant is not a supplier channel; its conversation is private.
+ *
+ * Cached briefly because this runs on the inbound path of EVERY message, and
+ * the allowlist changes on the order of days. A read failure answers `false`:
+ * an unrecognised sender is recorded as before, which is the safe direction —
+ * the alternative would silently drop a real supplier's message.
+ */
+const AI_PHONE_TTL_MS = 60_000;
+let aiPhoneCache: { at: number; phones: Set<string> } | null = null;
+
+export async function isAiAssistantPhone(phone: string): Promise<boolean> {
+  const target = canonicalPhone(phone);
+  if (!target) return false;
+  try {
+    const now = Date.now();
+    if (!aiPhoneCache || now - aiPhoneCache.at > AI_PHONE_TTL_MS) {
+      const rows = await db
+        .select({
+          phone: aiAssistantUsersTable.phone,
+          employeeId: aiAssistantUsersTable.employeeId,
+        })
+        .from(aiAssistantUsersTable)
+        .where(eq(aiAssistantUsersTable.isActive, true));
+      aiPhoneCache = { at: now, phones: new Set(rows.map((r) => canonicalPhone(r.phone))) };
+    }
+    return aiPhoneCache.phones.has(target);
+  } catch {
+    return false;
+  }
+}
+
+/** Test seam: the allowlist cache must not leak between cases. */
+export function resetAiPhoneCache(): void {
+  aiPhoneCache = null;
+}
+
 export async function findAuthorizedUser(phone: string): Promise<AiAuthorizedUser | null> {
   const target = canonicalPhone(phone);
   const rows = await db
