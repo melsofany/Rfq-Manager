@@ -5038,3 +5038,29 @@ if (isText && !isRepPayload) {
 inbound message saved"` والصف مُرآة (`synced=✅`) باسم المورد.
 
 **2,453 اختبار api-server يمر**؛ tsc + prettier نظيفان.
+
+## إزالة Chatwoot — درس «ملف باسم منتج قد يحمل منطق أعمال» (PR #492)
+
+حُذف Chatwoot CE نهائيًا (8,644 ملفًا) مع الحفاظ الكامل على وظائف واتساب. الدرس
+الأهم: **`modules/chatwoot/bridge.ts` لم يكن كله كود Console.**
+
+- **منطق بوت الموردين كان يسكن داخل الـbridge**: `supplierByPhone`،
+  `openPricingRequestsForSupplier`، `responsibleEmployeeFor`، `pickRequestFromText`.
+  حذف الـbridge مع الـConsole كان **سيأخذ البوت معه بصمت** — نفس صنف «قدرة تُحذف
+  فتُختفي وظيفة لا علاقة لها بالاسم».
+- **القاعدة**: قبل حذف وحدة سمّاها منتج خارجي، صنّف **كل دالة مُصدَّرة** بجدولها:
+  أي دالة تقرأ جداولنا (`suppliersTable`, `sentLogTable`, `rfqTable`) هي **منطق
+  أعمال** تُنتزع إلى وحدة محلية أولًا. ما يبقى هو ما يتحدث إلى الـAPI الخارجي فقط.
+  المُنتزَع هنا: `communications/supplier-requests.ts`.
+- **لا تحذف بيانات الإنتاج لإزالة ميزة.** `chatwoot_links` (418 صفًا) و
+  `whatsapp_chats.chatwoot_synced_at` (7,981 صفًا) باقيان بلا مساس؛ الـDDL أُزيل من
+  `init-db.ts` فقط. حذف البيانات قرار منفصل لا رجعة فيه.
+- **`downloadAndStoreMedia` على المسارين** (العام + البوت) — تخزين الوسائط في
+  `whatsapp_media` هو ما يجعل الشاشة تعرض المرفقات. تحويله إلى fire-and-forget
+  (`void`) كالمسار العام، لا حذفه.
+- **`/whatsapp`** يعرض الشاشة الأصلية المدمجة مرة أخرى (حُذف مسار `/whatsapp-legacy`).
+- **التحقق**: 2,303 اختبار api-server + 79 portal يمر؛ tsc + prettier + البناءان
+  نظيفة؛ CI (Type Check · Tests · Format Check · Build+E2E) أخضر.
+- **`mergeable_state: dirty` بعد squash-merge**: الفرع الذي أُنشئ من التزام
+  مُدمَج-squash يظهر متعارضًا رغم تطابق الشجرتين. **الدمج لا إعادة التأسيس**
+  (`git merge origin/main`) — إعادة التأسيس تُسقط التزامات لم تدخل main.
