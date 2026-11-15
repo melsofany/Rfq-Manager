@@ -41,7 +41,7 @@ const CORE_TOOLS = [
   "lookup_document", // one thing by its number — the most common single ask
   "describe_schema", // real table/column names — stops SQL guessing (any question may need SQL)
   "search_database", // generic record search
-  "count_database", // generic count
+  "count_database",
   "learn_organization", // record a document-number pattern / entity alias the operator taught
   "remember_fact", // long-term memory (cheap, no I/O)
   "recall_memory",

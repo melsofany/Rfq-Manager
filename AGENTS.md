@@ -5296,3 +5296,24 @@ question named no source — **even when only one source could hold the data**.
   under the question's own word.
 =======
 >>>>>>> origin/main
+
+### An "open requests" tool that returned the table total — caught by a live probe
+
+#497 added `isOpenRequest` (`customer-rfq/open-requests.ts`), the APPROVED rule the
+«الطلبات المفتوحة» tab uses. Openness is DERIVED from the milestones, not a
+`status` value — `customer_rfqs.status` only holds `draft`/`sent`.
+
+The first cut of a `count_open_requests` tool synthesised a `stage` from `status`
+and passed it to `isOpenRequest`. **A live probe returned `open: 4744, total:
+4744`** — the tool reproduced the exact defect it existed to remove (the table
+total wearing the word «مفتوح»), now with a function name that made it look
+authoritative. It was **deleted**, not patched: the real fix needs the per-request
+milestones (`buildRequestStatus`), which is a whole query graph, not a `status`
+projection.
+
+**Rule**: calling the approved rule is not enough — the tool must supply the
+INPUTS that rule expects. A synthesised input makes a correct function return a
+confident wrong answer, which is worse than no tool, because the answer now looks
+like it came from the system of record. **Probe a new tool against production
+before believing it**; the unit test would have passed (it only asserted
+`open <= total`).
