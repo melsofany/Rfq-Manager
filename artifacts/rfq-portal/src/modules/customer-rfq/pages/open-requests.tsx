@@ -33,6 +33,9 @@ type OpenRequestRow = {
   /** Live items with no customer PO yet — the part «نجح %» cannot see. */
   unorderedItems: number;
   remainingDays: number | null;
+  /** True when the close date has PASSED — no quote can be submitted any more. */
+  closePassed: boolean;
+  closePassedLabel: string | null;
   urgency: string;
   remainingLabel: string;
   requestStatus: {
@@ -59,10 +62,13 @@ type OpenRequestsResponse = {
   window: {
     days: number;
     includeUndated: boolean;
+    includeOverdue: boolean;
     from: string;
     to: string;
     today: string;
     olderNotShown: number;
+    /** Overdue requests left out because «إظهار المتأخرة» is off. */
+    hiddenOverdue: number;
   };
 };
 
@@ -82,6 +88,9 @@ export function OpenRequestsTab() {
   const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState<number>(30);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  // Off by default: a passed close date means no quote can be submitted, so
+  // those requests are history rather than outstanding work.
+  const [includeOverdue, setIncludeOverdue] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +98,7 @@ export function OpenRequestsTab() {
     try {
       const params = new URLSearchParams({ days: String(days) });
       if (onlyUnassigned) params.set("onlyUnassigned", "true");
+      if (includeOverdue) params.set("includeOverdue", "true");
       const res = await fetch(`/api/customer-rfq/open-requests?${params.toString()}`, {
         credentials: "include",
       });
@@ -102,7 +112,7 @@ export function OpenRequestsTab() {
     } finally {
       setLoading(false);
     }
-  }, [days, onlyUnassigned]);
+  }, [days, onlyUnassigned, includeOverdue]);
 
   useEffect(() => {
     void load();
@@ -171,6 +181,15 @@ export function OpenRequestsTab() {
         </Button>
         <Button
           size="sm"
+          variant={includeOverdue ? "default" : "outline"}
+          className="h-7 px-2.5 text-xs gap-1"
+          onClick={() => setIncludeOverdue((v) => !v)}
+          title="إظهار الطلبات التي انتهى موعد إغلاقها (لا يمكن تقديم عرض سعر بها)"
+        >
+          <AlertTriangle size={13} /> إظهار المنتهية
+        </Button>
+        <Button
+          size="sm"
           variant="ghost"
           className="h-7 px-2.5 text-xs gap-1"
           onClick={() => void load()}
@@ -186,6 +205,12 @@ export function OpenRequestsTab() {
       </div>
 
       {/* A bounded list must say so, or it reads as the whole set. */}
+      {!loading && !error && (data?.window.hiddenOverdue ?? 0) > 0 && (
+        <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-3 py-2 text-[12px] text-red-800 dark:text-red-300">
+          {data?.window.hiddenOverdue} طلب انتهى موعد إغلاقه وغير معروض (لا يمكن تقديم عرض سعر به) —
+          اضغط «إظهار المنتهية» لعرضه.
+        </div>
+      )}
       {!loading && !error && (data?.window.olderNotShown ?? 0) > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 px-3 py-2 text-[12px] text-amber-800 dark:text-amber-300">
           هناك {data?.window.olderNotShown} طلب يُغلق قبل بداية هذا النطاق وغير معروض هنا — وسّع
@@ -268,6 +293,14 @@ export function OpenRequestsTab() {
                           <CalendarClock size={12} />
                           {r.remainingLabel}
                         </span>
+                        {/* A passed close date is terminal for quoting — say it in
+                            words, because a negative countdown alone reads as
+                            «still workable, just late». */}
+                        {r.closePassed && (
+                          <div className="text-[10px] font-medium text-red-700 dark:text-red-400 mt-0.5">
+                            {r.closePassedLabel ?? "انتهى موعد الإغلاق"} — لا يمكن تقديم عرض
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 bg-muted rounded text-xs font-medium text-foreground">
