@@ -106,3 +106,21 @@ describe("the failure-recovery sections", () => {
     expect(prompt).toContain("لا كتابة ولا إرسال");
   });
 });
+
+describe("act-first and context-free messages", () => {
+  it("tells the agent to execute with the default source instead of asking", () => {
+    // The operator's own report: «اعمل تقرير PDF بأعلى 5 موردين» was answered
+    // with «البيانات دي هجيبها من فين؟». Asking instead of executing is the
+    // defect, so the default source and a stated assumption replace the question.
+    expect(prompt).toContain("<act_first>");
+    expect(prompt).toContain("نفّذ ولا تسأل");
+    expect(prompt).toContain("قاعدة البيانات الداخلية");
+  });
+
+  it("forbids answering a question nobody asked", () => {
+    // «؟؟» was answered with a paragraph about the company logo — a confident
+    // answer to a question that was never put.
+    expect(prompt).toContain("ممنوع الإجابة عن سؤال لم يُطرح");
+    expect(prompt).toContain("رسالة بلا سياق");
+  });
+});

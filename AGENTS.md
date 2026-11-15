@@ -5264,3 +5264,32 @@ prompt must state that a question the operator cannot answer (which source?) is
 answered by the DEFAULT source and a stated assumption, not by asking — and that
 a one-word message carries no context, so the agent must ask or say it does not
 understand rather than answer a question nobody asked.
+
+## The source question was forced on questions that had ONE source (PR — act-first)
+
+«اعمل تقرير PDF بأعلى 5 موردين» was answered with «البيانات دي هجيبها من فين؟»
+followed by three options. `source-choice.ts` asked whenever a census-shaped
+question named no source — **even when only one source could hold the data**.
+
+- **A supplier table does not exist in the mailbox or in WhatsApp.** Those hold
+  MESSAGES. So the question was not ambiguous and the ask was pure delay, plus a
+  wasted round of a 20-request/day/model budget. `DB_ONLY_RE` now suppresses the
+  question for master data (suppliers/customers/employees/representatives).
+- **The list must stay NARROW.** «أوامر الشراء» and «البنود» are deliberately NOT
+  in it: the same words describe the EDC orders in the mail, which is the
+  operator's most frequent request. A test caught this — widening the list broke
+  «اعمل حصر لكل أوامر الشراء», which genuinely IS ambiguous. A guard that
+  suppresses a needed question produces a confidently wrong answer, which is
+  worse than the delay it removes.
+- Verified live through the real agent: the supplier report now EXECUTES and
+  returns the real table (H-EMAS 27, هاي فولت 12, 7 stars 7, الشركة العالمية 7).
+- **`<act_first>` in the prompt** states the default source (internal database
+  unless mail is named), that a question is allowed only when it CHANGES the
+  answer, and that a context-free message («؟؟»، «جاهز») must be met with one
+  clarifying line — never an answer to a question nobody asked (the logo
+  incident). Prompt budget 9,500 → 9,600 for it.
+- **`count_database` now reports what it cannot filter.** Asked «كام طلب تسعير
+  مفتوح؟» the agent now reads the real statuses (`sent` 4,073 / `draft` 671) and
+  says plainly that no status named «مفتوح» exists, then asks which is meant. That
+  is the CORRECT behaviour — the earlier «4,738» was the table total presented
+  under the question's own word.
