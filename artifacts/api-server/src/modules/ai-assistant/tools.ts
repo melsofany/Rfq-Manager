@@ -50,7 +50,6 @@ import {
   scanEmails,
   readEmail,
   readEmailAttachment,
-  sendAssistantEmail,
   isEmailReadConfigured,
   isTextLikeMime,
   isPdfAttachment,
@@ -2438,39 +2437,6 @@ async function executeToolInner(
             note: "تم إرسال الملف للمستخدم على واتساب.",
           },
         };
-      }
-      case "send_email": {
-        if (!ctx.settings.allowEmail) return { ok: false, error: "إرسال البريد معطّل" };
-        // P7: sending is an irreversible external action, so it is gated behind an
-        // explicit confirmation. Without it the tool returns the draft for review
-        // and sends NOTHING — the model must show it to the operator and re-call
-        // with confirmed:true. This is enforced here, in code, rather than trusted
-        // to the prompt, because a prompt rule is not a permission boundary.
-        if (args.confirmed !== true) {
-          return {
-            ok: true,
-            data: {
-              sent: false,
-              needsConfirmation: true,
-              draft: {
-                to: String(args.to ?? ""),
-                cc: args.cc ? String(args.cc) : undefined,
-                subject: String(args.subject ?? ""),
-                body: String(args.body ?? ""),
-              },
-              instructions:
-                "لم يُرسل البريد. اعرض هذا الملخّص على المستخدم واطلب تأكيدًا صريحًا، " +
-                "ثم أعد الاستدعاء بنفس البيانات مع confirmed=true.",
-            },
-          };
-        }
-        await sendAssistantEmail({
-          to: String(args.to ?? ""),
-          subject: String(args.subject ?? ""),
-          body: String(args.body ?? ""),
-          cc: args.cc ? String(args.cc) : undefined,
-        });
-        return { ok: true, data: { sent: true, to: args.to } };
       }
       case "generate_pdf": {
         if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };

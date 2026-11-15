@@ -35,9 +35,14 @@ describe("system prompt budget", () => {
   });
 
   it("states the honest capability limits", () => {
+    // Sending was REMOVED from the assistant on the operator's instruction: it
+    // reads everything and writes/sends nothing. The prompt must say so. The
+    // `send_email` name is deliberately NOT asserted here — asserting it would
+    // re-introduce the capability this change removed.
     // The model has claimed it could send WhatsApp messages; it cannot.
     expect(prompt).toMatch(/لا.*إرسال/);
-    expect(prompt).toContain("send_email");
+    // And it must state the write prohibition outright.
+    expect(prompt).toMatch(/الكتابة على قاعدة البيانات: ممنوعة/);
   });
 
   it("does not repeat the no-fabrication mandate into contradictions", () => {

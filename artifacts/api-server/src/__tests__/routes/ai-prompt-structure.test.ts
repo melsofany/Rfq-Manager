@@ -59,7 +59,6 @@ describe("agent prompt structure (Manus/same.new style)", () => {
       "scan_emails",
       "scan_email_items",
       "search_sent_emails",
-      "send_email",
       "lookup_document",
       "supplier_overview",
       "get_email_attachment",

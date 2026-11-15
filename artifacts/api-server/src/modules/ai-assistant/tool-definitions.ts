@@ -657,30 +657,6 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
-        name: "send_email",
-        description:
-          "إرسال بريد إلكتروني من حساب الشركة. هذا فعل خارجي حساس: يجب أولًا الاستدعاء بدون " +
-          "confirmed (فيُعاد لك ملخّص المستلم والموضوع والنص للتأكيد)، ثم اعرضه على المستخدم " +
-          "واطلب موافقته الصريحة، وبعدها فقط أعد الاستدعاء بـ confirmed=true.",
-        parameters: {
-          type: "object",
-          properties: {
-            to: { type: "string" },
-            subject: { type: "string" },
-            body: { type: "string" },
-            cc: { type: "string" },
-            confirmed: {
-              type: "boolean",
-              description: "true فقط بعد موافقة المستخدم الصريحة على الملخّص المعروض.",
-            },
-          },
-          required: ["to", "subject", "body"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
         name: "generate_pdf",
         description:
           "إنشاء ملف PDF بالعربية وإرساله للمستخدم على واتساب. استخدمه عندما يطلب المستخدم تقريرًا " +
