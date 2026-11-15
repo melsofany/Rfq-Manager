@@ -107,3 +107,24 @@ describe("the prompt states the limits and cannot be displaced", () => {
     expect(offenders).toEqual([]);
   });
 });
+describe("the assistant's conversation stays out of the shared inbox", () => {
+  it("recordInboundOnce refuses to record an assistant phone", () => {
+    const src = readFileSync(join(process.cwd(), "src/modules/communications/routes.ts"), "utf8");
+    const start = src.indexOf("async function recordInboundOnce");
+    expect(start).toBeGreaterThan(0);
+    const body = src.slice(start, src.indexOf("\n}", start));
+    // The guard must be BEFORE the insert: the webhook records before
+    // dispatching to a handler, so a post-dispatch check would still leak.
+    const guard = body.indexOf("isAiAssistantPhone");
+    const insertAt = body.indexOf(".insert(whatsappChatsTable)");
+    expect(guard).toBeGreaterThan(-1);
+    expect(insertAt).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(insertAt);
+  });
+
+  it("the privacy guard is exported from the assistant config", () => {
+    const src = readFileSync(join(DIR, "config.ts"), "utf8");
+    expect(src).toMatch(/export async function isAiAssistantPhone/);
+    expect(src).toMatch(/export function resetAiPhoneCache/);
+  });
+});

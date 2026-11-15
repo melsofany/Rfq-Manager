@@ -5117,3 +5117,58 @@ them in the database is half the job: `CREATE TABLE IF NOT EXISTS` in
 `ALTER TABLE … ADD COLUMN` were removed with the code, then the rows were dropped
 live. Take a JSON snapshot of a table before dropping it — the data is not
 recoverable from a migration file.
+
+## The assistant's conversation is PRIVATE — the shared inbox is not (fix/ai-inbox-privacy)
+
+The operator: «أي رسائل بيتم إرسالها من مستخدم المساعد بتوصل في الشات والموظفين
+بتشوفها وده مينفعش». Confirmed live: four manager numbers (his own team) had their
+messages sitting in `whatsapp_chats`, which `/whatsapp` renders as the shared
+supplier inbox.
+
+- **Cause**: `recordInboundOnce` writes the DB row **before any handler is
+  consulted** — deliberately, so a new interceptor cannot be silently invisible
+  (the comment above it says so, and that reasoning is still right). But the
+  assistant is one of those handlers, so a message TO the assistant was recorded
+  as a supplier message. The assistant itself never writes that table (verified:
+  `grep whatsappChats artifacts/api-server/src/modules/ai-assistant/*.ts` returns
+  reads only), so the recorder was the whole leak.
+- **Fix**: `isAiAssistantPhone()` (config.ts) answers whether the sender is an
+  allowlisted active assistant user, and `recordInboundOnce` returns before the
+  insert when it is true. Cached 60s — it runs on the inbound path of EVERY
+  message and the allowlist changes on the order of days.
+- **The failure direction matters**: a read error answers `false`, i.e. the
+  message is recorded as before. The opposite default would silently DROP a real
+  supplier's message, which is worse than the leak it prevents.
+- **A guard that runs after dispatch is not a guard.** The check must be before
+  the insert; `ai-hard-limits.test.ts` asserts the order inside the function, not
+  merely its presence.
+- **Backfill**: two leaked rows existed (`201098888170`, body «؟؟») and were
+  deleted after a JSON snapshot. Check for other formats (`+20…`, `0…`) before
+  concluding a count — a phone-match query only finds the format you guessed.
+- Tests: `ai-inbox-privacy.test.ts` (5 — recognition, cross-format matching, the
+  safe failure direction, the cache) + 2 order guards in `ai-hard-limits.test.ts`.
+
+## Borrowed failure-recovery rules for the agent prompt (Manus + Devin)
+
+The operator's second report: the agent «فاشل وبيخلبط». Two rules were missing
+from the prompt, and both come from prompts that hold up under long tool runs
+(`dontriskit/awesome-ai-system-prompts`: Manus' `Modules.md`, Devin's `system.md`).
+
+- **`<error_handling>` (Manus)**: a tool error is NOT the end of the task.
+  Classify it before retrying — a bad argument is fixed by changing the argument,
+  empty data by widening the range or changing the source, a timeout by one
+  identical retry — and never hide a failure behind an answer that reads complete.
+  The recorded failure mode was a run that stopped at the first failed call.
+- **`<verify_before_answer>` (Devin)**: a four-point self-check before the reply
+  (asked exactly? all parts done? every figure from a tool result? limits
+  respected?). Devin's rule is "critically examine your work before reporting
+  completion"; this is its cheap, checkable form.
+- **Adding to a budgeted prompt means cutting elsewhere.** The body was at 8,913
+  of a 9,000 ceiling, so the new sections were paid for by merging duplicated
+  mandates (the "proof before denial" rule appeared twice; four `counting_rules`
+  lines restated `source_selection`). The ceiling moved 9,000 → 9,500 (5%) with
+  the reason recorded in the guard — the alternative, cutting the new rules to
+  fit, would have removed exactly what the operator asked for.
+- **A guard whose limit moves to fit the change guards nothing.** The +500 is
+  documented in `ai-prompt-budget.test.ts` and is explicitly a ceiling for
+  growth, not a target to fill.

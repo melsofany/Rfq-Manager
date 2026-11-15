@@ -19,9 +19,15 @@ describe("system prompt budget", () => {
   const prompt = systemPrompt(settings);
 
   it("stays under the size where the rules stop being followed", () => {
-    // 9k leaves room for growth while failing the 19.7k body that was live when
-    // the assistant started ignoring its own instructions.
-    expect(prompt.length).toBeLessThan(9_000);
+    // The body that was live when the assistant started ignoring its own
+    // instructions was 19.7k. The budget was 9k; it is 9.5k because two
+    // sections were ADDED on the operator's report that the agent "fails and
+    // gets confused" — `<error_handling>` (Manus' rule that a tool error is not
+    // the end of the task) and `<verify_before_answer>` (Devin's check before
+    // reporting completion). Both answer a recorded failure, so the ceiling
+    // moved by 5% rather than the new rules being cut to fit. Keep the margin:
+    // this is a ceiling for GROWTH, not a target to fill.
+    expect(prompt.length).toBeLessThan(9_500);
     expect(prompt.length).toBeGreaterThan(1_000);
   });
 
