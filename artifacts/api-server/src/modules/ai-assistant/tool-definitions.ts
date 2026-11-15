@@ -42,12 +42,21 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       type: "function",
       function: {
         name: "count_database",
-        description: "عدّ السجلات في جدول (اختياريًا خلال آخر عدد أيام).",
+        description:
+          "عدّ السجلات في جدول. استخدم status للعدّ المفلتر (مثل «طلب مفتوح» أو «مسودة»)، وdistinctStatus لمعرفة قيم الحالة الموجودة فعلًا. بدون status النتيجة هي إجمالي الجدول كله — فإذا كان السؤال عن حالة معيّنة فلا تُبلّغ الإجمالي مكانها.",
         parameters: {
           type: "object",
           properties: {
             table: { type: "string" },
             sinceDays: { type: "integer" },
+            status: {
+              type: "string",
+              description: "قيمة الحالة المطلوب عدّها، كما تظهر في distinctStatus.",
+            },
+            distinctStatus: {
+              type: "boolean",
+              description: "أعِد قيم الحالة الموجودة فعلًا مع عدد كل قيمة (لا تُخمّن القيم).",
+            },
           },
           required: ["table"],
         },

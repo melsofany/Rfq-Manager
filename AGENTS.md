@@ -5213,3 +5213,107 @@ was «سلك حراري ١٠ملم» and the answer was «لم أعثر على �
   item. Before the fix the same question returned nothing.
 - Tests: `ai-search-terms.test.ts` (15). **2337 api-server tests** pass; tsc +
   repo-wide prettier clean.
+<<<<<<< HEAD
+
+## Stop fixing one symptom at a time — three DEFECT FAMILIES, not three bugs
+
+The operator: «أنا مش عايز كل مهمة أوكلها يفشل وارجعلك تصلحه، كده مبقاش ذكي».
+He is right, and the reason is structural: each round fixed ONE SYMPTOM while the
+transcript shows **different families of defect**, so the next one always arrived.
+Read the real conversation (`ai_assistant_messages`) before assuming what "fails".
+
+| What he asked | What the agent did | Family |
+|---|---|---|
+| «اعمل تقرير PDF بأعلى 5 موردين» | «البيانات دي هجيبها من فين؟» | **asks instead of acting** |
+| «نبدأ مهمة جديدة» → «جاهز» ×2 | 3 replies asking for details, no work | **never starts** |
+| «؟؟» | answered about the **company logo** | **hallucinates with no context** |
+| «كام طلب تسعير مفتوح؟» | «**4,738** طلب مسجل» (the TOTAL) | **answers a filtered question unfiltered** |
+
+### The two that are code defects (fixed here)
+
+- **A filtered count was impossible to express.** `countRecords` accepted only
+  `table` + `sinceDays`, so the ONLY available answer was the table total — and
+  the model reported that total under the question's own word («مفتوح»). **A
+  filter that cannot be expressed is what makes the model invent one.** It now
+  takes `status` (filtered count) and `distinctStatus` (the values that EXIST —
+  `draft`/`sent`, so the word is mapped onto data instead of guessed). Verified
+  live: `draft: 671`, `sent: 4073`, total 4,744.
+- **85 rows held swapped day/month dates** (`2025-17-09` = 17 September; 54 in
+  `expiry_date`, 31 in `entry_date`), written before any validation existed.
+  **One such row makes EVERY `::date` query throw** — `date/time field value out
+  of range` — so a date report failed instead of returning a figure.
+  `shared/date-guard.ts` normalises at write time (`normalizeIsoDate`) AND
+  `init-db.ts` repairs the existing rows. **Both halves are needed**: the guard
+  alone leaves the 85 throwing, the repair alone lets new ones in.
+- **The swap is a repair, not a guess**: no year has a 17th month and the day is
+  a valid month, so the reading is unambiguous. A row with NO valid reading is
+  left alone — a wrong date silently mis-sorts every report, which is worse than
+  a visible outlier.
+- **`isCastableDate` and `normalizeIsoDate` answer different questions** and must
+  not be conflated: the first is about a STORED value (a repairable input is not
+  yet castable), the second about an INPUT. A migration must test the stored form
+  or it skips the very rows that need repair. A test caught this.
+- Verified the repair inside a transaction on production then `ROLLBACK`:
+  `54+31 → 0+0` and `expiry_date::date` went from throwing to returning 4,701.
+- Tests: `date-guard.test.ts` (9) + `ai-count-filter.test.ts` (3). **2349
+  api-server tests** pass; tsc + repo-wide prettier clean.
+
+### The two that are prompt defects (still open)
+
+«يسأل بدل أن ينفّذ» and «يهلوس عند غياب السياق» are NOT fixed by the above. The
+prompt must state that a question the operator cannot answer (which source?) is
+answered by the DEFAULT source and a stated assumption, not by asking — and that
+a one-word message carries no context, so the agent must ask or say it does not
+understand rather than answer a question nobody asked.
+
+## The source question was forced on questions that had ONE source (PR — act-first)
+
+«اعمل تقرير PDF بأعلى 5 موردين» was answered with «البيانات دي هجيبها من فين؟»
+followed by three options. `source-choice.ts` asked whenever a census-shaped
+question named no source — **even when only one source could hold the data**.
+
+- **A supplier table does not exist in the mailbox or in WhatsApp.** Those hold
+  MESSAGES. So the question was not ambiguous and the ask was pure delay, plus a
+  wasted round of a 20-request/day/model budget. `DB_ONLY_RE` now suppresses the
+  question for master data (suppliers/customers/employees/representatives).
+- **The list must stay NARROW.** «أوامر الشراء» and «البنود» are deliberately NOT
+  in it: the same words describe the EDC orders in the mail, which is the
+  operator's most frequent request. A test caught this — widening the list broke
+  «اعمل حصر لكل أوامر الشراء», which genuinely IS ambiguous. A guard that
+  suppresses a needed question produces a confidently wrong answer, which is
+  worse than the delay it removes.
+- Verified live through the real agent: the supplier report now EXECUTES and
+  returns the real table (H-EMAS 27, هاي فولت 12, 7 stars 7, الشركة العالمية 7).
+- **`<act_first>` in the prompt** states the default source (internal database
+  unless mail is named), that a question is allowed only when it CHANGES the
+  answer, and that a context-free message («؟؟»، «جاهز») must be met with one
+  clarifying line — never an answer to a question nobody asked (the logo
+  incident). Prompt budget 9,500 → 9,600 for it.
+- **`count_database` now reports what it cannot filter.** Asked «كام طلب تسعير
+  مفتوح؟» the agent now reads the real statuses (`sent` 4,073 / `draft` 671) and
+  says plainly that no status named «مفتوح» exists, then asks which is meant. That
+  is the CORRECT behaviour — the earlier «4,738» was the table total presented
+  under the question's own word.
+=======
+>>>>>>> origin/main
+
+### An "open requests" tool that returned the table total — caught by a live probe
+
+#497 added `isOpenRequest` (`customer-rfq/open-requests.ts`), the APPROVED rule the
+«الطلبات المفتوحة» tab uses. Openness is DERIVED from the milestones, not a
+`status` value — `customer_rfqs.status` only holds `draft`/`sent`.
+
+The first cut of a `count_open_requests` tool synthesised a `stage` from `status`
+and passed it to `isOpenRequest`. **A live probe returned `open: 4744, total:
+4744`** — the tool reproduced the exact defect it existed to remove (the table
+total wearing the word «مفتوح»), now with a function name that made it look
+authoritative. It was **deleted**, not patched: the real fix needs the per-request
+milestones (`buildRequestStatus`), which is a whole query graph, not a `status`
+projection.
+
+**Rule**: calling the approved rule is not enough — the tool must supply the
+INPUTS that rule expects. A synthesised input makes a correct function return a
+confident wrong answer, which is worse than no tool, because the answer now looks
+like it came from the system of record. **Probe a new tool against production
+before believing it**; the unit test would have passed (it only asserted
+`open <= total`).

@@ -48,8 +48,31 @@ export const SOURCE_QUESTION =
   "3) واتساب\n" +
   "ابعت الرقم أو اسم المصدر، وأبدأ على طول.";
 
-/** A census question that names no source. */
+/**
+ * Entities that exist ONLY in the internal database, so a census question about
+ * them is NOT ambiguous: «أعلى 5 موردين» cannot be answered from the mailbox or
+ * from WhatsApp — those hold no supplier table. Asking «البيانات دي هجيبها من
+ * فين؟» for such a question is what made the operator say the agent «يسأل بدل ما
+ * ينفّذ», and the question then wastes a round and a slice of the daily quota.
+ *
+ * The list is deliberately NARROW — master data only (suppliers, customers,
+ * employees, representatives). Those are tables with no mail counterpart.
+ *
+ * «أوامر الشراء» and «البنود» are NOT here even though they live in the internal
+ * database, because the SAME words describe the EDC orders in the mailbox — the
+ * operator's most frequent request. Asking there is correct, and a test caught
+ * this: widening the list to purchase orders broke «اعمل حصر لكل أوامر الشراء»
+ * which genuinely is ambiguous.
+ */
+const DB_ONLY_RE =
+  /مورد(?:ين|ون)?|موردي|عميل|عملاء|موظف|موظفين|مندوب|مندوبين|supplier|vendor|customer|employee/i;
+
+/** A census question that names no source AND could come from either place. */
 export function needsSourceChoice(text: string): boolean {
+  // The question is only genuinely ambiguous when the data it asks about could
+  // live in more than one source. A supplier count cannot, so it runs straight
+  // away with the default source instead of asking.
+  if (DB_ONLY_RE.test(text)) return false;
   return CENSUS_RE.test(text) && !SOURCE_NAMED_RE.test(text);
 }
 

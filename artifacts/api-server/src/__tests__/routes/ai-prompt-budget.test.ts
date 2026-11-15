@@ -26,8 +26,11 @@ describe("system prompt budget", () => {
     // the end of the task) and `<verify_before_answer>` (Devin's check before
     // reporting completion). Both answer a recorded failure, so the ceiling
     // moved by 5% rather than the new rules being cut to fit. Keep the margin:
-    // this is a ceiling for GROWTH, not a target to fill.
-    expect(prompt.length).toBeLessThan(9_500);
+    // this is a ceiling for GROWTH, not a target to fill. Raised again to 9.6k
+    // for `<act_first>`, which answers the operator's central complaint that the
+    // agent asks instead of executing — the most valuable 300 characters in the
+    // prompt, so they are not cut to fit a round number.
+    expect(prompt.length).toBeLessThan(9_600);
     expect(prompt.length).toBeGreaterThan(1_000);
   });
 

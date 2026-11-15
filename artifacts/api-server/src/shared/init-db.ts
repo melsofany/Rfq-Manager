@@ -3372,4 +3372,46 @@ export async function initDb(): Promise<void> {
   } finally {
     client.release();
   }
+
+  // ── Repair swapped day/month dates in customer_rfqs ─────────────────────
+  // Measured live: 54 rows in `expiry_date` and 31 in `entry_date` hold
+  // `2025-17-09` (month 17). A single such row makes EVERY `::date` query throw
+  // — `date/time field value out of range` — so a report that touches these
+  // columns fails instead of returning a figure. The write guard
+  // (`normalizeIsoDate`) stops new ones; this repairs the existing rows,
+  // because the guard alone leaves the 85 throwing.
+  //
+  // The swap is a REPAIR, not a guess: no year has a 17th month, and the
+  // original day is a valid month, so the reading is unambiguous. Rows with no
+  // valid reading are left alone rather than invented — a wrong date silently
+  // mis-sorts every report, which is worse than a visible outlier.
+  //
+  // Its OWN statement: `client.query` statements share an implicit transaction,
+  // so a failure in a sibling would roll this back silently.
+  try {
+    await client.query(`
+      UPDATE customer_rfqs SET expiry_date =
+        split_part(expiry_date,'-',1) || '-' ||
+        lpad(split_part(expiry_date,'-',3), 2, '0') || '-' ||
+        lpad(split_part(expiry_date,'-',2), 2, '0')
+      WHERE expiry_date ~ '^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$'
+        AND split_part(expiry_date,'-',2)::int > 12
+        AND split_part(expiry_date,'-',2)::int <= 31
+        AND split_part(expiry_date,'-',3)::int BETWEEN 1 AND 12
+    `);
+    await client.query(`
+      UPDATE customer_rfqs SET entry_date =
+        split_part(entry_date,'-',1) || '-' ||
+        lpad(split_part(entry_date,'-',3), 2, '0') || '-' ||
+        lpad(split_part(entry_date,'-',2), 2, '0')
+      WHERE entry_date ~ '^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$'
+        AND split_part(entry_date,'-',2)::int > 12
+        AND split_part(entry_date,'-',2)::int <= 31
+        AND split_part(entry_date,'-',3)::int BETWEEN 1 AND 12
+    `);
+  } catch (err) {
+    // Log loudly: this repair is why a date report works at all, so a failure
+    // must not look like "tables already exist".
+    logger.error({ err }, "init-db: date repair FAILED — date queries will keep throwing");
+  }
 }

@@ -613,18 +613,59 @@ async function applyRefs(spec: TableSpec, row: Record<string, unknown>): Promise
 }
 
 /** Row count, optionally for recent rows only. */
-export async function countRecords(opts: { table: string; sinceDays?: number }): Promise<number> {
+export async function countRecords(opts: {
+  table: string;
+  sinceDays?: number;
+  /**
+   * A `status` value to count, e.g. `draft` / `sent`. The operator asks «كام طلب
+   * تسعير مفتوح؟» — a FILTERED count. Without this argument the only thing the
+   * tool could answer was the table TOTAL, and the model reported that total
+   * under the question's own word («مفتوح»), which reads as a confident answer
+   * and is wrong. A filter that cannot be expressed is what makes the model
+   * invent one.
+   */
+  status?: string;
+  /** Values of `status` actually present, so the caller sees the real options. */
+  distinctStatus?: boolean;
+}): Promise<{ count: number; status?: string; statuses?: { value: string; count: number }[] }> {
   const spec = TABLES[opts.table];
   if (!spec) throw new Error(`Unknown table "${opts.table}"`);
   const columns = cols(spec.table);
+
+  if (opts.distinctStatus) {
+    // The vocabulary of statuses is DATA, not something the model should guess:
+    // it asked for «مفتوح» while the column holds `draft`/`sent`. Returning the
+    // real values lets it map the word instead of inventing a value that
+    // matches nothing (or worse, everything).
+    if (!columns["status"]) throw new Error(`Table "${opts.table}" has no status column`);
+    // `groupBy` is reached through `any`: the column type is dynamic (it comes
+    // from the registry), and drizzle's generic cannot be satisfied for a
+    // runtime-chosen column. The result is cast back immediately below.
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const statusCol = columns["status"] as any;
+    const grouped = db.select({ value: statusCol, cnt: count() }).from(spec.table as any) as any;
+    const rows = (await grouped.groupBy(statusCol)) as Array<{ value: unknown; cnt: number }>;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    return {
+      count: rows.reduce((n, r) => n + Number(r.cnt), 0),
+      statuses: rows.map((r) => ({ value: String(r.value ?? ""), count: Number(r.cnt) })),
+    };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q: any = db.select({ cnt: count() }).from(spec.table as any);
+  const filters: SQL[] = [];
   if (opts.sinceDays && columns["createdAt"]) {
     const since = new Date(Date.now() - opts.sinceDays * 24 * 60 * 60 * 1000);
-    q = q.where(gte(columns["createdAt"], since));
+    filters.push(gte(columns["createdAt"], since) as SQL);
   }
+  if (opts.status !== undefined && opts.status !== "") {
+    if (!columns["status"]) throw new Error(`Table "${opts.table}" has no status column`);
+    filters.push(eq(columns["status"], opts.status) as SQL);
+  }
+  if (filters.length) q = q.where(and(...filters));
   const [row] = (await q) as Array<{ cnt: number }>;
-  return Number(row?.cnt ?? 0);
+  return { count: Number(row?.cnt ?? 0), status: opts.status };
 }
 
 /** A broad one-shot snapshot: row counts across every module. */
