@@ -1,7 +1,0 @@
-<% content_for(:title) { t("administrate.actions.new_resource", name: page.resource_name.titleize.downcase) } %>
-
-<%= render "page_header",
-           title: content_for(:title),
-           back: (display_resource_name(page.resource_name) if existing_action?(page.resource_name, :index)) %>
-
-<%= render "form", page: page %>

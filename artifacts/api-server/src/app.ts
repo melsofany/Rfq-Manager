@@ -9,14 +9,6 @@ import { existsSync } from "fs";
 import { getPool } from "@workspace/db";
 import router from "./routes";
 import admsRouter from "./modules/hr/adms";
-import {
-  proxyChatwootRequest,
-  chatwootProxyTarget,
-  chatwootProxyMount,
-  chatwootConsoleGuard,
-  chatwootOwnsPath,
-  chatwootRequiresAuth,
-} from "./modules/chatwoot/proxy";
 import { logger } from "./shared/logger";
 
 const app: Express = express();
@@ -108,48 +100,6 @@ app.use(
     },
   }),
 );
-
-// ─── Chatwoot console, served on OUR origin under a path prefix ──────────────
-//
-// Mounted HERE — before the body parsers — because the console uploads files
-// and posts forms: `express.json()` would consume the stream and the proxy
-// would forward an empty body. It is also the reason the mount sits outside
-// `/api`: the console's own `/api/v1` must never collide with Cortoba's router.
-//
-// Serving the console from our own origin is not a preference. `onrender.com`
-// is on the Public Suffix List, so the gateway and the Chatwoot service are
-// DIFFERENT SITES; a console framed from the second into the first is a
-// third-party frame and its session cookie is refused. First-party hosting is
-// what makes the embedded login work, and it lets the Chatwoot service itself
-// stay PRIVATE with no public entry point.
-const chatwootConsoleBase = chatwootProxyMount();
-const chatwootTarget = chatwootProxyTarget();
-if (chatwootTarget && chatwootConsoleBase) {
-  // At the root, `app.use("/")` would match EVERY request, so the console is
-  // filtered to its own path space and everything else falls through to the API
-  // and the SPA. `chatwootOwnsPath` is the single description of that space.
-  const handler = (req: Request, res: Response, next: NextFunction): void => {
-    proxyChatwootRequest(req, res, {
-      target: chatwootTarget,
-      prefix: chatwootConsoleBase,
-    }).catch(next);
-  };
-  const guard = chatwootConsoleGuard();
-  const gate = (req: Request, res: Response, next: NextFunction): void => {
-    if (!chatwootOwnsPath(req.path)) return next();
-    // Static assets carry no business data and are requested dozens of times per
-    // page. Charging the guard — a database lookup — to each one returned 401
-    // for the console's own JS and made every screen slow. Supplier data still
-    // goes through the guard.
-    if (!chatwootRequiresAuth(req.path)) return handler(req, res, next);
-    guard(req, res, () => handler(req, res, next));
-  };
-  app.use(chatwootConsoleBase, gate);
-  logger.info(
-    { target: chatwootTarget, at: chatwootConsoleBase },
-    "Chatwoot console proxy mounted",
-  );
-}
 
 // Capture the raw request body for routes that need to verify Meta's
 // X-Hub-Signature-256 webhook signature (see modules/communications/routes.ts).

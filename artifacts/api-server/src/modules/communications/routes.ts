@@ -80,15 +80,11 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50
 import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
 import {
-  mirrorInboundMessage,
-  markInboundHandled,
-  mirrorOutboundMessage,
-  mirrorSystemNote,
   openPricingRequestsForSupplier,
   responsibleEmployeeFor,
   pickRequestFromText,
   supplierByPhone,
-} from "../chatwoot/bridge";
+} from "./supplier-requests";
 
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
@@ -207,7 +203,6 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     } else if (await handleRepMessage(from, msg)) {
       // Internal chat: recorded but not mirrored — mark it handled, or the
       // backfill replays it into the console as a phantom staff thread.
-      await markInboundHandled(msg.id);
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
     } else if (await handleSupplierBotMessage(from, msg)) {
@@ -354,7 +349,6 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
         // Allowlisted admin/manager AI assistant owns this message.
         logger.info({ from }, "AI assistant message handled");
       } else if (await handleRepMessage(from, message)) {
-        await markInboundHandled(message.id);
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
       } else if (await handleSupplierBotMessage(from, message)) {
@@ -1082,15 +1076,6 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
 
   // Point the conversation at the chosen request so the reply that follows is
   // filed there, and tell the supplier who is handling it.
-  await mirrorSystemNote({
-    phone,
-    body: `[اختيار الطلب ${chosen.internalRfqNo}]`,
-    rfqId: chosen.rfqId,
-    supplierId: supplier.id,
-    employeeId: chosen.employeeId,
-    employeeName: chosen.employeeName,
-    waMessageId: msg.id,
-  });
   // The pick CONFIRMS THE HAND-OFF, not a data-entry session: the bot's job is
   // to route the supplier to the employee who owns the request. Recording it is
   // what makes the hand-off real — the invitation below («أرسل عرضك هنا
@@ -1140,17 +1125,13 @@ function supplierBotEnabled(): boolean {
 }
 
 /**
- * Record an inbound supplier message and mirror it into the console.
+ * Record an inbound supplier message the bot consumed.
  *
- * The bot consumes a supplier's message BEFORE the generic handler runs, so
- * without this the employee opens the conversation in Chatwoot and sees an empty
- * thread while the supplier is actively quoting — the prices, availability and
- * notes exist only inside the bot session. The console is where the employee is
- * supposed to work, so the bot has to leave the same trail the generic handler
- * does.
+ * The bot answers a supplier BEFORE the generic handler runs, so without this
+ * the message would never reach the chat log the employee reads — the prices,
+ * availability and notes would exist only inside the bot session.
  *
- * Best-effort by design: a console or DB hiccup must never cost the supplier
- * their answer.
+ * Best-effort by design: a DB hiccup must never cost the supplier their answer.
  */
 async function recordSupplierBotInbound(opts: {
   phone: string;
@@ -1187,81 +1168,11 @@ async function recordSupplierBotInbound(opts: {
           );
       }
     }
-    // The bot path must carry the FILE too, for the same reason the generic
-    // inbound path does: a supplier who sends their quote as a PDF while the
-    // bot is open would otherwise reach the console as a text stub. One
-    // mirror, two entry points — the attachment travels on both.
-    const mediaBytes = mediaId
-      ? await downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream")
-      : null;
-    await mirrorInboundMessage({
-      phone: opts.phone,
-      body,
-      rfqId: opts.rfqId ?? null,
-      contactName: opts.supplierName ?? null,
-      supplierId: opts.supplierId,
-      employeeId: opts.employeeId ?? null,
-      employeeName: opts.employeeName ?? null,
-      waMessageId: opts.waMessageId ?? null,
-      media: mediaBytes
-        ? {
-            data: mediaBytes,
-            mimeType: mimeType ?? "application/octet-stream",
-            filename: filename ?? `whatsapp-${mediaType ?? "file"}`,
-            kind: mediaType ?? null,
-          }
-        : null,
-    });
+    // Store the FILE, as the generic inbound path does: a supplier who sends
+    // their quote as a PDF while the bot is open must not lose it.
+    if (mediaId) void downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream");
   } catch (err) {
-    logger.warn(
-      { err, phone: opts.phone },
-      "Supplier bot: inbound record/mirror failed — non-fatal",
-    );
-  }
-}
-
-/**
- * Mirror a submitted quote into the supplier's console conversation.
- *
- * The employee reviews offers in Chatwoot, so the prices have to be IN the
- * thread. Mirrored as an internal-style summary rather than as a WhatsApp
- * message: this is a record for the team, not something the supplier receives
- * (they already got their own confirmation).
- *
- * Best-effort — the offer is already saved by the time this runs.
- */
-export async function mirrorSupplierQuoteToConsole(
-  supplier: { id: number; name: string },
-  phone: string,
-  rfqId: number,
-  rfqNo: string,
-): Promise<void> {
-  try {
-    const { items, drafts } = await loadSupplierRequestItemsWithDrafts(supplier.id, rfqId);
-    const priced = items
-      .map((it) => ({ it, d: drafts.get(it.id) }))
-      .filter(({ d }) => d?.unitPrice != null && String(d.unitPrice).trim() !== "");
-    if (priced.length === 0) return;
-
-    const lines = priced.map(({ it, d }) => {
-      const label = it.partNo || it.lineItem || it.description || `بند ${it.id}`;
-      const price = `${d!.unitPrice}${d!.currency ? " " + d!.currency : ""}`;
-      const extra = d!.deliveryDays != null ? ` — توريد ${d!.deliveryDays} يوم` : "";
-      return `• ${label}: ${price}${extra}`;
-    });
-    const unpriced = items.length - priced.length;
-
-    await mirrorOutboundMessage({
-      phone,
-      rfqId,
-      supplierId: supplier.id,
-      body:
-        `📩 رد سعري من ${supplier.name} على الطلب ${rfqNo} — ${priced.length} بند مسعّر` +
-        (unpriced > 0 ? ` (${unpriced} بند بدون سعر)` : "") +
-        `\n${lines.join("\n")}`,
-    });
-  } catch (err) {
-    logger.warn({ err, rfqId }, "Supplier quote mirror to console failed — non-fatal");
+    logger.warn({ err, phone: opts.phone }, "Supplier bot: inbound record failed — non-fatal");
   }
 }
 
@@ -1449,15 +1360,6 @@ export async function handleSupplierBotMessage(
         const note = b === "0" ? "غير متاح" : "متاح";
         // The tap itself is part of the conversation, so it is mirrored — the
         // employee sees the supplier answered, not just that a menu was opened.
-        await mirrorSystemNote({
-          phone,
-          body: `[رد المورد على البند: ${note}]`,
-          rfqId: session.rfqId,
-          supplierId: supplier.id,
-          employeeId: owner?.employeeId ?? null,
-          employeeName: owner?.employeeName ?? null,
-          waMessageId: msg.id,
-        });
         await sendSupplierRequestHandedOff(phone, rfqNo, owner?.employeeName ?? null, items.length);
         broadcastWaEvent({ type: "new_message", phone });
         await clearSession(phone);
@@ -1490,10 +1392,6 @@ export async function handleSupplierBotMessage(
           `✅ تم إرسال ردكم على الطلب ${rfqNo} (${result.savedItems} بند).\n` +
             "سيتم مراجعته من قبل الموظف المسؤول وسنوافيكم بالنتيجة.",
         );
-        // Put the submitted prices in the console thread. The employee reviews
-        // the offer THERE; without this the thread shows a bare acknowledgement
-        // and the employee has to open the RFQ screen to learn what was quoted.
-        await mirrorSupplierQuoteToConsole(supplier, phone, session.rfqId, rfqNo);
         // Tell the responsible employee. Best-effort: the offer is already
         // saved, and a notification failure must not look like a failed reply.
         void notifyResponsibleEmployee(
@@ -2585,8 +2483,6 @@ async function handleInboundMessage(
   );
   broadcastWaEvent({ type: "new_message", phone, senderName });
 
-  // Mirror into the Chatwoot console so agents can read and reply. Best-effort:
-  // a Chatwoot outage must never affect the inbound pipeline.
   //
   // The reply is filed under the REQUEST it answers, not just the phone: an
   // explicit request number in the text wins, then a supplier with a single open
@@ -2619,30 +2515,7 @@ async function handleInboundMessage(
     // stub for every attachment, which is the recorded reason the previous
     // WhatsApp screen was abandoned: the agent could read "the supplier sent a
     // file" but never open it.
-    const mediaBytes = mediaId
-      ? await downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream")
-      : null;
-    await mirrorInboundMessage({
-      phone,
-      body,
-      rfqId,
-      contactName: senderName ?? null,
-      supplierId,
-      waMessageId: waMessageId ?? null,
-      // Quote the message the supplier replied to, exactly as the Cortoba chat
-      // does. Without it a reply reads in the console as an unrelated message.
-      replyToWaMessageId: msg.context?.id ?? null,
-      employeeId: owner.employeeId,
-      employeeName: owner.employeeName,
-      media: mediaBytes
-        ? {
-            data: mediaBytes,
-            mimeType: mimeType ?? "application/octet-stream",
-            filename: filename ?? `whatsapp-${mediaType ?? "file"}`,
-            kind: mediaType ?? null,
-          }
-        : null,
-    });
+    if (mediaId) void downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream");
     // Several open requests and no number given: ask which one instead of
     // guessing. The reply lands in an unlabelled thread until they pick.
     if (needsPick && supplierId) {
@@ -2964,7 +2837,6 @@ router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
     replyToMessageId: replyToWaMessageId ?? null,
     isRead: true,
   });
-  void mirrorOutboundMessage({ phone: normalized, body: message, supplierId: supplierId ?? null });
   res.json({ ok: true });
 });
 

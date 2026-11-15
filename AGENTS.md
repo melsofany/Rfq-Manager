@@ -695,7 +695,6 @@ git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
 
 ## WhatsApp contact identity вЂ” the profile NAME is the only thing Meta gives you
 
-- **Product decision to remember**: the Cloud API **cannot** return a contact's profile picture. There is no endpoint; respond.io and Chatwoot both document this as a Meta platform limitation (Chatwoot closed the request _not planned_). Only the regular WhatsApp protocol exposes avatars вЂ” business/Cloud API integrations never see them. Do not re-add a profile-picture lookup: the old `GET /whatsapp/profile-picture/:phone` called `/contacts?fields=profile_picture_url`, always failed `#100 / code 2500`, and 404'd once per avatar per render, flooding the console + Render logs (removed in PR #131; the `Avatar` component renders deterministic initials).
 - **What IS available**: the webhook sends `contacts[0].profile.name`. Both webhook paths (`Whatsapp.on.message` and `dispatchWebhookPayload`) already parsed it into `senderName`, but it was **never persisted** вЂ” so every conversation rendered as a bare phone number. PR #132 fixed that.
 - **DB**: `whatsapp_chats.contact_name` (schema `whatsapp_chats.ts` + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in `init-db.ts`). Set on inbound in `handleInboundMessage` (`senderName?.trim() || null`). Outbound rows carry no name.
 - **API**: `GET /whatsapp/chats` returns `contactName` = latest **non-null** name for the phone. Use `(array_agg(contact_name ORDER BY created_at DESC) FILTER (WHERE contact_name IS NOT NULL))[1]` вЂ” the `FILTER` matters, otherwise the newest outbound row's NULL wins and the name never shows. Same `array_agg(...)[1]` idiom as the existing `lastMessage`.
@@ -4692,245 +4691,6 @@ Postgres حقيقي.
   «هل كلتاهما تجمّعان بنفس الطريقة؟» — هنا كانت القائمة تجمع والتفاصيل لا تجمع،
   فبدت القائمة سليمة والتفاصيل مكسورة.
 
-## Chatwoot live verification — the replay's five real defects (this session)
-
-Verified **from scratch** against production, not from prior reports. The
-console, the agent UI and the supplier bot are live; the defects below were all
-found by replaying real data, and each guard is proven to fail against its
-pre-fix code.
-
-- **A conversation the console no longer has must be recreated, not retried.**
-  A stored `chatwoot_links` row pointed at conversation 3, which the console did
-  not have (`404 Resource could not be found`). Every message answered 404, so
-  no row was ever marked replayed, so the same window was re-read forever — it
-  could not progress by retrying, which is why it looked like a hang. The
-  conversation is now verified before use and recreated when gone.
-  **A mock that accepts every send guards nothing** — the backfill mock had to
-  return `undefined` for a message into a dead conversation before the guard
-  could fail at all.
-- **The replay window must ask for the UNREPLAYED rows.** It was the oldest
-  `limit` rows of the number, replayed or not. Number one holds 125 messages,
-  100 already done, so every batch returned those 100, spent its whole budget
-  skipping them, and the 394 numbers behind it were never reached
-  (`phonesConsidered: 20` forever, 4,226 rows waiting). The query now filters
-  `chatwoot_synced_at IS NULL`.
-  **Assert the QUERY, not only the outcome**: a mock that filters by itself
-  hides exactly this defect (the run looked healthy while the SQL read the whole
-  history). `builder()` captures the caller's WHERE and the guard inspects it.
-- **A conversation is filed under the supplier's `sent_log`, not only our link
-  table.** The link table is empty on a fresh console, so 413 of 414
-  conversations carried `rfqId: 0` and the console could not answer «which
-  request is this?». `sent_log` is the authority for which requests we actually
-  sent them.
-- **Phone normalisation is the whole contact path.** Three separate defects
-  (`createContact(name, phone)` argument swap; a local `010…` number where
-  E.164 was required; Cairo landlines `02…` unhandled) each broke contact
-  creation or matching. `canonicalPhone` is the ONE rule — never re-derive it.
-- **Result, verified live**: 7,950/7,950 messages replayed (0 pending), **414
-  conversations**, 0 errors, and the console loads inside Cortoba with the SSO
-  cookie planted (`_chatwoot_session`, no second login). The SSO URL must be
-  re-pointed at OUR origin (`sameOriginConsolePath`) — `onrender.com` is a
-  public suffix, so the console's own host is a DIFFERENT site and its cookie is
-  rejected.
-- **Supplier bot isolation verified live**: `supplierMayAnswer` reads `sent_log`
-  on `(supplierId, rfqId)`, so a request sent to another supplier answers
-  `{ok:false, reason:"not_sent_to_supplier"}` and its items read as `[]`. An RFQ
-  goes to SEVERAL suppliers, so another supplier's open request is NOT
-  automatically foreign — a test built on that premise proves nothing.
-- Run the suite with `env -i PATH="$PATH" HOME="$HOME"`: exported
-  `SMTP_*`/`AI_*`/`GOOGLE_*`/`CHATWOOT_*` fail unrelated tests.
-
-## Chatwoot is an agent console on an API channel — never a WhatsApp channel
-
-Replacing the hand-built `/whatsapp` page (2453 lines) with Chatwoot failed once
-before (PR #5 added it, PR #6 reverted) because Chatwoot's **WhatsApp channel**
-would take over the Meta webhook. That webhook (`/api/webhook/whatsapp`) is what
-drives RFQ sending, PO dispatch, the representative bot and the AI assistant —
-pointing Meta at Chatwoot silently breaks all of them.
-
-- **The webhook is the gateway; Chatwoot is a view.** Wire Chatwoot on an **API
-  inbox** and mirror in both directions: inbound (our webhook → Chatwoot),
-  outbound (our sends → Chatwoot), and agent replies (Chatwoot webhook → our
-  `sendWhatsAppText` → also recorded in `whatsapp_chats`). One conversation, one
-  source of truth.
-- **Never point Meta at Chatwoot.** `docs/CHATWOOT_INTEGRATION.md` previously
-  instructed exactly that ("stop the old webhook") — a doc that breaks sending.
-- **Mirroring must be best-effort.** Every Chatwoot call is wrapped; a Chatwoot
-  outage must never fail an inbound message or an RFQ/PO send.
-- **`private` notes are internal.** The agent-reply webhook must reject
-  `private: true` or the team's internal discussion is sent to the supplier. A
-  test caught this, not review — keep the guard and its test.
-- **Own-message dedup.** Chatwoot echoes every message we mirror back on its
-  webhook; `ownMessageIds` (bounded) stops us forwarding our own sends to
-  WhatsApp a second time.
-- **Unconfigured = today's behaviour exactly.** With no `CHATWOOT_*` vars
-  `/whatsapp` renders the built-in chat, and a Chatwoot outage shows a button
-  back to it. `/whatsapp-legacy` keeps the built-in page reachable.
-- **Hosting is a separate Rails stack** (web + Sidekiq + Postgres + Redis) and
-  cannot run on the Node service; ~$23/mo on Render, ~$6/mo on a VPS, or paid
-  Chatwoot Cloud. The code is safe to merge before hosting is decided.
-
-## Chatwoot: a conversation is per REQUEST, not per supplier phone (feat/chatwoot-agent-console)
-
-- **The defect**: `chatwoot_links` was keyed on `phone` alone, so one supplier's
-  several open pricing requests collapsed into ONE conversation. A reply to
-  Ahmed's request and a reply to Abdelrahman's request landed in the same thread
-  and nothing recorded which request — or which employee — was being answered.
-  The ownership the console exists to show was simply absent.
-- **The key is `(phone, rfqId)`**: the CONTACT is per phone (one supplier), the
-  CONVERSATION is per request. `employee_id`/`employee_name` ride on the row.
-  `rfqId = 0` means "no request context" — 0 rather than NULL so it can take part
-  in the unique index (a NULL in a Postgres unique index does not collide).
-- **Resolution order is the whole design** (`pickRequestFromText`): an explicit
-  request number in the text is AUTHORITATIVE — the supplier naming their request
-  must never be overruled; else a supplier with exactly ONE open request is
-  unambiguous; else **stay ambiguous on purpose**. Guessing files a price under
-  the wrong request and the wrong employee, and a wrong price is worse than an
-  unlabelled thread. The webhook then asks the supplier which request they mean
-  (tappable buttons carrying the number + the responsible employee's name).
-- **Match on alphanumerics, not on the literal string**: a supplier retyping
-  «RFQ 2026 000222» for «RFQ-2026-000222» must still match. The first cut
-  stripped only whitespace and a test caught it. This is the same class as the
-  EDC `26R 011936` / `26R011936` canonicalisation rule.
-- **Stale-button guard**: the chosen request is re-read from the OPEN set before
-  it is honoured, so a button from an old menu cannot file a reply against
-  another supplier's request or a closed one.
-- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table**, so the DDL
-  adds `rfq_id`/`employee_id`/`employee_name`/`id` explicitly, and the primary-key
-  move to the surrogate `id` runs ONLY while the PK is still on the old shape
-  (otherwise it would fight the new table). Same rule as the delivery-idempotency
-  incident.
-- **The PO mirror deliberately carries NO `rfqId`** — `supplier-po-no-rfq.test.ts`
-  guards that no RFQ reference ever reaches a supplier, and adding one tripped it.
-  The guard was right: a supplier-facing PO must not expose our request number.
-- **`mirrorInboundMessage`/`mirrorOutboundMessage` are best-effort by design.**
-  A Chatwoot outage degrades the console; it must never stop an RFQ from being
-  sent or a supplier reply from being stored.
-- Tests: `chatwoot-ownership.test.ts` (7) — phone canonicalisation + the
-  resolution rules, including the separator-tolerant match that failed against
-  the first cut. **2279 api-server tests** pass; tsc (libs + api-server + portal)
-  clean; repo-wide prettier clean; portal build clean.
-- **Push**: the environment `$GITHUB_TOKEN` is the read-only `ghu_` OAuth token —
-  `POST /git/refs` returns `403 Resource not accessible by integration` even
-  though `GET /repos/...` reports `permissions.push: true`, and `git push` is
-  refused. A user-issued `ghp_` token with `repo` scope works end-to-end (push →
-  poll `commits/<sha>/check-runs` → update the PR body via `PATCH /pulls/:n`).
-  Reset the remote to the credential-less URL afterwards.
-- **Status**: PR #437 updated (`d699369`), all 4 CI checks green
-  (Type Check / Format Check / Tests / Build+E2E), `mergeable_state: clean`.
-
-
-## Chatwoot CE embedded natively — vendor as container, own the thread (PR #437)
-
-The console is Chatwoot Community Edition running **from this repository**, not a
-service we call. `chatwoot/` is the upstream tree vendored byte-for-byte
-(v4.19.1 @ `caab07a8f00032d5205b5a5d7e2eb0ba2f3d2d82`, recorded in
-`chatwoot/UPSTREAM.md`); `chatwoot-cortoba/` is the **only** thing we own.
-
-- **Never edit `chatwoot/`.** Bumping Chatwoot must stay a change of one Docker
-  tag plus one line of `UPSTREAM.md`. Anything we add lives in
-  `chatwoot-cortoba/`, so a future upgrade diff is readable.
-- **Two configuration traps, both measured**: plain `postgres` fails
-  `db:chatwoot_prepare` with `extension "vector" is not available` (use
-  `pgvector/pgvector:pg16`), and production Rails aborts at boot without
-  `SECRET_KEY_BASE`.
-- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table** (again). The
-  overlay's attributes and the idempotency columns must be `ALTER TABLE ... ADD
-  COLUMN IF NOT EXISTS`, or a pre-existing database silently lacks them.
-
-### The defect the test caught, not the code review
-
-**`external_source_ids` duplicated every message.** `Message` declares
-`store :external_source_ids, accessors: [:slack], coder: JSON`, which serialises
-an assigned **Hash into a JSON *string*** in the jsonb column. A guard written as
-`external_source_ids ->> 'cortoba' = ?` therefore never matched — every re-import
-appended a full duplicate set. Measured: three imports left **6** messages where
-3 were expected, with identical `"{\"cortoba\":\"wamid.TEST1\"}"` values.
-
-The fix is `messages.source_id` — the indexed **text** column Chatwoot's own
-WhatsApp integration stores the inbound message id in
-(`app/services/whatsapp/contact_info_response_service.rb`). After the change:
-three imports → `1 contact / 1 conversation / 3 messages`, timestamps preserved.
-
-**Rule**: before using a jsonb column as an idempotency key, check the model for
-`store ... coder: JSON` — it turns structured values into strings and makes
-`->>` comparisons silently never match. Prefer a plain indexed text column.
-
-### A failed resolution must never be cached
-
-`ensureAgentForEmail` caches resolved agents so a busy thread does not re-list
-the roster. The first cut cached on failure too, which would have made that
-employee **permanently unassignable** for the life of the process — a transient
-Chatwoot blip becoming a permanent one. Only successes are cached; the guard
-fails against the caching version (verified by injecting it).
-
-### Routing priority, and why each rung is deliberate
-
-`pickAssignee` decides who owns a supplier thread: **owner** (they know the
-request) → **online agent** (a supplier should not wait for someone away) →
-**administrator** (CE has no supervisor role, so admins are the escalation tier)
-→ **unassigned, LABELLED** so it appears in the console's unassigned view rather
-than disappearing. Nobody-available is a routing OUTCOME, not an error to retry
-forever — that distinction is what keeps the retry honest.
-
-`availability_status` is **computed** (stored `availability` + live Redis
-presence via `AvailabilityStatusable`), so a freshly provisioned agent always
-reports `offline` even with an online preference. Do not read it as a stored
-column — it is not one, and the API's `role` enum in CE is only
-`agent`/`administrator`.
-
-### Two facts that cost time, recorded so they cost nothing next time
-
-- **The conversation API id is `display_id`, not the primary key.**
-  `_conversation.json.jbuilder` emits `json.id conversation.display_id` and
-  `Conversations::BaseController` resolves with `find_by!(display_id:)`. A SQL
-  check against `conversations.id` will "prove" an assignment is missing when it
-  is not — compare `display_id`.
-- **`AccessToken` has no `name` column** (`id, owner_type, owner_id, token,
-  created_at, updated_at`). `AccessToken.create!(owner:, name:)` raises
-  `unknown attribute 'name'`.
-
-### Verification that actually proves it
-
-A mocked guard proves the policy, not the integration. The bridge client was
-driven against the **real running Chatwoot** (`listAgents` → `createAgent` →
-`findAgentByEmail` uppercase → `createContact` → `createConversation` →
-`setConversationCustomAttributes` → `assignConversation` → `createMessage`), and
-the routing ladder was exercised live: nobody online → the administrator was
-assigned and the thread labelled `cortoba:مشرف`. Both probe files were deleted
-afterwards.
-
-### Where the business rules live — deliberately in ONE place
-
-Which pricing request a reply answers, and who owns it, are decided in
-`artifacts/api-server/src/modules/chatwoot/bridge.ts`, next to the WhatsApp
-gateway. They are **not** re-implemented in the Ruby overlay: two copies of one
-truth is how they drift apart. The overlay only does what can *only* be done
-inside Chatwoot — console configuration and a faithful historical import (the
-REST API cannot set `created_at` or a message id).
-
-### CI / repo hygiene for a 9.7k-file vendor tree
-
-- `.prettierignore` **and** `.gitignore` both need `chatwoot/`; the format gate is
-  repo-wide, and 9.7k upstream files would fail it instantly.
-- Exclude heavy non-code assets (`spec/`, `public/videos/`, `*.onnx`,
-  `node_modules/`, `public/packs/`) — that is what takes the commit from 232 MB
-  to **60.1 MB / 8597 files** (largest blob 1.38 MB).
-- To check the real (tracked-files-only) format gate without committing
-  anything: `git ls-files -z | grep -zE '\.(ts|tsx|js|mjs|json|css|md)$' |
-  xargs -0 prettier --check`.
-- CI runs only **typecheck + tests + format** (no eslint), so an eslint error
-  cannot block a deploy — but the format gate absolutely can.
-- `pnpm` is not on PATH; use the corepack shim
-  (`/acp-node/lib/node_modules/corepack/shims`) with
-  `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`.
-- Run the suite with `env -i PATH="$PATH" HOME="$HOME"` — exported
-  `SMTP_*`/`AI_*`/`GOOGLE_*`/`CHATWOOT_*` make unrelated tests fail.
-
-**Tests**: 2300 api-server (chatwoot-assignment 21, up from 0) + 78 portal pass;
-tsc (libs + api-server + portal) clean; tracked-file format gate clean; eslint
-clean on the changed files. Committed `fb7fcd9` on `feat/chatwoot-agent-console`.
-
 ## `tsc --build` from the root is NOT the typecheck CI runs
 
 `pnpm typecheck` runs `tsc -p tsconfig.json --noEmit` **inside each package**
@@ -4962,28 +4722,6 @@ failed with **`out of range`** — and **a failing test inside `if` does NOT tri
 it had never verified. Extract a sentinel line, then fail closed on anything
 unparsable. Same family as the `filter(Boolean)` and false-`truncated`
 incidents: a capability reporting something other than what it did.
-
-## The documented Chatwoot install was broken (fixed in PR #439)
-
-`docker compose up -d --build` then `exec web rails db:chatwoot_prepare` starts
-`web`/`worker` **before the schema exists**, so they crash-loop on
-`relation "installation_configs" does not exist` until the second command is run
-by hand — a correct install looks like a dead stack. A one-shot `migrate`
-service now prepares the schema, verifies it, and `web`/`worker` wait for
-`service_completed_successfully`. **`up -d` is the whole install.**
-
-`db:chatwoot_prepare` **exits 0 even when it creates nothing** (it short-circuits
-on a database it considers half-prepared), so its exit code is never the proof.
-
-- **Compose interpolates `${...}` even inside a `#` comment** inside a block
-  scalar. A `${var:-default}` written in prose produced
-  `WARN The "count" variable is not set` on every `docker compose` command.
-- **Verify a fix in BOTH directions.** Passes at 110 tables, exits 1 at 0 — a
-  guard only checked on the happy path guards nothing.
-- **A mock cannot see a DDL syntax error.** The new tables, their unique index
-  and the FK cascade were executed against real Postgres
-  (`pgvector/pgvector:pg16`): duplicate triple rejected, `DELETE supplier` →
-  drafts `1 → 0`.
 
 ## Supplier WhatsApp bot — scoping must live in the QUERY (Phase 6, PR #439)
 
@@ -5046,13 +4784,11 @@ it). 2325 api-server tests pass.
 The supplier bot (`handleSupplierBotMessage`) runs BEFORE `handleInboundMessage`,
 so it CONSUMES the supplier's message: whatever it does not record itself is
 never recorded at all. The bot saved prices into drafts and recorded nothing, so
-the employee opened the Chatwoot conversation to find an EMPTY thread while the
 supplier was actively quoting — the console is where the employee works, so a
 silent bot makes the console lie about the conversation it shows.
 
 - `recordSupplierBotInbound` records the inbound message (idempotent on
   `wa_message_id`, so a redelivered webhook cannot double the thread) and mirrors
-  it into Chatwoot. Best-effort — a console fault must never cost the supplier
   their answer.
 - `mirrorSupplierQuoteToConsole` puts the submitted prices (label, price,
   currency, delivery days) plus the unpriced count into the thread. A bare
@@ -5068,190 +4804,9 @@ called.** The quote-mirror wiring test drives the REAL confirmation; calling
 deleted. Removing the recording call fails 3 tests, removing the mirror call
 fails 1 — both verified by reverting.
 
-**The public Chatwoot webhook answers 200 BEFORE validating, deliberately:**
-Chatwoot retries a slow webhook, which would double-send. The token check returns
 before any action, so an unauthenticated request sends nothing. A 200 on that
 path is an ack, not evidence of authorization — verify the absence of the
 outbound send, not the status code.
-
-## تحقّق Chatwoot + بوت الموردين من الصفر (فرع feat/supplier-bot-and-chatwoot-install)
-
-تحقّق مستقلّ بلا الاعتماد على تقارير سابقة. أربعة عيوب حقيقية أُصلحت، كلٌّ بحارس
-**يفشل ضد الكود قبل الإصلاح** (مُتحقَّق بالـstash).
-
-### 1) حاجز التضمين في iframe عبر `*.onrender.com` — قياس لا تخمين
-
-- `onrender.com` مُدرَج في **قائمة النطاقات العامة** (PSL) ⇒
-  `cortoba-rfq.onrender.com` و`cortoba-chatwoot.onrender.com` **موقعان مستقلان**،
-  فالكوكي داخل الـiframe طرف ثالث ⇒ لا تُرسَل ولا تُخزَّن.
-- **الدليل**: الـiframe يُحمَّل ويُنفّذ `POST /auth/sign_in` بنجاح (سجل الخادم:
-  `Enqueued UserSessionIpLookupJob`) **ثم تعود الواجهة لصفحة الدخول** و
-  `localStorage` يبقى فارغًا. هذا سلوك منصة، **لا عيب كود** — لا يُصلح بتعديل Chatwoot.
-- الحلّان: (أ) تاب منفصل (يعمل الآن، Chatwoot يصبح طرفًا أول)،
-  (ب) نطاق مخصّص same-site (جذري، يحتاج موافقة DNS).
-
-### 2) توكن SSO أحادي الاستخدام كان يترك رابط «فتح في نافذة منفصلة» ميتًا
-
-- التوكن يُحذف من Redis عند أول `POST /auth/sign_in` (مُثبت: استهلاك أول 200،
-  ثانٍ **401**). الـiframe يستهلكه عند التحميل، فالزر `<a href={iframeUrl}>`
-  يفتح رابطًا ميتًا ⇒ يُقرأ كـ«اللوحة لا تفتح».
-- الإصلاح: الزر يصدر **رابطًا طازجًا** من `/api/chatwoot/sso` عند الضغط.
-- الحارس: `chatwoot-fallback.test.tsx` يقارن الرابط المفتوح بالرابط المُستهلك
-  ويرفض تطابقهما (**1 failed** قبل الإصلاح).
-
-### 3) «التواصل مع موظف» كان وعدًا بلا وفاء
-
-- المورد يُقال له «سيتواصل معك أحد الموظفين» والكود يكتفي بـ`broadcastWaEvent`
-  (بث SSE لصفحة مفتوحة فقط). **وأخطر**: الزر من القائمة الرئيسية لا يحمل `rfqId`
-  ⇒ لا «موظف مسؤول» ⇒ لا إشعار في الحالة الشائعة.
-- الإصلاح: إشعار واتساب مباشر لرقم الموظف (`notifyEmployeeOfSupplierRequest`)،
-  بسلّم الأولوية نفسه الذي يستخدمه إسناد اللوحة (مسؤول → مشرف → أدمن → أي موظف).
-- الحارس في `supplier-bot-console-trail.test.ts` (**1 failed** قبل الإصلاح).
-- **درس اختبار الموك**: الإشعار يستدعي `sendWhatsAppText` عبر الربط الداخلي للوحدة،
-  فتجاوز التصدير **لا يعترضه** — يجب تسجيله عند حدّ `notifyEmployeeOfSupplierRequest`
-  نفسه، وإلا «أثبت» الاختبار شيئًا لم يحدث.
-
-### ما تم التحقق منه سليمًا (بلا تغيير)
-
-- **ترتيب المعالجات متطابق في مساري الويبهوك** (`Whatsapp.on.message` و
-  `dispatchWebhookPayload`): `reaction → ai → rep → supplierBot → workOrder → inbound`.
-- **عزل الموردين**: كل استعلامات البوت مقيّدة بـ`supplierId` في `WHERE` (لا فلتر لاحق).
-- **العرض يُكتب UNAPPROVED** — لا يُعتبر ردّ المورد عرضًا معتمدًا.
-- **السيناريوهات الستة** كلها موجودة ومعالَجة (`sup_menu` → myrfqs/help/agent،
-  `sup_rfq` → البنود، `sup_item`/`sup_avail` → الردود، `sup_confirm` → التأكيد).
-- **`data_services: failing` تقرير كاذب**: Postgres يعمل فعلًا (مُثبت:
-  `GET /platform/api/v1/accounts/3/account_users` → 200 بصفَّين). الفحص الأصلي
-  يستخدم `connection.active?` التي لا تتفق مع connection pooling عند الخمول.
-- **مسارات إرسال RFQ/PO لم تُمَس**: 8 أسطر محذوفة فقط (توقيع دالة أُعيد ترتيبه).
-
-الاختبارات: **2354 api-server** (كان 2352) + 82 واجهة تمر؛ tsc + prettier + البناء نظيف.
-
-## لوحة Chatwoot تُخدَم على جذر نطاق التطبيق — ولا يمكن أن تكون تحت مسار فرعي
-
-Chatwoot يستخرج رقم الحساب من **موضع** المقطع في الرابط:
-
-    // app/javascript/dashboard/api/ApiClient.js
-    if (pathname.includes('/app/accounts')) return pathname.split('/')[3];
-
-على نطاقه الخاص يكون المسار `/app/accounts/3/...` فالمقطع 3 هو الحساب. تحت
-`/whatsapp/console` تنزاح الفهارس بمقدار 2 فيصبح المقطع 3 هو النص `app` → كل طلب
-يذهب إلى `/api/v1/accounts/app/...` = **404** (167 متتالية حيًّا) فتظهر قائمة محادثات
-فارغة **بلا أي خطأ**. أربعة مواضع تقرأ نفس الفهرس (`ApiClient.js`، `uploadHelper.js`
-×2، `useWhatsappCallSession.js`، `Contact.vue`)، ولا يوجد دعم لمسار فرعي: الموجّه
-`createWebHistory()` بلا `base`. وتعديل كود Chatwoot المُضمَّن ممنوع — يُفقد عند
-الترقية.
-
-لذلك `chatwootProxyMount()` يُرجع الجذر. وبما أن `app.use("/")` سيردّ على كل شيء،
-التركيب مُرشَّح بـ`chatwootOwnsPath()` — الوصف الواحد لفضاء مسارات Chatwoot — وكل ما
-عداه يمرّ إلى `/api` وSPA. نفس الحارس يحمي مُرحّل الـWebSocket: اختبار `${mount}/`
-يصبح `//` عند الجذر فلا يطابق شيئًا، فتُرسم اللوحة ولا تصلها رسالة حية.
-
-- **الفضاء مقسوم إلى مجموعتين**، وكلتاهما في `proxy.ts`:
-  - `CHATWOOT_PUBLIC_PREFIXES` (حزم، أصوات، شعارات، أيقونات، PWA manifest) —
-    **لا يمرّ عليها الحارس**. إمرارها عليه كان يردّ **401 على JS/CSS اللوحة نفسها**
-    (حيًّا: `/vite/assets/*.js`، `/packs/js/app.js`، `/manifest.json`)، فتنهار
-    اللوحة بأعراض تبدو كأعطال غير متعلقة؛ والحارس **استعلام من قاعدة البيانات**،
-    فتحميله على كل أصل يجعل كل صفحة بطيئة.
-  - `CHATWOOT_PROTECTED_PREFIXES` (`/app`، `/api/v1`، `/platform`، `/auth`،
-    `/super_admin`، `/cable`، `/rails`) — الحارس يعمل عليها. `/rails` هو
-    ActiveStorage الذي يخدم **مرفقات الموردين**، فيبقى محميًا.
-  - `chatwootOwnsPath` = الاتحاد (ماذا يردّ عليه البروكسي)،
-    `chatwootRequiresAuth` = المحمية (على ماذا يعمل الحارس).
-- **`/auth` هو نقطة دخول اللوحة نفسها** (`mount_devise_token_auth_for 'User', at:
-  'auth'`)، **وهو مسار SSO أيضًا**: رابط SSO يُبنى
-  `FRONTEND_URL + /app/login?email=…&sso_auth_token=…`، واللوحة تقرأ المعاملين في
-  `v3/helpers/RouteHelper.js` وتُرسلهما تلقائيًا في **`POST /auth/sign_in`**
-  (`v3/views/login/Index.vue`)، والخادم يستهلك الرمز في
-  `devise_overrides/sessions_controller.rb` (`process_sso_auth_token`). فنقص `/auth`
-  = `auth/sign_in 404` → اللوحة **تعرض نموذج الدخول اليدوي بدل الدخول التلقائي**.
-  حدث حيًّا بالضبط.
-  - **الـ404 كان من Express لا من Chatwoot**: catch-all في `app.ts` هو **GET فقط**،
-    فـPOST غير المطابق (مسار `/auth` قبل إصلاحه) يعطي 404 من Express. لذلك لا
-    تستنتج من رمز الحالة وحده — تحقّق من أي جهة صدر.
-- **`/dashboard` و`/assets` و`/integrations` ليست مملوكة لـChatwoot** رغم وجود مسارات
-  بهذه الأسماء عنده: `/dashboard` مسار SPA، و`/assets` مكان كتابة **Vite** لحزم
-  التطبيق، و`/integrations` مسار SPA حقيقي. ضمّ `/assets` جعل CSS/JS التطبيق تذهب
-  إلى Chatwoot الذي ردّ HTML → **صفحة بلا تنسيق و404 على الحزمة** (حدث حيًّا).
-  - **لا تُبقِ هذه القائمة يدوية**: `chatwoot-prefix-collision.test.ts` يقرأ
-    `App.tsx` لمسارات التطبيق و`vite.config.ts` لـ`assetsDir`، ويفشل عند أي تعارض.
-    تعارض المسار ظاهر في المصدر، أما تعارض الأصول **لا يوجد إلا بعد البناء** —
-    ولهذا يقرأ الإعداد لا `grep`. أي مسار مضموم يجب أن يمرّ من هذا الحارس.
-- **أي مسار عليا جديد في Chatwoot يجب إضافته** إلى إحدى المجموعتين وإلا 404 لميزة
-  واحدة بصمت. `/monitoring` (Sidekiq) و`/bot` (فيسبوك) **غير مضمّنة عمدًا** — لا رابط
-  لهما من اللوحة، وإضافتهما توسّع السطح بلا مقابل. `/api` (فهرس Chatwoot العاري) غير
-  مضمّن لأنه سيتعارض مع `/api/*` الخاص بنا.
-- **لا تحقن `<base>` عند الجذر** — المستند يحلّ الروابط النسبية صحيحًا أصلًا. يُحقن
-  تحت مسار فرعي فقط.
-- **لا تضيّق `Path` على كوكي اللوحة** عند الجذر (`scopeSetCookie` يتخطاه): تضييقه
-  يخفيها عن صفحات اللوحة نفسها ويكسر الدخول الذي تم للتو.
-- **لا تُبادئ الأصول المطلقة** (`/vite/...`) عند الجذر: هي تُحلّ على اللوحة، وبادئتها
-  توجّه المتصفح إلى `/app/vite/...` الذي لا يخدمه شيء.
-- **إطار الواجهة يشير إلى `/app`** لا `/`: فتح `/` يحمّل تطبيقنا داخل الإطار
-  فيتداخل مع نفسه.
-- التحقق في الإنتاج: `GET /api/v1/accounts/3/conversations` يجب أن يعطي **401**
-  (من Chatwoot، خلف حارسه) لا 404؛ والسجلات يجب ألا تحوي `accounts/app`.
-- خدمة Chatwoot **خاصة عمدًا**: كل مسار مباشر عليها يعطي 404 ولا تستجيب إلا لبوابة
-  التطبيق — لا تحاول التحقق منها مباشرة.
-- `action_cable.disable_request_forgery_protection = true` في Chatwoot، فالـWebSocket
-  يقبل أصل نطاقنا بلا إعداد إضافي.
-
-## Chatwoot console: two defects that each made it silently unusable
-
-### The WebSocket relay wrote the handshake to the wrong peer
-
-`relayWebSocket(req, socket, head, cfg)` receives `socket` = the BROWSER's
-connection and opens `up` = the upstream's. It built the request line and headers
-from the browser's request — including the gateway credential the console's gate
-requires — and then wrote them to `socket`, i.e. back down the browser's own
-connection. Measured live: the upstream got a bare TCP connection with no request
-line, never answered, and the browser reported
-`WebSocket connection to 'wss://…/cable' failed` on repeat. The browser's bytes
-still reached the upstream through `socket.pipe(up)` but WITHOUT the credential,
-so the gate refused them with its 404 — two symptoms, one transposed argument.
-Writing to `up` fixes both. `head` belongs to the upstream stream for the same
-reason.
-
-**Why nothing caught it**: the HTTP half of the proxy was covered and worked;
-nothing exercised the upgrade at all. `chatwoot-websocket-gateway.test.ts` now
-drives a REAL upgrade through a real gateway running `relayWebSocket` to a real
-upstream and asserts on the arriving bytes. Restoring `socket.write` fails 3 of 4.
-
-**A WebSocket test must not be written against a hand-rolled `IncomingMessage`.**
-The first three attempts passed a fake request to a `net` server and never
-reached the relay: Node does not emit `upgrade` without the real upgrade headers,
-and a socket already talking to the upstream cannot also be the relay's inbound
-duplex. Drive it end to end (client → gateway → upstream) or it proves nothing.
-
-### The console started empty because the history was never imported
-
-The live mirror only fires when a message ARRIVES, so a console installed today
-shows only what happened after today. Production held **7,851 messages across 414
-numbers** from June onward; `chatwoot_links` held **4** conversations. «المحادثات
-القديمة مش موجودة» was not a UI bug.
-
-**The REST API is sufficient — do not reach into Chatwoot's database.**
-`Messages::MessageBuilder#message_params` reads `external_created_at` and
-`source_id` straight off the request, so a replay keeps the ORIGINAL timestamp and
-carries the original id. `chatwoot-cortoba`'s Rails importer writes through the
-models, which is the only way to set a message id, but this process has no
-credentials for that database and the coupling breaks on Chatwoot's next upgrade.
-
-**`source_id` is INDEXED, NOT UNIQUE.** Chatwoot accepts a duplicate without
-complaint, so a replay MUST look it up before inserting or a second run doubles
-every thread — invisible until someone counts. Without `external_created_at` a
-replay stamps "now" and three months of history reads as one burst.
-
-`POST /api/chatwoot/backfill` is admin/manager, batched and resumable
-(`nextCursor` + `stoppedBy`), read-only on Cortoba's tables. The console page
-carries the button, because **an endpoint only `curl` can reach is an endpoint
-that does not exist for the operator who needs it** — and the UI gate is a
-courtesy while the server's `requireRole` is the boundary.
-
-### Phase 6 (supplier bot) was already implemented
-
-`handleSupplierBotMessage` is wired into BOTH webhook paths (`routes.ts:204` and
-`:349`, the same pairing the dispatch-order rule requires), menus live in
-`service.ts`, and two suites cover it. Check before building what exists.
 
 ## الوسائط في شاشة الوكلاء — العيب الذي أنهى الشاشة القديمة (PR #467/#469)
 
@@ -5259,7 +4814,6 @@ courtesy while the server's `requireRole` is the boundary.
 العيب في `createMessage`: **نصّ فقط**.
 
 - **`createMessage` لا يحمل بايتات.** `MessageBuilder#process_attachments` في
-  Chatwoot يقرأ `attachments[]` **كملف مرفوع**، أي multipart. `createMediaMessage`
   الجديدة تُرسل `FormData`، و`cw` **تتوقف عن فرض** `application/json` عندما يكون
   الجسم `FormData` (الـruntime يولّد حدّ multipart؛ فرض الترويسة يجعل الشاشة ترفض
   الرفع). البايتات هي المخزَّنة أصلًا من Meta (`downloadAndStoreMedia` تُرجعها الآن).
@@ -5269,9 +4823,7 @@ courtesy while the server's `requireRole` is the boundary.
 - **الرسالة الاصطناعية ليست رسالة.** نقرة زر واختيار طلب لا مرفق لهما؛ لهما
   `mirrorSystemNote`. دالة واحدة للاثنين هي ما سمح بالعيب أعلاه.
 - **التحقق الحيّ هو الحكم**: رفع صورة من المورد عبر الـwebhook، ثم ظهور
-  `MessagesController#create` + `ActiveStorage::AnalyzeJob` في سجل Chatwoot = الملف
   خُزِّن فعلًا. **قياس الحارس وحده لا يُثبت أن الشاشة استلمت الملف.**
-- **الحرّاس**: `chatwoot-bridge.test.ts` (11) — الرفع multipart بلا ترويسة JSON
   (يفشل ضد `createMessage`)، وكل نداء `mirrorInboundMessage` في المصدر يمرّر
   `media` (يفشل ضد مسار البوت النصّي)، والعلامات الاصطناعية على `mirrorSystemNote`.
 
@@ -5337,8 +4889,6 @@ courtesy while the server's `requireRole` is the boundary.
 ## كل مسار وارد يجب أن يكون مُنهيًا — لا مُعلَّقًا (PRs #474–#477)
 
 عيب حيّ اكتُشف **بالقياس على قاعدة الإنتاج**، لا بالقراءة: من **1252** صفًا واردًا
-كان **1222** فقط مُعلَّمًا `chatwoot_synced_at`، بينما **كل** الصادر (6728) مُعلَّم.
-والـbackfill يختار بالضبط `chatwoot_synced_at IS NULL` — فكل رسالة غير مُعلَّمة
 تبقى **مرشّحة دائمة** لإعادة العرض. الأثر: رسالة المورد تظهر في الشاشة **مرة
 ثانية** بعد دقائق، بلا رسالة جديدة على هاتفه — وهو بالضبط ما جعل المشغّل يهجر
 النظام القديم.
@@ -5347,10 +4897,8 @@ courtesy while the server's `requireRole` is the boundary.
   - **مُمرأى** (رسالة مورد / اختيار طلب / رد بند): المرآة تُعلّم الصف.
   - **غير مُمرأى** (بوت المندوب): محادثة **داخلية** لا مورد، فلا تظهر في الشاشة،
     لكنها **تُعلَّم** عبر `markInboundHandled` — وإلا صارت **محادثة شبحية** للموظفين.
-- **`markReplayed` هي التنفيذ الواحد** (في `chatwoot/bridge.ts`). المرآة الفاشلة
   **تترك** الصف غير مُعلَّم **عن قصد**، فيكون الـbackfill هو إعادة المحاولة لا
   الفقدان الصامت.
-- **`waMessageId` مزدوج الغرض**: مفتاح التعليم، **و**مفتاح منع التكرار في Chatwoot
   (`messages.source_id`) — فإعادة إرسال webhook أو إعادة تشغيل backfill **تُحدّث**
   الرسالة بدل أن تضيف نسخة.
 - **⚠️ عيب أدخلتُه أنا ثم اكتشفته حيًّا**: بعد أن نُقل الحفظ إلى نقطة التوزيع، صار
@@ -5372,80 +4920,6 @@ courtesy while the server's `requireRole` is the boundary.
 إحصاءات الملفات. **قبل كل دفع**: `git diff --stat origin/main` ثم
 `git diff origin/main | grep "^-"` — أي حذف لـ`describe(`/`it(` علامة خطر.
 الحل: ابنِ فرعًا جديدًا من `origin/main` وطبّق التغييرات، لا `rebase` على أساس قديم.
-
-## ثلاثة عيوب حيّة في شاشة Chatwoot — وكلها «سطح يصف شيئًا غير ما يفعله»
-
-عيبان بلّغ عنهما المشغّل من الاستخدام الفعلي (١٤ نوفمبر)، والثالث ظهر أثناء الفحص.
-الثلاثة من نفس العائلة المسجّلة في هذا الملف: **قدرة تعمل غير ما تقول**.
-
-### ١) البوت يطلب إعادة اختيار الطلب — كل مرة
-
-الاختيار كان يُعلن التسليم («تم ربط محادثتك بالطلب … **أرسل عرضك هنا مباشرة**»)
-و**لا يكتب شيئًا**. فالجلسة تبقى فارغة، والرسالة الحرّة التالية تفتح القائمة من
-جديد — **فتبتلع الرسالة التي دعاها البوت للتوّ**.
-
-**دعوة لا يُفي بها البوت أسوأ من عدمها**: المورد يعيد الاختيار، والعرض **لا يصل
-أبدًا** — وهو عمل البوت كله.
-
-الإصلاح: الاختيار يحفظ `step: "handed_off"` (و`rfqId`)، والنصّ الحرّ في هذه
-الحالة **يمرّ للموظف** بدل أن يجيب عليه البوت. النقرات الصريحة تظل تعمل، فيستطيع
-المورد فتح البوت عن قصد. و`stepPrompt` أخذ حالة `handed_off` ليبقى السلّم تامًّا
-(switch على `BotStep` بلا حالة = خطأ ترجمة، وهي الحماية المقصودة).
-
-**الدرس العام**: كل وعد في رسالة البوت يجب أن يقابله **أثر مكتوب**، وإلا فالنصّ
-يكذب. افحص: ماذا يدّعي البوت؟ وأين يُسجَّل ذلك؟
-
-### ٢) «Loading failed» على صورة المورد — والملف على القرص
-
-`routes.default_url_options` يأخذ `FRONTEND_URL`، وChatwoot يبني **روابط مطلقة**
-منه للمرفقات. كان يشير إلى **عنوان خدمة Chatwoot نفسها**، لكن الشاشة تُخدم عبر
-**بوابة Cortoba** (`/app/`, `/rails/active_storage/...` وكيل داخلي)، وتلك الخدمة
-خلف بوّابة الحماية (`CORTOBA_GATEWAY_SECRET`) — فيجلب المتصفح من مضيف **لا يصل
-إليه**، ويعرض «فشل التحميل» لملف كان على القرص طوال الوقت.
-
-**القاعدة**: القيمة هي **الأصل الذي يستخدمه المتصفح**، لا عنوان الخدمة. أي إعداد
-يبني به Chatwoot روابط يجب أن يشير إلى **عنوان البوابة**.
-
-تشخيصه لم يحتج قراءة الكود: `curl` على `/rails/active_storage/...` **مباشرةً**
-أرجع 404، وعبر البوابة أرجع **401** (يعمل، ويطلب مصادقة) — الفرق هو الإصلاح كله.
-
-**ملاحظة تشغيلية**: تغيير متغيّر بيئة على Render **لا يُعيد النشر** تلقائيًا
-(تم التحقق: النشر ظلّ على الالتزام القديم). أعد النشر صراحةً بعد تغيير متغيّر
-يقرأه Chatwoot عند الإقلاع.
-
-### ٣) الإسناد يقول السبب ولا يقول الاسم
-
-سجلّ النشاط في الشاشة كان يقرأ «Cortoba Admin added **cortoba:مندوب متاح**» —
-بلا اسم موظف. فلا المشغّل يعرف من أُسندت إليه، ولا إن كان الإسناد قد حدث أصلًا.
-
-**الوسم سبب، لا شخص.** `cortoba:مندوب متاح` تعني «أول موظف كان متاحًا» — وهذا
-بالضبط ما يجب أن يُعرف عن **قاعدة الإسناد**، وبالضبط ما لا تقوله عن **النتيجة**.
-فالإسناد كان يحدث فعلًا (`assignConversation` تُستدعى)، لكن لا شيء في الشاشة
-يسمّي الموظف.
-
-الإصلاح: الإسناد يكتب **ملاحظة داخلية** تسمّي الموظف وسبب اختياره
-(«👤 أُسندت المحادثة إلى: <الاسم> (أول موظف متاح)»). وهي **خاصة** فلا يراها
-المورد أبدًا — و`createMessage` كانت **مثبِّتة** `private: false` فكان إرسال
-ملاحظة داخلية **مستحيلًا**؛ صارت تحترم قيمة المستدعي.
-
-**قاعدتان**: (أ) الوسم يعبّر عن **السبب**، والملاحظة الداخلية عن **النتيجة** —
-لا تُحمّل الوسم ما لا يحمله. (ب) ملاحظة إسناد **best-effort**: الإسناد يكون قد
-نجح، وفشل الملاحظة **يجب ألا** يُلغي إسنادًا صحيحًا — ويشمل ذلك الرمي **المتزامن**
-لا المؤجّل فقط (`.catch` وحدها لا تكفي).
-
-**الحرّاس الثلاثة يفشلون ضد الكود قبل الإصلاح** (تم التحقق بإرجاع كل إصلاح على
-حدة): حارس التسليم، حارس `private`، وحارس المانيفست. **2,447 اختبار يمر**؛
-tsc + prettier على كل المستودع نظيفان.
-
-**التحقق الحيّ (الإنتاج)**: اختيار الطلب 456 → الجلسة `step=handed_off`،
-`rfq_id=456`، والردّ الحرّ التالي **لم يطلب إعادة الاختيار**؛ والوسائط تُطلب الآن
-من أصل البوابة حيث جلسة الموظف موجودة.
-
-### قاعدة إضافية: `FRONTEND_URL` في كل خدمة تشير للبوابة
-
-أي خدمة Chatwoot تُخدم عبر بوابة يجب أن يكون `FRONTEND_URL` فيها **عنوان
-البوابة**. حارس المانيفست يرفض عودة عنوان Chatwoot إلى `render.yaml`، فلا يعود
-العيب عند إعادة الإنشاء من الملف.
 
 ## الردّ على رسالة: الرابط، والاقتباس، وما يُعرض فيه
 
@@ -5474,9 +4948,7 @@ tsc + prettier على كل المستودع نظيفان.
 الآن `ReplyQuoteContent` يعرض **وسائط الرسالة نفسها**: الصورة للصورة، واسم الملف
 للمستند، والنصّ للنصّ — بارتفاع محدود (`max-h-24`) فلا يطغى على المحادثة.
 
-### ٣) الاقتباس يحتاج **معرّف Chatwoot**، لا معرّف واتساب
 
-Chatwoot يربط الردّ عبر `content_attributes.in_reply_to`، ويحمل **معرّفه الخاص**.
 معرّف واتساب الذي نملكه **لا يعرفه**. لذلك `findMessageIdBySourceId` تُرجع المعرّف
 الداخلي بالبحث عن `source_id` (وهو معرّف واتساب الذي نخزّنه عند المِرآة).
 
@@ -5496,7 +4968,6 @@ Chatwoot يربط الردّ عبر `content_attributes.in_reply_to`، ويحم�
 ### ٥) الفشل يجب أن يكون مرئيًا
 
 فشل الترجمة يعني ردًّا **بلا اقتباس** — وهو **لا يُميَّز** عن العيب الأصلي. لذلك
-الترجمة تُسجَّل مع المعرّفات (`Chatwoot: reply quote resolved`)، فالفشل المستمر
 يظهر في السجل بدل أن يبدو كأن العيب عاد.
 
 ### الاختبارات
@@ -5523,7 +4994,6 @@ Chatwoot يربط الردّ عبر `content_attributes.in_reply_to`، ويحم�
 بلاغ المشغّل جاء بعد إصلاح الاقتباس: **«مفيش حاجة وصلت للموظف»** — والرسائل
 **موجودة في قاعدة البيانات**. هذا يفرّق بين سببين متشابهين في الشكل ومختلفين في
 العلاج: **العيب في الاستقبال/المِرآة** أم **في الموزِّع**. وجود الصف مع
-`chatwoot_synced_at` **يُبرئ الاثنين** ويضع الشكّ في الموزِّع.
 
 ### السبب: رقم واحد = مورد ومندوب، والبوت يبتلع النصّ
 
