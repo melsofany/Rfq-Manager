@@ -354,8 +354,11 @@ export async function backfillPhone(
     }
     const meta = { externalCreatedAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined, sourceId, inReplyTo };
 
+    // Same rule as the live path: a file carries its own content, so the stored
+    // «[صورة مرسلة]» placeholder must not be posted as the message text.
+    const caption = media ? body.replace(/^\[[^\]]*\]\s*(?:—|-)?\s*/, "").trim() : body;
     const msg = media
-      ? await createMediaMessage(conversationId, body, row.direction === "inbound" ? "incoming" : "outgoing", media, meta)
+      ? await createMediaMessage(conversationId, caption, row.direction === "inbound" ? "incoming" : "outgoing", media, meta)
       : await createMessage(conversationId, body, row.direction === "inbound" ? "incoming" : "outgoing", meta);
     if (msg) {
       // Mark only AFTER Chatwoot accepted it: marking first would drop a
