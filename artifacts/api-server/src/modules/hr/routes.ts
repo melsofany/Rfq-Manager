@@ -28,6 +28,7 @@ import { requireAuth } from "../../middlewares/auth";
 import { hrLeaveRequestsTable, hrLeaveTypesTable } from "@workspace/db";
 import { missionExcusal, withinMissionWindow } from "./missions-logic";
 import { resolveEmployeeShift, lateMinutesFor, isAbsent } from "./attendance-exception-logic";
+import { pairDayPunches } from "./punch-pairing";
 
 const router: IRouter = Router();
 
@@ -421,87 +422,27 @@ export async function buildAttendance(
   const exceptionRows = await db.select().from(hrAttendanceExceptionsTable);
   const exceptionByEmp = new Map(exceptionRows.map((r) => [r.employeeId, r]));
 
-  const byPin = new Map<string, string[]>();
+  const byPin = new Map<string, { time: string; status: string | null }[]>();
   for (const p of punches) {
     const list = byPin.get(p.pin) ?? [];
-    list.push(p.punchedAt.slice(11, 19));
+    list.push({ time: p.punchedAt.slice(11, 19), status: p.status });
     byPin.set(p.pin, list);
   }
   const graceMin = configured?.lateGraceMinutes ?? 0;
 
-  const rows = employees.map((e) => {
-    const times = e.biometricPin ? (byPin.get(e.biometricPin) ?? []) : [];
-    const firstIn = times[0] ?? null;
-    const lastOut = times.length > 1 ? times[times.length - 1] : null;
-
-    const excusal = missionExcusal(missionsByEmp.get(e.id) ?? []);
-    const onMission = excusal.fullDay || excusal.windows.length > 0;
-
-    // Fold the company shift with this employee's exception: their own start
-    // time, their own grace, and whether a punch is required at all.
-    const resolved = resolveEmployeeShift(
-      { start: shiftStart, end: configured?.end ?? "17:00", lateGraceMinutes: graceMin },
-      exceptionByEmp.get(e.id) ?? null,
-    );
-
-    // A punch inside an approved mission window is not lateness.
-    const firstInMin = firstIn ? minutesOf(firstIn) : null;
-    const coveredByMission =
-      firstInMin !== null && withinMissionWindow(excusal.windows, firstInMin);
-    const late = coveredByMission
-      ? 0
-      : lateMinutesFor(
-          {
-            start: resolved.start,
-            lateGraceMinutes: resolved.lateGraceMinutes,
-            exemptFromPunch: resolved.exemptFromPunch,
-          },
-          firstIn,
-        );
-
-    // No punches is only absence when nothing excuses the day: a full-day
-    // mission, an approved leave, or an exemption from punching at all.
-    const absent = dayOff
-      ? false
-      : isAbsent({
-          punchCount: times.length,
-          exemptFromPunch: resolved.exemptFromPunch,
-          fullDayMission: excusal.fullDay,
-          onLeave: leaveByEmp.has(e.id),
-        });
-
-    // A timed mission with no punch at all is worth flagging: the window was
-    // excused but there is no evidence the employee was ever on site.
-    const missingPunchWarning =
-      excusal.windows.length > 0 && !excusal.fullDay && times.length === 0;
-
-    return {
-      employeeId: e.id,
-      employeeNo: e.employeeNo,
-      fullName: e.fullName,
-      department: e.department,
-      biometricPin: e.biometricPin,
-      firstIn,
-      lastOut,
-      punchCount: times.length,
-      lateMinutes: late,
-      onLeave: leaveByEmp.has(e.id),
+  const rows = employees.map((e) =>
+    buildDayRow({
+      employee: e,
+      punches: e.biometricPin ? (byPin.get(e.biometricPin) ?? []) : [],
+      shiftStart,
+      shiftEnd: configured?.end ?? "17:00",
+      graceMin,
+      exception: exceptionByEmp.get(e.id) ?? null,
+      missions: missionsByEmp.get(e.id) ?? [],
       leaveName: leaveByEmp.get(e.id) ?? null,
-      onMission,
-      missionFullDay: excusal.fullDay,
-      missionWindows: excusal.windows.map((w) => `${w.startTime}-${w.endTime}`),
-      missingPunchWarning,
-      absent,
-      dayOffName: dayOff?.name ?? null,
-      dayOffKind: dayOff?.kind ?? null,
-      // Which terms were applied, so the screen can show the exception rather
-      // than silently reporting a lateness of 0.
-      shiftStart: resolved.start,
-      lateGraceMinutes: resolved.lateGraceMinutes,
-      hasException: resolved.hasException,
-      exemptFromPunch: resolved.exemptFromPunch,
-    };
-  });
+      dayOff,
+    }),
+  );
 
   return {
     ok: true,
@@ -518,10 +459,377 @@ export async function buildAttendance(
         onLeave: rows.filter((r) => r.onLeave).length,
         onMission: rows.filter((r) => r.onMission).length,
         late: rows.filter((r) => r.lateMinutes > 0).length,
+        incomplete: rows.filter((r) => r.incomplete).length,
       },
       rows,
     },
   };
+}
+
+export interface AttendanceDayRow {
+  employeeId: number;
+  employeeNo: string;
+  fullName: string;
+  department: string | null;
+  biometricPin: string | null;
+  firstIn: string | null;
+  lastOut: string | null;
+  punchCount: number;
+  incomplete: boolean;
+  missingPunch: "in" | "out" | null;
+  lateMinutes: number;
+  onLeave: boolean;
+  leaveName: string | null;
+  onMission: boolean;
+  missionFullDay: boolean;
+  missionWindows: string[];
+  missingPunchWarning: boolean;
+  absent: boolean;
+  dayOffName: string | null;
+  dayOffKind: "holiday" | "weekly" | null;
+  shiftStart: string;
+  lateGraceMinutes: number;
+  hasException: boolean;
+  exemptFromPunch: boolean;
+}
+
+interface DayOff {
+  kind: "holiday" | "weekly";
+  name: string | null;
+}
+
+/**
+ * One employee's attendance for one day. Pure apart from the caller-supplied
+ * data, so the daily screen and the range report share the exact same rules —
+ * a second copy is how the two ends drift apart.
+ */
+function buildDayRow(input: {
+  employee: {
+    id: number;
+    employeeNo: string;
+    fullName: string;
+    department: string | null;
+    biometricPin: string | null;
+  };
+  punches: { time: string; status: string | null }[];
+  shiftStart: string;
+  shiftEnd: string;
+  graceMin: number;
+  exception: {
+    startTime: string | null;
+    lateGraceMinutes: number | null;
+    exemptFromPunch: boolean;
+    isActive: boolean;
+  } | null;
+  missions: {
+    missionType: string;
+    status: string;
+    startTime: string | null;
+    endTime: string | null;
+  }[];
+  leaveName: string | null;
+  dayOff: DayOff | null;
+}): AttendanceDayRow {
+  const { employee: e, punches, dayOff } = input;
+  // The device records a direction with every punch, so an arrival is a
+  // check-in and a departure a check-out. A lone check-out must NOT be read as
+  // an arrival at the departure time.
+  const day = pairDayPunches(punches);
+  const firstIn = day.firstIn;
+  const lastOut = day.lastOut;
+
+  const excusal = missionExcusal(input.missions);
+  const onMission = excusal.fullDay || excusal.windows.length > 0;
+
+  // Fold the company shift with this employee's exception: their own start
+  // time, their own grace, and whether a punch is required at all.
+  const resolved = resolveEmployeeShift(
+    { start: input.shiftStart, end: input.shiftEnd, lateGraceMinutes: input.graceMin },
+    input.exception,
+  );
+
+  // A punch inside an approved mission window is not lateness.
+  const firstInMin = firstIn ? minutesOf(firstIn) : null;
+  const coveredByMission = firstInMin !== null && withinMissionWindow(excusal.windows, firstInMin);
+  const late = coveredByMission
+    ? 0
+    : lateMinutesFor(
+        {
+          start: resolved.start,
+          lateGraceMinutes: resolved.lateGraceMinutes,
+          exemptFromPunch: resolved.exemptFromPunch,
+        },
+        firstIn,
+      );
+
+  // No punches is only absence when nothing excuses the day: a full-day
+  // mission, an approved leave, or an exemption from punching at all.
+  // A day with only ONE side of the pair is not complete — it is neither
+  // "present" (the other half was never punched) nor silently absent; it is
+  // flagged for the operator to settle with an exception or a mission.
+  const absent = dayOff
+    ? false
+    : isAbsent({
+        punchCount: day.punchCount,
+        exemptFromPunch: resolved.exemptFromPunch,
+        fullDayMission: excusal.fullDay,
+        onLeave: input.leaveName !== null,
+      });
+
+  // A timed mission with no punch at all is worth flagging: the window was
+  // excused but there is no evidence the employee was ever on site.
+  const missingPunchWarning =
+    excusal.windows.length > 0 && !excusal.fullDay && day.punchCount === 0;
+
+  return {
+    employeeId: e.id,
+    employeeNo: e.employeeNo,
+    fullName: e.fullName,
+    department: e.department,
+    biometricPin: e.biometricPin,
+    firstIn,
+    lastOut,
+    punchCount: day.punchCount,
+    incomplete: !dayOff && !absent && day.incomplete && !resolved.exemptFromPunch,
+    missingPunch: day.missing,
+    lateMinutes: late,
+    onLeave: input.leaveName !== null,
+    leaveName: input.leaveName,
+    onMission,
+    missionFullDay: excusal.fullDay,
+    missionWindows: excusal.windows.map((w) => `${w.startTime}-${w.endTime}`),
+    missingPunchWarning,
+    absent,
+    dayOffName: dayOff?.name ?? null,
+    dayOffKind: dayOff?.kind ?? null,
+    shiftStart: resolved.start,
+    lateGraceMinutes: resolved.lateGraceMinutes,
+    hasException: resolved.hasException,
+    exemptFromPunch: resolved.exemptFromPunch,
+  };
+}
+
+/**
+ * Attendance for a DATE RANGE — تقرير الحضور والانصراف.
+ *
+ * Built for the printable report: one row per employee per working day over a
+ * period, plus per-employee totals. All the punches, leaves, missions and
+ * exceptions for the whole range are loaded ONCE and grouped by day, so a month
+ * for the whole team is a fixed number of queries — not one per day per person.
+ */
+export async function buildAttendanceRange(
+  from: string,
+  to: string,
+  employeeIds?: number[],
+): Promise<AttendanceOutcome> {
+  if (!DATE_RE.test(from) || !DATE_RE.test(to)) {
+    return { ok: false, error: "تاريخ البداية أو النهاية غير صالح" };
+  }
+  if (from > to) return { ok: false, error: "تاريخ البداية بعد تاريخ النهاية" };
+  const days = daysBetween(from, to);
+  if (days.length > 62) {
+    return { ok: false, error: "المدة أطول من 62 يوم — قسّم التقرير لفترات أقصر" };
+  }
+
+  const configured = await loadWorkShift();
+  const shiftStart = configured?.start ?? "09:00";
+  const shiftEnd = configured?.end ?? "17:00";
+  const graceMin = configured?.lateGraceMinutes ?? 0;
+  const calendar = await loadCalendar();
+  const nextOf = (d: string) => {
+    const n = new Date(`${d}T00:00:00Z`);
+    n.setUTCDate(n.getUTCDate() + 1);
+    return n.toISOString().slice(0, 10);
+  };
+
+  const employees = await db
+    .select()
+    .from(hrEmployeesTable)
+    .where(
+      employeeIds && employeeIds.length > 0
+        ? and(eq(hrEmployeesTable.status, "active"), inArray(hrEmployeesTable.id, employeeIds))
+        : eq(hrEmployeesTable.status, "active"),
+    )
+    .orderBy(asc(hrEmployeesTable.employeeNo));
+  if (!employees.length) {
+    return { ok: true, body: { from, to, rows: [], employees: [], totals: emptyRangeTotals() } };
+  }
+
+  const punches = await db
+    .select()
+    .from(hrAttendancePunchesTable)
+    .where(
+      and(
+        gte(hrAttendancePunchesTable.punchedAt, `${from} 00:00:00`),
+        lt(hrAttendancePunchesTable.punchedAt, `${nextOf(to)} 00:00:00`),
+      ),
+    )
+    .orderBy(asc(hrAttendancePunchesTable.punchedAt));
+  const punchesByPinDay = new Map<string, { time: string; status: string | null }[]>();
+  for (const p of punches) {
+    const key = `${p.pin}|${p.punchedAt.slice(0, 10)}`;
+    const list = punchesByPinDay.get(key) ?? [];
+    list.push({ time: p.punchedAt.slice(11, 19), status: p.status });
+    punchesByPinDay.set(key, list);
+  }
+
+  const leaveRows = await db
+    .select({
+      employeeId: hrLeaveRequestsTable.employeeId,
+      nameAr: hrLeaveTypesTable.nameAr,
+      startDate: hrLeaveRequestsTable.startDate,
+      endDate: hrLeaveRequestsTable.endDate,
+    })
+    .from(hrLeaveRequestsTable)
+    .innerJoin(hrLeaveTypesTable, eq(hrLeaveTypesTable.id, hrLeaveRequestsTable.leaveTypeId))
+    .where(
+      and(
+        eq(hrLeaveRequestsTable.status, "approved"),
+        lte(hrLeaveRequestsTable.startDate, to),
+        gte(hrLeaveRequestsTable.endDate, from),
+      ),
+    );
+
+  const missionRows = await db
+    .select()
+    .from(hrMissionsTable)
+    .where(
+      and(
+        eq(hrMissionsTable.status, "approved"),
+        gte(hrMissionsTable.missionDate, from),
+        lte(hrMissionsTable.missionDate, to),
+      ),
+    );
+  const missionsByEmpDay = new Map<string, typeof missionRows>();
+  for (const m of missionRows) {
+    const key = `${m.employeeId}|${m.missionDate}`;
+    const list = missionsByEmpDay.get(key) ?? [];
+    list.push(m);
+    missionsByEmpDay.set(key, list);
+  }
+
+  const exceptionRows = await db.select().from(hrAttendanceExceptionsTable);
+  const exceptionByEmp = new Map(exceptionRows.map((r) => [r.employeeId, r]));
+
+  const byEmployee = new Map<number, AttendanceDayRow[]>();
+  for (const e of employees) {
+    const perDay: AttendanceDayRow[] = [];
+    for (const date of days) {
+      const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+      const holidayName = calendar.holidays.get(date) ?? null;
+      const dayOff: DayOff | null = holidayName
+        ? { kind: "holiday", name: holidayName }
+        : calendar.weeklyOffDays.includes(weekday)
+          ? { kind: "weekly", name: null }
+          : null;
+      const leave = leaveRows.find(
+        (l) => l.employeeId === e.id && l.startDate <= date && l.endDate >= date,
+      );
+      perDay.push(
+        buildDayRow({
+          employee: e,
+          punches: e.biometricPin ? (punchesByPinDay.get(`${e.biometricPin}|${date}`) ?? []) : [],
+          shiftStart,
+          shiftEnd,
+          graceMin,
+          exception: exceptionByEmp.get(e.id) ?? null,
+          missions: missionsByEmpDay.get(`${e.id}|${date}`) ?? [],
+          leaveName: leave?.nameAr ?? null,
+          dayOff,
+        }),
+      );
+    }
+    byEmployee.set(e.id, perDay);
+  }
+
+  const employeeSummaries = employees.map((e) => {
+    const perDay = byEmployee.get(e.id) ?? [];
+    const worked = perDay.filter((r) => !r.absent && !r.dayOffKind);
+    return {
+      employeeId: e.id,
+      employeeNo: e.employeeNo,
+      fullName: e.fullName,
+      department: e.department,
+      presentDays: worked.filter((r) => !r.onLeave && !r.onMission && !r.incomplete).length,
+      absentDays: perDay.filter((r) => r.absent).length,
+      leaveDays: perDay.filter((r) => r.onLeave).length,
+      missionDays: perDay.filter((r) => r.onMission).length,
+      lateDays: perDay.filter((r) => r.lateMinutes > 0).length,
+      lateMinutes: perDay.reduce((acc, r) => acc + r.lateMinutes, 0),
+      incompleteDays: perDay.filter((r) => r.incomplete).length,
+    };
+  });
+
+  // Attach the date on each row (buildDayRow does not know it), then keep only
+  // working days — a weekly day off / holiday is reported at the summary level.
+  const datedRows: (AttendanceDayRow & { date: string })[] = [];
+  for (const e of employees) {
+    const perDay = byEmployee.get(e.id) ?? [];
+    for (let i = 0; i < perDay.length; i += 1) {
+      const row = perDay[i] as AttendanceDayRow & { date: string };
+      row.date = days[i];
+      if (!row.dayOffKind) datedRows.push(row);
+    }
+  }
+
+  return {
+    ok: true,
+    body: {
+      from,
+      to,
+      days: days.length,
+      shiftStart,
+      shiftEnd,
+      lateGraceMinutes: graceMin,
+      employees: employeeSummaries,
+      rows: datedRows,
+      totals: {
+        employees: employeeSummaries.length,
+        presentDays: employeeSummaries.reduce((a, s) => a + s.presentDays, 0),
+        absentDays: employeeSummaries.reduce((a, s) => a + s.absentDays, 0),
+        leaveDays: employeeSummaries.reduce((a, s) => a + s.leaveDays, 0),
+        missionDays: employeeSummaries.reduce((a, s) => a + s.missionDays, 0),
+        lateDays: employeeSummaries.reduce((a, s) => a + s.lateDays, 0),
+        lateMinutes: employeeSummaries.reduce((a, s) => a + s.lateMinutes, 0),
+        incompleteDays: employeeSummaries.reduce((a, s) => a + s.incompleteDays, 0),
+      },
+    },
+  };
+}
+
+function emptyRangeTotals() {
+  return {
+    employees: 0,
+    presentDays: 0,
+    absentDays: 0,
+    leaveDays: 0,
+    missionDays: 0,
+    lateDays: 0,
+    lateMinutes: 0,
+    incompleteDays: 0,
+  };
+}
+
+/** Comma-separated employee ids from a query string; empty/invalid entries are ignored. */
+function parseEmployeeIds(raw: unknown): number[] | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const ids = String(raw)
+    .split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  return ids.length > 0 ? ids : undefined;
+}
+
+/** Every calendar date from `from` to `to` inclusive. */
+export function daysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  const cursor = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cursor <= end) {
+    out.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
 }
 
 router.get("/hr/attendance", async (req, res): Promise<void> => {
@@ -534,6 +842,119 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     return;
   }
   res.json(outcome.body);
+});
+
+router.get("/hr/attendance/range", async (req, res): Promise<void> => {
+  const outcome = await buildAttendanceRange(
+    String(req.query.from ?? ""),
+    String(req.query.to ?? ""),
+    parseEmployeeIds(req.query.employees),
+  );
+  if (!outcome.ok) {
+    res.status(400).json({ error: outcome.error });
+    return;
+  }
+  res.json(outcome.body);
+});
+
+function csvCell(v: unknown): string {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+router.get("/hr/attendance/range.csv", async (req, res): Promise<void> => {
+  const outcome = await buildAttendanceRange(
+    String(req.query.from ?? ""),
+    String(req.query.to ?? ""),
+    parseEmployeeIds(req.query.employees),
+  );
+  if (!outcome.ok) {
+    res.status(400).json({ error: outcome.error });
+    return;
+  }
+  const body = outcome.body as {
+    employees: {
+      employeeNo: string;
+      fullName: string;
+      department: string | null;
+      presentDays: number;
+      absentDays: number;
+      leaveDays: number;
+      missionDays: number;
+      lateDays: number;
+      lateMinutes: number;
+      incompleteDays: number;
+    }[];
+    rows: {
+      date: string;
+      employeeNo: string;
+      fullName: string;
+      firstIn: string | null;
+      lastOut: string | null;
+      lateMinutes: number;
+      absent: boolean;
+      incomplete: boolean;
+      onLeave: boolean;
+      onMission: boolean;
+    }[];
+  };
+  const header = [
+    "employee_no",
+    "name",
+    "department",
+    "present_days",
+    "absent_days",
+    "leave_days",
+    "mission_days",
+    "late_days",
+    "late_minutes",
+    "incomplete_days",
+  ];
+  const lines = [header.join(",")];
+  for (const s of body.employees) {
+    lines.push(
+      [
+        s.employeeNo,
+        s.fullName,
+        s.department,
+        s.presentDays,
+        s.absentDays,
+        s.leaveDays,
+        s.missionDays,
+        s.lateDays,
+        s.lateMinutes,
+        s.incompleteDays,
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  lines.push("");
+  lines.push(
+    ["date", "employee_no", "name", "first_in", "last_out", "late_minutes", "state"].join(","),
+  );
+  for (const r of body.rows) {
+    const state = r.absent
+      ? "absent"
+      : r.onLeave
+        ? "leave"
+        : r.onMission
+          ? "mission"
+          : r.incomplete
+            ? "incomplete"
+            : "present";
+    lines.push(
+      [r.date, r.employeeNo, r.fullName, r.firstIn ?? "", r.lastOut ?? "", r.lateMinutes, state]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="attendance-${req.query.from}-${req.query.to}.csv"`,
+  );
+  res.send("\ufeff" + lines.join("\r\n") + "\r\n");
 });
 
 router.get("/hr/punches/recent", async (req, res): Promise<void> => {
