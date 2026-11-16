@@ -5675,4 +5675,4 @@ a rule the MODEL could satisfy on its own).
 - **الاختبارات**: `whatsapp-chat-caption.test.ts` (6) — إزالة العلامة، التعليق يُرسل
   مع الملف، لا تعليق عند الفراغ، والتجميع برقم واحد. 2420 اختبار api-server + 84 واجهة
   يمر؛ tsc للـapi-server والـportal + prettier على كل المستودع + البناءان نظيفة.
-- **النشر**: معلّق — لا دفع/PR إلا بطلب صريح.
+- **النشر**: PR #506 squash-merged `fa96c39`؛ CI (Type Check · Tests · Format Check · Build+E2E) + Deploy-to-Render ناجحان؛ Render `dep-dbtkc16i0phs73dkd8u0` live؛ `/api/healthz` = 200 و`/api/whatsapp/{chats,send-media}` = **401** (مركّبة خلف requireAuth، لا 404) ⇒ الحذف وصل الإنتاج.
