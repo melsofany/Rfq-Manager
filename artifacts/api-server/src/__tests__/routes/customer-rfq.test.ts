@@ -236,12 +236,18 @@ let openRequestWhereCond: any = null;
 // WHERE built by the LIST route (search/status filter) — recorded so a guard can
 // prove the filter is applied in SQL rather than in JS.
 let listWhereCond: any = null;
+// The offset the list route applied to the built query, so a test can prove
+// paging is real (a mock serving rows directly cannot see it).
+let listOffset: number | null = null;
 
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
 function chainable(value: any, methods: Record<string, any> = {}): any {
   const obj: any = { then: (resolve: any) => Promise.resolve(value).then(resolve) };
   for (const [k, fn] of Object.entries(methods)) obj[k] = fn;
+  // The list routes chain .limit(...).offset(...); every chainable supports it so
+  // a branch that only models .limit() still resolves the paged query.
+  if (!obj.offset) obj.offset = vi.fn(() => chainable(value, methods));
   return obj;
 }
 
@@ -343,7 +349,12 @@ const dbMock: any = {
                 chainable(openRequestRows, {
                   limit: vi.fn(() => {
                     listWhereCond = cond;
-                    return chainable(listRows);
+                    return chainable(listRows, {
+                      offset: vi.fn((n: number) => {
+                        listOffset = n;
+                        return chainable(listRows);
+                      }),
+                    });
                   }),
                   then: (resolve: any) => {
                     openRequestWhereCond = cond;
@@ -908,6 +919,7 @@ beforeEach(() => {
   openOlderNotShown = 0;
   openRequestWhereCond = null;
   listWhereCond = null;
+  listOffset = null;
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -1105,6 +1117,20 @@ describe("GET /api/customer-rfq (list)", () => {
     // No search/status → no WHERE at all (the unbounded-in-query case is gone).
     await request(testApp).get("/api/customer-rfq");
     expect(listWhereCond ?? null).toBeNull();
+  });
+
+  it("applies offset to the query so every page is reachable", async () => {
+    // The list is paged so a page open never serializes the whole table. The
+    // page bound must not HIDE rows: the portal pages forward with `offset`
+    // until a short page arrives. A mock that serves rows directly cannot see
+    // the offset, so assert the BUILT query carries it.
+    listRows = [{ rfq: { ...insertedRfq, id: 9, internalNo: "CRFQ-9" } }];
+    const res = await request(testApp).get("/api/customer-rfq?limit=50&offset=100");
+    expect(res.status).toBe(200);
+    expect(listOffset).toBe(100);
+    // Defaults to 0 when the caller omits it.
+    await request(testApp).get("/api/customer-rfq?limit=50");
+    expect(listOffset).toBe(0);
   });
 
   it("marks an unpriced RFQ whose close date passed as expired", async () => {

@@ -22,6 +22,9 @@ vi.mock("../../middlewares/auth", () => ({
 function chainable(value: any, methods: Record<string, any> = {}): any {
   const obj: any = { then: (resolve: any) => Promise.resolve(value).then(resolve) };
   for (const [k, fn] of Object.entries(methods)) obj[k] = fn;
+  // The list route chains .limit(...).offset(...); every chainable supports it so
+  // a branch that only models .limit() still resolves the paged query.
+  if (!obj.offset) obj.offset = vi.fn(() => chainable(value, methods));
   return obj;
 }
 

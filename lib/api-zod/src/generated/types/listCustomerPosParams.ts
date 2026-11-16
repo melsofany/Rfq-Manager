@@ -10,9 +10,14 @@ export type ListCustomerPosParams = {
 search?: string;
 status?: string;
 /**
- * Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.
+ * Maximum rows to return (default 200, max 1000). The list is paged so a page load never serializes the whole table.
  * @minimum 1
  * @maximum 1000
  */
 limit?: number;
+/**
+ * Rows to skip (default 0). Lets the client page forward through the whole list, so a bounded page never hides rows.
+ * @minimum 0
+ */
+offset?: number;
 };

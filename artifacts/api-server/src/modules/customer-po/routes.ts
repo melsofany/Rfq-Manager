@@ -473,12 +473,13 @@ function serialize(
 
 // GET /customer-po — list with optional search
 router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
-  const { search, status, limit } = req.query as Record<string, string>;
+  const { search, status, limit, offset: offsetQ } = req.query as Record<string, string>;
 
   // Server-side search/filter + a bounded page. The route used to load all 886
   // POs, filter in JS, then run three rollup queries over every one of them and
   // serialize a 436 KB payload (~4 s measured) on every open. `search` is a SQL
-  // ILIKE and the page is capped, newest first.
+  // ILIKE and the result is paged, newest first. `offset` keeps every row
+  // reachable, so a bounded page is never a silent truncation.
   const conditions = [];
   if (status) conditions.push(eq(customerPosTable.status, status));
   if (search) {
@@ -494,12 +495,14 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
   }
 
   const maxRows = Math.min(Math.max(parseInt(String(limit ?? "200"), 10) || 200, 1), 1000);
+  const offset = Math.max(parseInt(String(offsetQ ?? "0"), 10) || 0, 0);
   const rows = await db
     .select({ po: customerPosTable })
     .from(customerPosTable)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(customerPosTable.createdAt))
-    .limit(maxRows);
+    .limit(maxRows)
+    .offset(offset);
 
   const filtered = rows;
 
