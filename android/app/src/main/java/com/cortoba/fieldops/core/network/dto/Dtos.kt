@@ -258,6 +258,11 @@ data class DeliveryItem(
     val deliveredQty: Double = 0.0,
     val rejectedByCustomerQty: Double = 0.0,
     val availableQty: Double = 0.0,
+    /**
+     * The line has a supplier PO that has not been received yet. It is shown so
+     * the rep knows it exists, but it cannot be delivered until the goods land.
+     */
+    val awaitingSupplierReceipt: Boolean = false,
     val deliveryStatus: String = "",
 )
 

@@ -735,6 +735,163 @@ def main() -> int:
                   set(d8.get("poNos") or []) == {"SPO-TWO-A", "SPO-TWO-B"},
                   f"poNos={d8.get('poNos')}")
 
+    print("\n[12f] a supplier-linked line is shown but locked until it is received")
+    # The delivery screen must SHOW a customer line whose supplier PO has not been
+    # received yet — the rep has to know the work exists — while keeping it
+    # locked. A line with no supplier PO (a street purchase) stays deliverable
+    # immediately, and a cancelled supplier PO unlocks the line for an
+    # alternative source.
+    sup_lock = sql(
+        "INSERT INTO suppliers (name, phone, address, contact_person) "
+        "VALUES ('E2E Supplier Lock', '201666666666', 'القاهرة', 'نور') RETURNING id;"
+    )
+    lock_cpo = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_name, status) "
+        "VALUES ('CPO-LOCK', 'P26E-LOCK', 'عميل الانتظار', 'confirmed') RETURNING id;"
+    )
+    # Line A: issued to a supplier, not received yet → shown but locked.
+    lock_cpi_a = sql(
+        "INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+        f"VALUES ({lock_cpo}, 'بند بانتظار المورد', 5, 'قطعة') RETURNING id;"
+    )
+    lock_po = sql(
+        "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+        "VALUES ('SPO-LOCK', 'SPO-LOCK', 'draft') RETURNING id;"
+    )
+    sql(
+        "INSERT INTO purchase_order_items "
+        "(po_id, line_item, description, qty, uom, supplier_id, line_status, "
+        " customer_po_item_id) "
+        f"VALUES ({lock_po}, '1', 'بند بانتظار المورد', 5, 'قطعة', {sup_lock}, "
+        f"'pending', {lock_cpi_a});"
+    )
+    # Line B: bought on the street (no supplier PO) → deliverable immediately.
+    lock_cpi_b = sql(
+        "INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+        f"VALUES ({lock_cpo}, 'بند شراء من الشارع', 3, 'قطعة') RETURNING id;"
+    )
+    # A delivery task is what puts the customer on the rep's screen.
+    lock_assign = sql(
+        "INSERT INTO work_order_assignments "
+        "(po_id, customer_po_id, customer_po_item_id, kind, status, hr_employee_id, "
+        " representative_name, representative_phone) "
+        f"VALUES ({lock_po}, {lock_cpo}, {lock_cpi_a}, 'delivery', 'sent', {emp}, "
+        "'مندوب اختبار', '201000000001') RETURNING id;"
+    )
+    status, d_lock = api("GET", "/api/mobile/deliveries", token)
+    lock_card = next(
+        (t for t in d_lock.get("tasks", []) if t["customerName"] == "عميل الانتظار"), None
+    )
+    check("a customer with an awaiting line stays on the delivery list",
+          lock_card is not None,
+          f"customers={[t['customerName'] for t in d_lock.get('tasks', [])]}")
+    if lock_card:
+        # The seed creates name-only customers, so the card key carries the name.
+        kind, _, value = lock_card["key"].partition(":")
+        q_lock = f"id={value}" if kind == "id" else f"name={quote(value)}"
+        status, cd_lock = api("GET", f"/api/mobile/deliveries/customer?{q_lock}", token)
+    else:
+        status, cd_lock = 0, {}
+    check("the customer detail loads", status == 200, f"status={status}")
+    lock_po_detail = next(
+        (p for p in cd_lock.get("purchaseOrders", []) if p["customerPoNo"] == "P26E-LOCK"),
+        None,
+    )
+    check("the purchase order is shown while a line awaits its supplier",
+          lock_po_detail is not None,
+          f"POs={[p['customerPoNo'] for p in cd_lock.get('purchaseOrders', [])]}")
+    awaiting_line = None
+    street_line = None
+    if lock_po_detail:
+        by_id = {i["customerPoItemId"]: i for i in lock_po_detail["items"]}
+        awaiting_line = by_id.get(int(lock_cpi_a))
+        street_line = by_id.get(int(lock_cpi_b))
+        check("BOTH lines are listed (the awaiting one is not hidden)",
+              len(lock_po_detail["items"]) == 2,
+              f"items={[i['description'] for i in lock_po_detail['items']]}")
+        check("the supplier-linked line is flagged as awaiting receipt",
+              awaiting_line is not None
+              and awaiting_line.get("awaitingSupplierReceipt") is True,
+              f"line={awaiting_line}")
+        check("the awaiting line offers zero deliverable quantity",
+              awaiting_line is not None and abs(float(awaiting_line["availableQty"])) < 1e-6,
+              f"availableQty={awaiting_line and awaiting_line['availableQty']}")
+        check("the street-bought line is not awaiting anything",
+              street_line is not None
+              and street_line.get("awaitingSupplierReceipt") is False,
+              f"line={street_line}")
+        check("the street-bought line is deliverable immediately",
+              street_line is not None and abs(float(street_line["availableQty"]) - 3) < 1e-6,
+              f"availableQty={street_line and street_line['availableQty']}")
+
+    # Locked means locked: the server refuses a delivery of the awaiting line.
+    if awaiting_line is not None and lock_card is not None:
+        status, body = api(
+            "POST", f"/api/mobile/deliveries/{lock_assign}/confirm", token,
+            {"items": [{"customerPoItemId": int(lock_cpi_a), "deliveredQty": 5}],
+             "clientUuid": "e2e-lock-1"})
+        check("delivering an unreceived line is refused",
+              status == 400, f"status={status} body={body}")
+
+    # The street-bought line can be delivered right away, in the same task.
+    if street_line is not None:
+        status, body = api(
+            "POST", f"/api/mobile/deliveries/{lock_assign}/confirm", token,
+            {"items": [{"customerPoItemId": int(lock_cpi_b), "deliveredQty": 3}],
+             "clientUuid": "e2e-lock-street"})
+        check("the street-bought line is delivered immediately",
+              status == 200, f"status={status} body={body}")
+
+    # A cancelled supplier PO no longer supplies the line, so it becomes
+    # deliverable from an alternative source instead of waiting forever.
+    cancel_cpo = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_name, status) "
+        "VALUES ('CPO-CANCEL', 'P26E-CANCEL', 'عميل الإلغاء', 'confirmed') RETURNING id;"
+    )
+    cancel_cpi = sql(
+        "INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+        f"VALUES ({cancel_cpo}, 'بند مورد ملغي', 4, 'قطعة') RETURNING id;"
+    )
+    cancel_po = sql(
+        "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+        "VALUES ('SPO-CANCEL', 'SPO-CANCEL', 'draft') RETURNING id;"
+    )
+    sql(
+        "INSERT INTO purchase_order_items "
+        "(po_id, line_item, description, qty, uom, supplier_id, line_status, "
+        " customer_po_item_id) "
+        f"VALUES ({cancel_po}, '1', 'بند مورد ملغي', 4, 'قطعة', {sup_lock}, "
+        f"'cancelled', {cancel_cpi});"
+    )
+    cancel_assign = sql(
+        "INSERT INTO work_order_assignments "
+        "(po_id, customer_po_id, customer_po_item_id, kind, status, hr_employee_id, "
+        " representative_name, representative_phone) "
+        f"VALUES ({cancel_po}, {cancel_cpo}, {cancel_cpi}, 'delivery', 'sent', {emp}, "
+        "'مندوب اختبار', '201000000001') RETURNING id;"
+    )
+    status, cd_cancel = api(
+        "GET", f"/api/mobile/deliveries/customer?name={quote('عميل الإلغاء')}", token)
+    check("the cancelled-supplier customer detail loads", status == 200, f"status={status}")
+    cancel_line = None
+    if status == 200:
+        cpos = cd_cancel.get("purchaseOrders", [])
+        if cpos:
+            cancel_line = cpos[0]["items"][0]
+        check("a cancelled supplier PO does not lock its customer line",
+              cancel_line is not None
+              and cancel_line.get("awaitingSupplierReceipt") is False,
+              f"line={cancel_line}")
+        check("the cancelled-supplier line is deliverable from an alternative source",
+              cancel_line is not None and abs(float(cancel_line["availableQty"]) - 4) < 1e-6,
+              f"availableQty={cancel_line and cancel_line['availableQty']}")
+    status, body = api(
+        "POST", f"/api/mobile/deliveries/{cancel_assign}/confirm", token,
+        {"items": [{"customerPoItemId": int(cancel_cpi), "deliveredQty": 4}],
+         "clientUuid": "e2e-cancel-deliver"})
+    check("delivering a line whose supplier PO was cancelled is accepted",
+          status == 200, f"status={status} body={body}")
+
     print("\n[13] maintenance mode freezes operations but not the account")
     sql(
         """

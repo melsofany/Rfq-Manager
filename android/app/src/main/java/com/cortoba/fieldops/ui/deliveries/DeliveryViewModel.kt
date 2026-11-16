@@ -73,7 +73,19 @@ data class DeliveryEntry(
     val deliveredQty: String,
     val rejectedQty: String = "",
     val rejectionReason: String = "",
+    /**
+     * The line's supplier PO has not been received yet. The line is visible so
+     * the rep knows about it, but there is nothing in hand to deliver.
+     */
+    val awaitingSupplierReceipt: Boolean = false,
 ) {
+    /**
+     * Whether the rep can act on this line now. A line still waiting for its
+     * supplier receipt has a ceiling of zero, so it is never deliverable.
+     */
+    val isDeliverable: Boolean
+        get() = !awaitingSupplierReceipt && availableQty > 1e-6
+
     /** Selected state of the line: derived from the typed quantities. */
     val mode: DeliveryLineMode
         get() {
@@ -88,6 +100,10 @@ data class DeliveryEntry(
 
 /** How a single PO line is being settled. */
 enum class DeliveryLineMode { FULL, PARTIAL, REJECT }
+
+/** Shown when the rep tries to act on a line still waiting for its receipt. */
+const val AWAITING_SUPPLIER_MESSAGE =
+    "البند في انتظار استلام المورد — لا يمكن تسليمه قبل استلامه"
 
 /** Common rejection reasons, plus «أخرى» for a free-text reason. */
 val DELIVERY_REJECTION_REASONS = listOf(
@@ -190,6 +206,10 @@ class DeliveryViewModel @Inject constructor(
      */
     fun deliverLineFull(customerKey: String?, customerPoItemId: Int) {
         val entry = _form.value.entries.firstOrNull { it.customerPoItemId == customerPoItemId } ?: return
+        if (!entry.isDeliverable) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
         sendLines(
             customerKey,
             listOf(entry.copy(deliveredQty = formatQty(entry.availableQty), rejectionReason = "")),
@@ -202,6 +222,10 @@ class DeliveryViewModel @Inject constructor(
      */
     fun rejectLine(customerKey: String?, customerPoItemId: Int) {
         val entry = _form.value.entries.firstOrNull { it.customerPoItemId == customerPoItemId } ?: return
+        if (!entry.isDeliverable) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
         val reason = entry.rejectionReason.trim()
         if (reason.isBlank()) {
             _form.update { it.copy(error = "اختر سبب رفض الصنف أولاً") }
@@ -213,6 +237,10 @@ class DeliveryViewModel @Inject constructor(
     /** «تنفيذ» on a partial line: send the quantity the rep typed. */
     fun deliverLinePartial(customerKey: String?, customerPoItemId: Int) {
         val entry = _form.value.entries.firstOrNull { it.customerPoItemId == customerPoItemId } ?: return
+        if (!entry.isDeliverable) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
         val delivered = entry.deliveredQty.toDoubleOrNull()
         if (delivered == null || delivered < 0) {
             _form.update { it.copy(error = "أدخل كمية صحيحة") }
@@ -236,15 +264,21 @@ class DeliveryViewModel @Inject constructor(
 
     /** «تسليم كلي» on a whole PO: deliver every line of that order at once. */
     fun deliverPoFull(customerKey: String?, customerPoId: Int) {
-        val lines = _form.value.entries.filter { it.customerPoId == customerPoId }
-        if (lines.isEmpty()) return
+        val lines = _form.value.entries.filter { it.customerPoId == customerPoId && it.isDeliverable }
+        if (lines.isEmpty()) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
         sendLines(customerKey, lines.map { it.copy(deliveredQty = formatQty(it.availableQty), rejectionReason = "") })
     }
 
     /** «رفض كلي» on a whole PO: reject every line with the chosen reason. */
     fun rejectPo(customerKey: String?, customerPoId: Int, reason: String) {
-        val lines = _form.value.entries.filter { it.customerPoId == customerPoId }
-        if (lines.isEmpty()) return
+        val lines = _form.value.entries.filter { it.customerPoId == customerPoId && it.isDeliverable }
+        if (lines.isEmpty()) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
         if (reason.isBlank()) {
             _form.update { it.copy(error = "اختر سبب الرفض أولاً") }
             return
@@ -269,7 +303,14 @@ class DeliveryViewModel @Inject constructor(
      * customer so a settled order disappears and the rest stay.
      */
     private fun sendLines(customerKey: String?, lines: List<DeliveryEntry>) {
-        val byAssignment = lines.filter { it.assignmentId != null }.groupBy { it.assignmentId!! }
+        // Never send a line whose goods have not arrived — the server would
+        // reject it, and the rep would lose the rest of the batch with it.
+        val deliverable = lines.filter { it.isDeliverable }
+        if (deliverable.isEmpty()) {
+            _form.update { it.copy(error = AWAITING_SUPPLIER_MESSAGE) }
+            return
+        }
+        val byAssignment = deliverable.filter { it.assignmentId != null }.groupBy { it.assignmentId!! }
         if (byAssignment.isEmpty()) {
             _form.update { it.copy(error = "لا توجد مهمة تسليم مرتبطة بهذا الأمر") }
             return
@@ -343,7 +384,15 @@ class DeliveryViewModel @Inject constructor(
                         availableQty = item.availableQty,
                         alreadyDeliveredQty = item.deliveredQty,
                         alreadyRejectedQty = item.rejectedByCustomerQty,
-                        deliveredQty = com.cortoba.fieldops.core.util.formatQty(item.availableQty),
+                        // An awaiting line has nothing to hand over yet, so the
+                        // field starts empty — pre-filling it would look like a
+                        // deliverable quantity that does not exist.
+                        deliveredQty = if (item.awaitingSupplierReceipt) {
+                            ""
+                        } else {
+                            com.cortoba.fieldops.core.util.formatQty(item.availableQty)
+                        },
+                        awaitingSupplierReceipt = item.awaitingSupplierReceipt,
                     )
                 },
                 error = null,
@@ -365,7 +414,9 @@ class DeliveryViewModel @Inject constructor(
             if (current.seededForCustomer == key && current.entries.isNotEmpty()) return@update current
             val entries = detail.purchaseOrders.flatMap { po ->
                 po.items
-                    .filter { it.availableQty > 0 }
+                    // An awaiting line is shown too: it is work the rep must see,
+                    // it just cannot be executed until the supplier receipt lands.
+                    .filter { it.availableQty > 0 || it.awaitingSupplierReceipt }
                     .map { item ->
                         DeliveryEntry(
                             customerPoItemId = item.customerPoItemId,
@@ -377,7 +428,12 @@ class DeliveryViewModel @Inject constructor(
                             availableQty = item.availableQty,
                             alreadyDeliveredQty = item.deliveredQty,
                             alreadyRejectedQty = item.rejectedByCustomerQty,
-                            deliveredQty = com.cortoba.fieldops.core.util.formatQty(item.availableQty),
+                            deliveredQty = if (item.awaitingSupplierReceipt) {
+                                ""
+                            } else {
+                                com.cortoba.fieldops.core.util.formatQty(item.availableQty)
+                            },
+                            awaitingSupplierReceipt = item.awaitingSupplierReceipt,
                         )
                     }
             }

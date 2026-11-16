@@ -152,15 +152,28 @@ describe("POST /customer-po/:id/deliveries — no-delivery-before-receipt guard"
     expect(res.body.error).toMatch(/لا يمكن التسليم قبل الاستلام/);
   });
 
-  it("rejects delivery when the linked supplier line was rejected", async () => {
+  it("allows delivery when the linked supplier line was rejected (bought elsewhere)", async () => {
+    // A rejected/cancelled supplier PO no longer supplies the line, so it is
+    // sourced from an alternative channel and must be deliverable immediately.
     acceptedRows = [{ accepted: "0", lineStatus: "rejected" }];
 
     const res = await request(testApp)
       .post("/api/customer-po/5/deliveries")
       .send({ customerPoItemId: 42, deliveredQty: "5" });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/لا يمكن التسليم قبل الاستلام/);
+    expect(res.status).toBe(201);
+    expect(res.body.ok).toBe(true);
+  });
+
+  it("allows delivery when the linked supplier PO was cancelled (bought elsewhere)", async () => {
+    acceptedRows = [{ accepted: "0", lineStatus: "cancelled" }];
+
+    const res = await request(testApp)
+      .post("/api/customer-po/5/deliveries")
+      .send({ customerPoItemId: 42, deliveredQty: "10" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.ok).toBe(true);
   });
 
   it("allows delivery when the supplier line was accepted (received)", async () => {
