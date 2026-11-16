@@ -1707,6 +1707,29 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_org_profiles (updated_at DESC);
     `);
 
+    // The agent's durable task log: plan, steps, tools, errors and cost of every
+    // run. Its OWN statement — statements in one client.query share an implicit
+    // transaction, so a sibling failure would roll this CREATE back and the
+    // table would silently not exist.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_task_log (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        plan JSONB,
+        steps JSONB,
+        tools_used JSONB,
+        model_calls INTEGER NOT NULL DEFAULT 0,
+        tool_calls INTEGER NOT NULL DEFAULT 0,
+        errors JSONB,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_task_log_created
+        ON ai_assistant_task_log (created_at DESC);
+    `);
+
     // ── Search / document-number indexes (P12) ──────────────────────────────
     // The assistant resolves documents by number and suppliers/customers by name
     // with ILIKE '%term%'. Without indexes those become sequential scans as the

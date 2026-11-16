@@ -224,3 +224,24 @@ export const aiAssistantIncidentsTable = pgTable("ai_assistant_incidents", {
   detail: jsonb("detail").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * A durable record of every agent task: the plan, the steps, the tools used,
+ * the errors and the cost. `metrics.ts` keeps its history in memory and loses
+ * it on restart; an auditable log must survive, because the question that
+ * matters is «what did it do when it produced this figure», asked later.
+ */
+export const aiAssistantTaskLogTable = pgTable("ai_assistant_task_log", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  goal: text("goal").notNull(),
+  outcome: text("outcome").notNull(),
+  plan: jsonb("plan"),
+  steps: jsonb("steps"),
+  toolsUsed: jsonb("tools_used"),
+  modelCalls: integer("model_calls").notNull().default(0),
+  toolCalls: integer("tool_calls").notNull().default(0),
+  errors: jsonb("errors"),
+  durationMs: integer("duration_ms").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});

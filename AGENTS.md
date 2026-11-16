@@ -5435,3 +5435,35 @@ paths, with `handleRepMessage` and `handleWorkOrderButton` still after it — so
 the representative bot and the whole-PO flow keep working.
 
 2410 api-server tests pass; `tsc --build` (libs) + api-server + prettier clean.
+
+### The durable task log, and the guard that had to be extended (not weakened)
+
+`metrics.ts` keeps its history in a MEMORY ring buffer, so a restart loses it.
+The operator asked for a record of the plan, steps, tools, results, errors and
+cost — an in-memory buffer answers «what happened just now», not «what did it do
+when it produced this figure», asked the next day. `task-log.ts` writes that row
+to `ai_assistant_task_log` (DDL in `init-db.ts` as its OWN statement — a sibling
+failure would roll the CREATE back silently). The write happens AFTER the answer
+exists and is best-effort: bookkeeping must never turn a produced answer into a
+failure.
+
+`ai-hard-limits.test.ts` then failed with
+`task-log.ts: insert(aiAssistantTaskLogTable)`. **The guard was right and the
+fix was to extend its list, not to weaken the guard**: it protects the rule that
+the agent cannot write a BUSINESS table (a supplier, an RFQ, a price). The task
+log is the assistant's OWN bookkeeping, on the same footing as `messages`,
+`jobs` and `memories`, which the list already allowed. The comment now says so,
+because the next person to add an assistant table will hit the same failure and
+needs to know which side of the line it falls on.
+
+Two more guards fired during this work and both were correct:
+
+- `case "supplier_po"` / `"customer_po"` are DOCUMENT TYPES inside
+  `lookupDocument`, not tool dispatches — slice such a guard from
+  `executeToolInner` or it reports false alarms.
+- **A regression I had just introduced**: routing an unknown tool name through
+  the permission layer returned early and skipped the dispatcher's `default`
+  branch that LOGS it. A hallucinated tool that is refused silently is invisible
+  in the logs and the model retries it forever. Only KNOWN tools are judged now.
+
+2412 api-server tests pass; tsc (libs + api-server) + prettier clean.
