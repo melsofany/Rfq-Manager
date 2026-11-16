@@ -5646,3 +5646,33 @@ a rule the MODEL could satisfy on its own).
   ثلاث حفظات متتالية لا تضيف صفًا، الصف الملغى لا يُحيا، التفاصيل تُسقط الملغى)
   — **كلها تفشل ضد الكود قبل الإصلاح** (تحقّق بالـstash). 2446 اختبار api-server
   + 84 واجهة يمر؛ tsc للـapi-server والـportal + prettier على كل المستودع نظيفة.
+
+## حذف بوت الموردين + إصلاح المحادثة المكررة + تعليق مع المرفق (feat/whatsapp-supplier-bot-removal-and-chat-fixes)
+
+ثلاث مهام في شاشة الواتساب، بلا حذف أي رسالة قديمة.
+
+- **حذف بوت الموردين بالكامل.** `supplier-bot.ts` أُزيل، وكتلة `handleSupplierBotMessage`
+  + `handleSupplierRequestPick` + `recordSupplierBotInbound` + الدوال المساعدة
+  (`rfqNoOf`/`itemLabelOf`/`showItemDetail`/`advanceStep`/`requestHumanAgent`/
+  `notifyResponsibleEmployee`/`employeePhoneOf`/`fallbackHumanAgentPhone`) من
+  `routes.ts`، ونداءات التوزيع من **المسارين** (`Whatsapp.on.message` و
+  `dispatchWebhookPayload`). حُذفت أيضاً الدوال المُصدَّرة من `service.ts`
+  (`sendSupplierBot*`، `sendSupplierRequestPicker/HandedOff/Confirmed`،
+  `notifyEmployeeOfSupplier*`) واختبارها `supplier-bot.test.ts`. `supplier-requests.ts`
+  بقي فيه `canonicalPhone` + `supplierByPhone` فقط (تحديد هوية المُرسِل ليس ميزة بوت).
+  **لا `sup_`/`rfq_pick` حمولات متبقية** — لا أزرار ميتة.
+- **المحادثة المكررة**: العدد كان يُجمَّع بـ`(phone, supplier_id, name)`. رقم مورد
+  مخزَّن بعلامة اتجاه خفية (`⁦+201155351999`، U+2066) لا يطابق wa_id العاري من ميتا،
+  فتُكتب صفوفه الواردة بـ`supplier_id = NULL` بجانب الصادرة التي تحمل المورد ⇒
+  **محادثتان لرقم واحد**. الإصلاح: (1) `normalizePhone` يزيل علامات Bidi/التنسيق،
+  (2) `GET /whatsapp/chats` يُجمِّع بالهاتف **وحده** ويستخرج المورد بـ`MAX(supplier_id)`
+  مع استعلام أسماء واحد. **لا تعد التجميع على `supplier_id`** — أي رسالة بلا مورد
+  تعيد تقسيم الخيط.
+- **تعليق مع المرفق في نفس الرسالة**: `/whatsapp/send-media` يقرأ `caption` من الـFormData
+  ويمرّره إلى `Image`/`Video`/`Document` (الصوت لا يقبل تعليقاً). يُخزَّن في `body`
+  كـ`[placeholder]\n<caption>`، و`MediaMessage` في الواجهة يفصله ويعرض التعليق تحت
+  الملف. `handleSend` في الواجهة يُرسل النص المكتوب كـ`caption` مع الملف ويُفرِّغ الحقل.
+- **الاختبارات**: `whatsapp-chat-caption.test.ts` (6) — إزالة العلامة، التعليق يُرسل
+  مع الملف، لا تعليق عند الفراغ، والتجميع برقم واحد. 2420 اختبار api-server + 84 واجهة
+  يمر؛ tsc للـapi-server والـportal + prettier على كل المستودع + البناءان نظيفة.
+- **النشر**: معلّق — لا دفع/PR إلا بطلب صريح.

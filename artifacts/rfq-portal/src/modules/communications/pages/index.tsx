@@ -229,8 +229,30 @@ function Avatar({ name, phone, size = 40 }: { name: string; phone: string; size?
 }
 
 // ─── MediaMessage Component ───────────────────────────────────────────────
+/**
+ * Split a media message's stored body into its file placeholder and the
+ * operator's caption. The server stores `[صورة: x.jpg]\n<caption>` when a file
+ * is sent with text, and just the placeholder otherwise — so the caption is
+ * whatever follows the first newline, and a body with no placeholder is a
+ * caption on its own (an inbound image whose text we recorded).
+ */
+function splitMediaBody(body: string | null | undefined): {
+  placeholder: string | null;
+  caption: string | null;
+} {
+  if (!body) return { placeholder: null, caption: null };
+  const nl = body.indexOf("\n");
+  if (nl === -1) {
+    return /^\[[^\]]+\]$/.test(body.trim()) || body.startsWith("[")
+      ? { placeholder: body, caption: null }
+      : { placeholder: null, caption: body };
+  }
+  return { placeholder: body.slice(0, nl), caption: body.slice(nl + 1).trim() || null };
+}
+
 function MediaMessage({ msg }: { msg: Message }) {
   const url = `/api/whatsapp/media/${msg.mediaId}`;
+  const { caption } = splitMediaBody(msg.body);
   if (msg.mediaType === "image") {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" className="block">
@@ -242,17 +264,26 @@ function MediaMessage({ msg }: { msg: Message }) {
             (e.target as HTMLImageElement).style.display = "none";
           }}
         />
-        {msg.body && !msg.body.startsWith("[صورة") && !msg.body.startsWith("[ملصق") && (
-          <p className="text-sm mt-1">{msg.body}</p>
+        {caption && (
+          <p className="text-sm mt-1 whitespace-pre-wrap" dir="auto">
+            {caption}
+          </p>
         )}
       </a>
     );
   }
   if (msg.mediaType === "audio") {
     return (
-      <div className="flex items-center gap-2">
-        <Mic size={16} className="flex-shrink-0 opacity-70" />
-        <audio controls src={url} className="h-8 max-w-[180px]" />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <Mic size={16} className="flex-shrink-0 opacity-70" />
+          <audio controls src={url} className="h-8 max-w-[180px]" />
+        </div>
+        {caption && (
+          <p className="text-sm whitespace-pre-wrap" dir="auto">
+            {caption}
+          </p>
+        )}
       </div>
     );
   }
@@ -260,21 +291,32 @@ function MediaMessage({ msg }: { msg: Message }) {
     return (
       <div className="flex flex-col gap-1">
         <video controls src={url} className="max-w-[260px] rounded-lg" />
-        {msg.body && !msg.body.startsWith("[فيديو") && <p className="text-sm">{msg.body}</p>}
+        {caption && (
+          <p className="text-sm whitespace-pre-wrap" dir="auto">
+            {caption}
+          </p>
+        )}
       </div>
     );
   }
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-    >
-      <FileText size={16} className="flex-shrink-0 opacity-70" />
-      <span className="text-sm underline truncate max-w-[160px]">{msg.filename || msg.body}</span>
-      <Download size={14} className="flex-shrink-0 opacity-60" />
-    </a>
+    <div className="flex flex-col gap-1">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+      >
+        <FileText size={16} className="flex-shrink-0 opacity-70" />
+        <span className="text-sm underline truncate max-w-[160px]">{msg.filename || "مرفق"}</span>
+        <Download size={14} className="flex-shrink-0 opacity-60" />
+      </a>
+      {caption && (
+        <p className="text-sm whitespace-pre-wrap" dir="auto">
+          {caption}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -657,6 +699,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         fd.append("phone", selected);
         if (selectedChat?.supplierId != null)
           fd.append("supplierId", String(selectedChat.supplierId));
+        // Anything typed in the composer travels WITH the file as its caption,
+        // in one WhatsApp message — not as a separate message after it.
+        const caption = draft.trim();
+        if (caption) fd.append("caption", caption);
         fd.append("file", pendingFile.file, pendingFile.file.name);
         const r = await fetch("/api/whatsapp/send-media", {
           method: "POST",
@@ -670,7 +716,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           showToast("تم إرسال الملف ✓", true);
         }
         clearPendingFile();
+        setDraft("");
         setUploading(false);
+        void loadChats();
+        if (selected) void loadMessages(selected);
       } else {
         const text = draft.trim();
         const body: Record<string, unknown> = {
@@ -1342,7 +1391,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                 </div>
               )}
               <div className="flex-1" />
-              <span className="text-xs text-muted-foreground">جاهز للإرسال</span>
+              <span className="text-xs text-muted-foreground">
+                {draft.trim() ? "سيُرسل النص كتعليق مع الملف" : "اكتب تعليقًا مع الملف إن أردت"}
+              </span>
             </div>
           )}
 
