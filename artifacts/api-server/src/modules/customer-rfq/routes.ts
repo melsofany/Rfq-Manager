@@ -272,6 +272,12 @@ function formatQty(qty: string | null): string | null {
 // Match a submitted customer-RFQ item (which carries no id) to its stored row,
 // by partNo first then lineItem, ignoring case and whitespace. Drives both price
 // preservation and the UPDATE-in-place save.
+//
+// `claimed` excludes rows already matched earlier in the same save. A submission
+// may legitimately repeat a line (two rows of the same part), and each one must
+// consume a DISTINCT stored row — without this, the second copy re-matched the
+// row the first had already taken, so `toInsert` received it and a NEW row was
+// inserted on every save: items multiplied (RFQ 5551 had 14 rows for 3 items).
 function findItemByKey<
   T extends {
     id: number;
@@ -279,11 +285,17 @@ function findItemByKey<
     lineItem: string | null;
     unitPrice: string | null;
   },
->(rows: T[], it: { partNo?: string; lineItem?: string; description?: string }): T | undefined {
+>(
+  rows: T[],
+  it: { partNo?: string; lineItem?: string; description?: string },
+  claimed?: Set<number>,
+): T | undefined {
   const key = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").trim().toLowerCase();
+  const free = (row: T) => !claimed || !claimed.has(row.id);
   const partNo = key(it.partNo);
   const lineItem = key(it.lineItem);
   for (const row of rows) {
+    if (!free(row)) continue;
     if (partNo && key(row.partNo) === partNo) return row;
     if (lineItem && key(row.lineItem) === lineItem) return row;
   }
@@ -293,7 +305,8 @@ function findItemByKey<
   const description = key(it.description);
   if (description) {
     for (const row of rows) {
-      if (key((row as { description?: string | null }).description) === description) return row;
+      if (free(row) && key((row as { description?: string | null }).description) === description)
+        return row;
     }
   }
   return undefined;
@@ -437,7 +450,12 @@ async function computeRequestStatusForRfq(
   const items = await db
     .select()
     .from(customerRfqItemsTable)
-    .where(eq(customerRfqItemsTable.customerRfqId, rfqId));
+    .where(
+      and(
+        eq(customerRfqItemsTable.customerRfqId, rfqId),
+        eq(customerRfqItemsTable.isCancelled, false),
+      ),
+    );
 
   const itemIds = items.map((i) => i.id);
   const totalItems = items.length;
@@ -3210,7 +3228,12 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         unitPrice: customerRfqItemsTable.unitPrice,
       })
       .from(customerRfqItemsTable)
-      .where(eq(customerRfqItemsTable.customerRfqId, id));
+      .where(
+        and(
+          eq(customerRfqItemsTable.customerRfqId, id),
+          eq(customerRfqItemsTable.isCancelled, false),
+        ),
+      );
     return currentDbItemsForPricing;
   };
 
@@ -3218,10 +3241,17 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // lineItem (the submitted items carry no id). Used both to preserve prices and
   // to UPDATE in place rather than delete+recreate — the row ids are referenced
   // by customer-PO and supplier-offer links.
+  //
+  // `claimed` holds the row ids already matched in THIS save. A row may be
+  // claimed once: a repeated line in the submission must consume a DISTINCT
+  // stored row (or be inserted), never re-match the same row — re-matching it
+  // would drop the duplicate from `toInsert` while the loop's else-branch
+  // inserted it anyway, which is how items multiplied on every save.
   const findDbItem = (
     rows: typeof currentDbItemsForPricing,
     it: { partNo?: string; lineItem?: string; description?: string },
-  ) => findItemByKey(rows ?? [], it);
+    claimed?: Set<number>,
+  ) => findItemByKey(rows ?? [], it, claimed);
 
   if (status === "sent" && validItems !== undefined) {
     const unpriced = validItems.filter(
@@ -3352,7 +3382,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     for (const it of validItems!) {
       const explicitPrice =
         privileged && it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null;
-      const existing = findDbItem(existingRows, it);
+      const existing = findDbItem(existingRows, it, keptIds);
       const price = explicitPrice ?? existing?.unitPrice ?? null;
       const fields = {
         partNo: it.partNo?.trim() || null,
