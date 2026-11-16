@@ -5317,3 +5317,52 @@ confident wrong answer, which is worse than no tool, because the answer now look
 like it came from the system of record. **Probe a new tool against production
 before believing it**; the unit test would have passed (it only asserted
 `open <= total`).
+
+## Two root causes behind «كل مهمة بتفشل» — and why OpenManus is not the answer
+
+The operator asked for OpenManus to be installed. I read its source first: it is
+a **Python** agent (`app/agent/base.py`, `app/tool/{bash,python_execute,browser,…}`)
+whose loop is `step()` + `is_stuck()` + `handle_stuck_state()` + `max_steps`.
+Our engine already implements every one of those, so installing it would REPLACE
+a loop carrying every recorded fix (quota memory, cross-provider rescue,
+relevance ordering, dedup, verifier) with a Python service we cannot run inside
+this Node process — and would answer nothing new. **The defects were ours.**
+
+### 1. A part name was routed to the MAIL by our own prompt
+
+The prompt said, literally: «اسم بند أو ماركة **ليس موضوعًا للبريد**: ابحث بـ
+contains داخل المرفقات». The agent obeyed it. «سلك حراري» therefore started a
+background census of **every mailbox** — measured live: job #402 sat at
+`opened 2050 / 5984` for **hours**, while the answer was **8 rows** in
+`customer_po_items`, readable in under a second.
+
+**A prompt rule that routes a question to the expensive source is a performance
+bug, not a style issue** — and the operator experiences it as «كل مهمة بتفشل».
+Now: a bare part name goes to the database FIRST; the mail is searched only when
+the operator names it, or when the internal search genuinely returns nothing.
+
+### 2. The search ORDERED by recency, so the right row fell below the cut
+
+`expandSearchTerms("سلك حراري")` → `WIRE, CABLE, THERMAL, HEAT, HEATER, HEATING`.
+Measured on live data: `HEAT` matches **370** rows (every `WATER HEATER`),
+`CABLE` 186, `THERMAL` 8. The match set is a UNION, ordered `id desc`, so the
+newest `WATER HEATER` outranked `THERMAL WIRE CABLE` — and with `limit 5` the
+actual answer never reached the model, which then reported «لا يوجد».
+
+Rows are now scored by how many **distinct ideas** they satisfy:
+
+- **Terms that contain one another collapse to ONE family** (`HEAT`/`HEATER`/
+  `HEATING` all match the single word "HEATING"). Without this a row was credited
+  three times for one idea while `THERMAL WIRE CABLE` earned three for three — the
+  first cut still ranked «HEATING ELEMENT … CABLE» on top.
+- **`orderBy` must be called ONCE.** Drizzle's `orderBy` REPLACES the previous
+  ordering, so the first cut's second call silently dropped the score and went
+  back to newest-first.
+- Relevance **orders**, it never filters: a single-term match still appears.
+
+Verified on production: `THERMAL WIRE CABLE SIZE 6 MM` → rank 1 (was absent from
+the top 5). Guards: `ai-search-relevance.test.ts` (4).
+
+**Rule**: when a search expands one phrase into several terms, ORDER BY the
+number of distinct ideas matched — `orderBy(id desc)` over a union is how a
+correct query answers with unrelated rows.

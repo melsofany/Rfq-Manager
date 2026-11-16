@@ -484,6 +484,8 @@ export async function queryRecords(opts: {
   const matchedOn: string[] = [];
   let applied = false;
 
+  /** Search terms, kept for the relevance ordering below. */
+  let relevanceTerms: string[] = [];
   const term = opts.search?.trim();
   if (term) {
     // Every way the term can match is an ALTERNATIVE (OR), not a conjunction:
@@ -499,6 +501,7 @@ export async function queryRecords(opts: {
     // CABLE rows. Every known counterpart is an ALTERNATIVE (OR) — a row holding
     // the English word and a row holding the Arabic one are both answers.
     const terms = expandSearchTerms(term);
+    relevanceTerms = terms;
     const direct = spec.search.filter((c) => columns[c]);
     const directParts = direct.flatMap((c) => terms.map((t) => ilike(columns[c], `%${t}%`)));
     if (directParts.length) {
@@ -547,8 +550,58 @@ export async function queryRecords(opts: {
 
   if (filters.length) q = q.where(and(...filters));
 
+  // Relevance FIRST when the search expanded to several terms.
+  //
+  // A bare `orderBy(id desc)` returned the NEWEST matching row, and the match
+  // set is a union of every counterpart: «سلك حراري» expands to WIRE / CABLE /
+  // THERMAL / HEAT / HEATER / HEATING, and `HEAT` alone matches 370 rows —
+  // every `WATER HEATER` in the catalogue. The newest of those outranked a row
+  // holding BOTH `WIRE` and `THERMAL`, so the search answered a thermal-cable
+  // question with water heaters and the model reported «لا يوجد».
+  //
+  // Counting how many distinct terms a row satisfies puts the specific rows on
+  // top without excluding anything: a row matching one term still appears, it
+  // just sorts below a row matching three.
   const orderCol = columns[spec.orderBy ?? "id"] ?? columns["id"];
-  if (orderCol) {
+  const searchCols = relevanceTerms.length > 1 ? spec.search.filter((c) => columns[c]) : [];
+  if (searchCols.length) {
+    // Score by how many DISTINCT ideas the row satisfies, not how many strings.
+    //
+    // `expandSearchTerms("سلك حراري")` yields THERMAL/WIRE/CABLE plus
+    // HEAT/HEATER/HEATING — and those last three all match the single word
+    // "HEATING", so a row was credited three times for one idea while
+    // `THERMAL WIRE CABLE` earned three for three. The score therefore ranked
+    // «HEATING ELEMENT … CABLE» above the thermal cable the operator asked for.
+    //
+    // Collapsing terms that contain one another into one family makes a match
+    // count once per idea: {HEAT, HEATER, HEATING} is one point, and
+    // THERMAL + WIRE + CABLE is three.
+    const families: string[][] = [];
+    for (const t of relevanceTerms) {
+      const f = families.find((g) => g.some((x) => x.includes(t) || t.includes(x)));
+      if (f) f.push(t);
+      else families.push([t]);
+    }
+    // Built with plain tagged templates (no `sql.join`/`sql.raw`), so a
+    // partially-mocked `drizzle-orm` can still exercise this path.
+    const haystack = searchCols
+      .map((c) => sql`coalesce(${columns[c]}, '')`)
+      .reduce((x, c) => sql`${x} || ' ' || ${c}`);
+    const score = families
+      .map((f) => {
+        const anyTerm = f
+          .map((t) => sql`${haystack} ilike ${`%${t}%`}`)
+          .reduce((x, c) => sql`${x} or ${c}`);
+        return sql`(case when ${anyTerm} then 1 else 0 end)`;
+      })
+      .reduce((x, c) => sql`${x} + ${c}`);
+    // ONE call: drizzle's `orderBy` REPLACES the previous ordering, so calling
+    // it twice dropped the relevance score and silently went back to newest-first.
+    const dir = opts.orderDir ?? spec.orderDir ?? "desc";
+    q = orderCol
+      ? q.orderBy(sql`(${score}) desc`, dir === "asc" ? asc(orderCol) : desc(orderCol))
+      : q.orderBy(sql`(${score}) desc`);
+  } else if (orderCol) {
     const dir = opts.orderDir ?? spec.orderDir ?? "desc";
     q = q.orderBy(dir === "asc" ? asc(orderCol) : desc(orderCol));
   }
