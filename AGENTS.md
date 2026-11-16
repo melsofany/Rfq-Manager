@@ -5489,3 +5489,41 @@ Two more guards fired during this work and both were correct:
   يُظهر حذفًا لملفات أضافها main (`search-terms.ts`، `date-guard.ts`). `git status` لا
   يشتكي وCI قد يمر. افحص دائمًا `git diff --name-status origin/main | grep "^D"` قبل
   الدفع، وابنِ الفرع من `origin/main` الحقيقي.
+
+## The trial-run switch: read everything, change nothing
+
+The operator's instruction for the first deploy was absolute — «لا يرسل أي شيء
+بالواتساب أو الميل، ولا يكتب أي شيء في قاعدة البيانات» — so it is enforced in
+CODE, not in the prompt. A prompt rule is not a permission boundary; this
+repository has already paid for that lesson (`send_email`'s `confirmed:true` was
+a rule the MODEL could satisfy on its own).
+
+- **`readOnlyMode`** (default **ON**, `ai_assistant_settings.read_only_mode`).
+  When on, only `read`-effect tools run. It is checked FIRST in
+  `decideToolUse`, before every feature gate and before the `send` approval path,
+  so **nothing can lift it** — a later «موافق» from the operator must not unlock
+  a switch they turned on.
+- **`generate_pdf` is refused too, deliberately.** The first cut exempted it as
+  "builds a file in memory, writes no row". That was wrong: the handler then
+  TRANSMITS the file as a WhatsApp attachment, so allowing it would mean a
+  document leaving the process during a trial whose whole point is that nothing
+  leaves. The operator gets TEXT answers; a report is one toggle away.
+- **Attachments are suppressed as well** (`agent.ts`): a tool could still queue
+  one, and the read-only guarantee must hold at the transmission point too, not
+  only at the tool gate.
+- **The switch is WIRED, and the test proves it.** A pure-function test proves
+  the decision, not the wiring — the model calls `executeTool`. The integration
+  test drives the real executor: `remember_fact` and `generate_pdf` are refused
+  with «القراءة فقط», and `count_database` is ALLOWED THROUGH (it then fails
+  only because the test has no database — that failure is the evidence the
+  refusal came from the switch and not from the tool).
+- **The agent still writes its OWN bookkeeping** — `ai_assistant_messages`,
+  `ai_assistant_scan_sessions`, `ai_assistant_incidents`, `ai_assistant_task_log`.
+  These are the assistant's memory, not business data: no supplier, RFQ, price or
+  receipt is touched, which `ai-hard-limits.test.ts` independently guards. Worth
+  stating plainly because «لا يكتب أي شيء» is about the COMPANY's data.
+- **Endable from the UI** (`/ai-assistant` → «وضع القراءة فقط (تجربة)»), so the
+  operator can end the trial themselves without a deploy — never silently, the
+  panel shows the current state.
+
+2422 api-server tests pass; tsc (libs + api-server + portal) + prettier clean.

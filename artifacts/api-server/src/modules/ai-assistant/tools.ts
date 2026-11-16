@@ -1250,6 +1250,8 @@ async function executeToolInner(
     // forever — the regression a guard test caught when this check ran first.
     const decision = isKnownTool(name)
       ? decideToolUse(name, {
+          // `readOnlyMode` is carried through: the permission layer refuses
+          // every write and send while the operator's trial switch is on.
           settings: ctx.settings as never,
           approvedEffects: ctx.approvedEffects,
         })

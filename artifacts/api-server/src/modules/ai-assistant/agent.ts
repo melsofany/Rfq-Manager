@@ -1044,7 +1044,17 @@ async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
     reply: finalText,
     usedTools: s.usedTools,
   });
-  return { reply: finalText + footer, attachments: s.ctx.outbox };
+  // Read-only mode transmits NOTHING: a queued attachment is a document leaving
+  // the process, which is exactly what the operator's trial switch forbids. The
+  // text answer still reaches them — that is the answer to their own question.
+  const attachments = s.ctx.settings.readOnlyMode ? [] : s.ctx.outbox;
+  if (s.ctx.settings.readOnlyMode && s.ctx.outbox.length) {
+    logger.info(
+      { phone: s.input.phone, suppressed: s.ctx.outbox.length },
+      "AI assistant: read-only mode — queued attachments not sent",
+    );
+  }
+  return { reply: finalText + footer, attachments };
 }
 
 export async function runAgent(input: AgentInput): Promise<AgentOutput> {

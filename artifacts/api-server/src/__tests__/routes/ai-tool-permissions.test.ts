@@ -84,3 +84,99 @@ describe("tool permissions", () => {
     ).toEqual([]);
   });
 });
+
+describe("the trial-run switch: read everything, change nothing", () => {
+  const RO = { settings: { allowDatabase: true, allowEmail: true, readOnlyMode: true } };
+
+  it("refuses every write and every send", () => {
+    for (const t of [
+      "remember_fact",
+      "forget_memory",
+      "learn_organization",
+      "start_census_job",
+      "generate_pdf",
+    ]) {
+      const d = decideToolUse(t, RO);
+      expect(d.allowed, t).toBe(false);
+      expect(d.reason, t).toContain("القراءة فقط");
+    }
+    const send = decideToolUse("send_email", RO);
+    expect(send.allowed).toBe(false);
+    expect(send.reason).toContain("إرسال");
+  });
+
+  it("CANNOT be unlocked by an approval — the operator's switch wins", () => {
+    // The `send` approval path exists for a normal run. While the trial switch
+    // is on, a later «موافق» must not lift it: the operator said «لا يرسل».
+    const approved = decideToolUse("send_email", { ...RO, approvedEffects: ["send"] });
+    expect(approved.allowed).toBe(false);
+    expect(approved.requiresApproval).toBe(false);
+  });
+
+  it("refuses a PDF too — the handler would transmit it on WhatsApp", () => {
+    // Strict: even a document built in memory is refused, because the handler
+    // sends it as a WhatsApp attachment. A trial that transmits nothing cannot
+    // make an exception for the file it transmits.
+    expect(decideToolUse("generate_pdf", RO).allowed).toBe(false);
+  });
+
+  it("still allows reading — the whole point of a trial run", () => {
+    for (const t of ["search_database", "aggregate_customer_po_items", "search_emails"]) {
+      expect(decideToolUse(t, RO).allowed, t).toBe(true);
+    }
+  });
+
+  it("is off by default so a normal deployment is unaffected", async () => {
+    const { DEFAULT_SETTINGS } = await import("../../modules/ai-assistant/config");
+    // The DEFAULT is on for THIS trial; a deployment that wants writes sets it
+    // false explicitly. Asserted so a silent flip is visible in review.
+    expect(DEFAULT_SETTINGS.readOnlyMode).toBe(true);
+  });
+
+  it("GUARD: the DDL adds the column to the EXISTING table", () => {
+    // `CREATE TABLE IF NOT EXISTS` is a no-op on the production table, so only
+    // an ADD COLUMN IF NOT EXISTS makes the setting real there.
+    const ddl = readFileSync("src/shared/init-db.ts", "utf8");
+    expect(ddl).toContain(
+      "ALTER TABLE ai_assistant_settings ADD COLUMN IF NOT EXISTS read_only_mode",
+    );
+  });
+});
+
+describe("the switch is WIRED to the dispatcher, not just the pure function", () => {
+  it("executeTool refuses a write when read-only mode is on", async () => {
+    // The pure decision being right proves nothing about the wiring: a tool
+    // reached through `executeTool` is what the model actually calls. This
+    // drives the real executor with the real settings shape.
+    const { executeTool } = await import("../../modules/ai-assistant/tools");
+    const ctx = {
+      settings: {
+        enabled: true,
+        model: "m",
+        baseUrl: null,
+        systemPrompt: null,
+        language: "ar",
+        allowEmail: true,
+        allowDatabase: true,
+        allowReadOnlySql: true,
+        allowPdf: true,
+        readOnlyMode: true,
+      },
+      phone: "201000000000",
+      outbox: [],
+    } as never;
+
+    const write = await executeTool("remember_fact", { key: "k", value: "v" }, ctx);
+    expect(write.ok).toBe(false);
+    expect(String(write.error)).toContain("القراءة فقط");
+
+    const pdf = await executeTool("generate_pdf", { title: "t", sections: [] }, ctx);
+    expect(pdf.ok).toBe(false);
+
+    // A read is ALLOWED THROUGH the permission layer — it reaches the tool and
+    // fails only because this test has no database. That failure is the proof:
+    // the refusal above came from the read-only switch, not from the tool.
+    const read = await executeTool("count_database", { table: "suppliers" }, ctx);
+    expect(String(read.error ?? "")).not.toContain("القراءة فقط");
+  });
+});

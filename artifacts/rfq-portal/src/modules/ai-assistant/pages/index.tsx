@@ -104,6 +104,7 @@ interface AiSettings {
   allowEmail: boolean;
   allowDatabase: boolean;
   allowPdf: boolean;
+  readOnlyMode: boolean;
   apiKeySet: boolean;
   imapConfigured: boolean;
   defaultModel?: string;
@@ -415,6 +416,7 @@ export default function AiAssistantPage() {
           allowEmail: settings.allowEmail,
           allowDatabase: settings.allowDatabase,
           allowPdf: settings.allowPdf,
+          readOnlyMode: settings.readOnlyMode,
         }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
@@ -1082,6 +1084,20 @@ export default function AiAssistantPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
+                <div className="flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                  <div className="space-y-0.5">
+                    <Label className="text-amber-900 dark:text-amber-200">
+                      وضع القراءة فقط (تجربة)
+                    </Label>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      مفعّل: المساعد يقرأ كل شيء ولا يرسل ولا يكتب أي بيانات.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.readOnlyMode}
+                    onCheckedChange={(v) => setSettings({ ...settings, readOnlyMode: v })}
+                  />
+                </div>
                 <div className="flex items-center justify-between rounded-lg border p-3">
                   <Label>الوصول لقاعدة البيانات</Label>
                   <Switch

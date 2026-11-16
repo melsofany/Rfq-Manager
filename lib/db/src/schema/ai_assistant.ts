@@ -49,6 +49,7 @@ export const aiAssistantSettingsTable = pgTable("ai_assistant_settings", {
   allowPdf: boolean("allow_pdf").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  readOnlyMode: boolean("read_only_mode").notNull().default(true),
 });
 
 // ─── Long-term memory ──────────────────────────────────────────────────────

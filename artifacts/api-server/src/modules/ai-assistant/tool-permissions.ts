@@ -107,6 +107,16 @@ export interface PermissionContext {
     allowDatabase?: boolean;
     allowEmail?: boolean;
     allowReadOnlySql?: boolean;
+    /**
+     * HARD read-only: only `read` tools run. No send, no write — and unlike the
+     * `send` approval path, NOTHING can unlock them, because the operator's
+     * instruction was «لا يرسل ولا يكتب» and an approval phrase in a later
+     * message must not be able to override a switch they turned on.
+     *
+     * This is the switch for a trial run: the agent can look at everything and
+     * change nothing.
+     */
+    readOnlyMode?: boolean;
   };
   /** Approval the OPERATOR gave for this task, not an argument the model passed. */
   approvedEffects?: ToolEffect[];
@@ -126,6 +136,24 @@ export function decideToolUse(name: string, ctx: PermissionContext): ToolDecisio
   // route around a switch the operator turned off. Each capability is checked
   // on its OWN gate: a mail tool must not pass because the DATABASE gate is on,
   // which is how a disabled mailbox stayed reachable.
+  // HARD read-only comes FIRST: it is an operator switch, and nothing below —
+  // not a feature gate, not an approval — may work around it.
+  //
+  // STRICT on purpose: even `generate_pdf` is refused. It builds a document and
+  // the handler then transmits it on WhatsApp, so allowing it would mean a file
+  // leaving the process during a trial whose point is that nothing leaves. The
+  // operator gets TEXT answers; a report is one toggle away.
+  if (ctx.settings.readOnlyMode === true && effect !== "read") {
+    return {
+      allowed: false,
+      requiresApproval: false,
+      reason:
+        effect === "send"
+          ? "الوكيل في وضع القراءة فقط: إرسال أي شيء (واتساب/إيميل/ملف) معطّل، ولا يمكن تجاوزه."
+          : "الوكيل في وضع القراءة فقط: لا يكتب أي بيانات، ولا يمكن تجاوزه.",
+    };
+  }
+
   const isMail = MAIL_TOOLS.has(name);
   if (isMail && ctx.settings.allowEmail === false) {
     return { allowed: false, reason: "الوصول للبريد معطّل في الإعدادات.", requiresApproval: false };
