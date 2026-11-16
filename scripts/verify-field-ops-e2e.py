@@ -206,8 +206,18 @@ def main() -> int:
                         ("SPO-005", "P26E014", 3.0),
                         ("SPO-009", "P26E021", 1.0)],
               f"got {pairs}")
-        check("supplier PO cards are one per PO", len(pickups.get("tasks", [])) == 3,
-              f"got {len(pickups.get('tasks', []))}")
+        # One card per SUPPLIER: the three POs above all belong to the same
+        # supplier, so they fold into a single card the rep visits once.
+        cards = pickups.get("tasks", [])
+        check("the supplier shows ONE card for its three POs", len(cards) == 1,
+              f"got {len(cards)}")
+        if len(cards) == 1:
+            card_nos = set(cards[0].get("poNos") or [])
+            check("the card lists all three purchase orders",
+                  card_nos == {"SPO-001", "SPO-005", "SPO-009"}, f"poNos={card_nos}")
+        supplier_ids = [t.get("supplier", {}).get("id") for t in cards if t.get("supplier")]
+        check("no supplier is listed twice",
+              len(supplier_ids) == len(set(supplier_ids)), f"suppliers={supplier_ids}")
 
     print("\n[5] delivery is blocked until receiving is confirmed")
     status, deliveries = api("GET", "/api/mobile/deliveries", token)
@@ -224,10 +234,10 @@ def main() -> int:
     # assignmentId used to confirm. Receive 2 of 2 on SPO-001 and 2 of 3 on
     # SPO-005; leave SPO-009 (1 unit) unreceived.
     by_po = {a["poNo"]: a for a in line["allocations"]}
-    task_by_po = {t["poNo"]: t for t in pickups.get("tasks", [])}
+    # One card per supplier: every line confirms through that single card.
+    task = pickups["tasks"][0]
     for po_no, want in (("SPO-001", 2), ("SPO-005", 2)):
         alloc = by_po[po_no]
-        task = task_by_po[po_no]
         status, body = api("POST", f"/api/mobile/pickups/{task['assignmentId']}/confirm",
                            token, {"items": [{"poItemId": alloc["poItemId"],
                                               "receivedQty": want}],
@@ -475,6 +485,12 @@ def main() -> int:
     # check covers the other real shape: ONE supplier PO carrying several
     # different items. Opening that PO's detail must list every line, not just
     # the single line behind whichever assignment id the card happened to carry.
+    # Its own supplier: a card is one supplier, so reusing the main supplier
+    # would fold this PO into the other scenarios' card.
+    sup_b = sql(
+        "INSERT INTO suppliers (name, phone, address, contact_person) "
+        "VALUES ('E2E Supplier Multi', '201333333333', 'القاهرة', 'منى') RETURNING id;"
+    )
     multi_po = sql(
         "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
         "VALUES ('SPO-MULTI', 'SPO-MULTI', 'draft') RETURNING id;"
@@ -484,7 +500,7 @@ def main() -> int:
             f"INSERT INTO purchase_order_items "
             f"(po_id, line_item, description, qty, uom, supplier_id, line_status) "
             f"VALUES ({multi_po}, '{idx2}', '{label}', 5, 'قطعة', "
-            f"{supplier}, 'pending') RETURNING id;"
+            f"{sup_b}, 'pending') RETURNING id;"
         )
         sql(
             f"INSERT INTO work_order_assignments "
@@ -494,7 +510,10 @@ def main() -> int:
             f"{emp}, 'مندوب اختبار', '201000000001');"
         )
     status, p3 = api("GET", "/api/mobile/pickups", token)
-    multi_task = next((t for t in p3.get("tasks", []) if t["poNo"] == "SPO-MULTI"), None)
+    multi_task = next(
+        (t for t in p3.get("tasks", []) if t.get("supplier", {}).get("id") == int(sup_b)),
+        None,
+    )
     check("the multi-line PO appears as one supplier card", multi_task is not None,
           f"tasks={[t['poNo'] for t in p3.get('tasks', [])]}")
     if multi_task:
@@ -511,6 +530,10 @@ def main() -> int:
     # submission refused with «أدخل الكمية المستلمة أو المرفوضة», so the lines
     # they did receive could never be recorded. Rejecting one line must record it
     # as rejected and let the accepted lines through.
+    sup_c = sql(
+        "INSERT INTO suppliers (name, phone, address, contact_person) "
+        "VALUES ('E2E Supplier Reject', '201444444444', 'القاهرة', 'علي') RETURNING id;"
+    )
     rej_po = sql(
         "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
         "VALUES ('SPO-REJECT', 'SPO-REJECT', 'draft') RETURNING id;"
@@ -529,7 +552,7 @@ def main() -> int:
             f"INSERT INTO purchase_order_items "
             f"(po_id, line_item, description, qty, uom, supplier_id, line_status, "
             f" customer_po_item_id) "
-            f"VALUES ({rej_po}, '{idx3}', '{label}', 5, 'قطعة', {supplier}, 'pending', "
+            f"VALUES ({rej_po}, '{idx3}', '{label}', 5, 'قطعة', {sup_c}, 'pending', "
             f"{cpi}) RETURNING id;"
         )
         sql(
@@ -541,7 +564,10 @@ def main() -> int:
         )
         rej_items.append(int(item_id))
     status, p4 = api("GET", "/api/mobile/pickups", token)
-    rej_task = next((t for t in p4.get("tasks", []) if t["poNo"] == "SPO-REJECT"), None)
+    rej_task = next(
+        (t for t in p4.get("tasks", []) if t.get("supplier", {}).get("id") == int(sup_c)),
+        None,
+    )
     check("the rejection PO appears as a supplier card", rej_task is not None,
           f"tasks={[t['poNo'] for t in p4.get('tasks', [])]}")
     if rej_task:
@@ -569,6 +595,10 @@ def main() -> int:
     # Now that each button confirms on its own, a rep can receive one line per
     # tap. The task must stay open until the LAST line of that task is settled —
     # a single tap must not silently close work that is still owed.
+    sup_d = sql(
+        "INSERT INTO suppliers (name, phone, address, contact_person) "
+        "VALUES ('E2E Supplier OneByOne', '201555555555', 'القاهرة', 'هدى') RETURNING id;"
+    )
     one_po = sql(
         "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
         "VALUES ('SPO-ONEBYONE', 'SPO-ONEBYONE', 'draft') RETURNING id;"
@@ -587,7 +617,7 @@ def main() -> int:
             f"INSERT INTO purchase_order_items "
             f"(po_id, line_item, description, qty, uom, supplier_id, line_status, "
             f" customer_po_item_id) "
-            f"VALUES ({one_po}, '{idx4}', '{label}', 3, 'قطعة', {supplier}, 'pending', "
+            f"VALUES ({one_po}, '{idx4}', '{label}', 3, 'قطعة', {sup_d}, 'pending', "
             f"{cpi}) RETURNING id;"
         )
         one_items.append(int(item_id))
@@ -602,7 +632,10 @@ def main() -> int:
     )
     # The task card must list BOTH lines so each can be received on its own.
     status, p5 = api("GET", "/api/mobile/pickups", token)
-    one_task = next((t for t in p5.get("tasks", []) if t["poNo"] == "SPO-ONEBYONE"), None)
+    one_task = next(
+        (t for t in p5.get("tasks", []) if t.get("supplier", {}).get("id") == int(sup_d)),
+        None,
+    )
     check("the two-line task appears as one supplier card", one_task is not None,
           f"tasks={[t['poNo'] for t in p5.get('tasks', [])]}")
 
@@ -617,7 +650,9 @@ def main() -> int:
               body.get("assignmentStatus") == "partially_received",
               f"assignmentStatus={body.get('assignmentStatus')}")
         status, p6 = api("GET", "/api/mobile/pickups", token)
-        still_listed = any(t["poNo"] == "SPO-ONEBYONE" for t in p6.get("tasks", []))
+        still_listed = any(
+            t.get("supplier", {}).get("id") == int(sup_d) for t in p6.get("tasks", [])
+        )
         check("the task is still on the list after only one line", still_listed,
               f"tasks={[t['poNo'] for t in p6.get('tasks', [])]}")
 
@@ -632,9 +667,73 @@ def main() -> int:
               body.get("assignmentStatus") == "received",
               f"assignmentStatus={body.get('assignmentStatus')}")
         status, p7 = api("GET", "/api/mobile/pickups", token)
-        gone = not any(t["poNo"] == "SPO-ONEBYONE" for t in p7.get("tasks", []))
+        gone = not any(
+            t.get("supplier", {}).get("id") == int(sup_d) for t in p7.get("tasks", [])
+        )
         check("the settled task leaves the list", gone,
               f"tasks={[t['poNo'] for t in p7.get('tasks', [])]}")
+
+    print("\n[12e] a supplier with two purchase orders shows ONE card")
+    # The rep visits the supplier once, so two POs for the same supplier must
+    # fold into a single card — otherwise it looks like two suppliers.
+    two_sup = sql(
+        "INSERT INTO suppliers (name, phone, address, contact_person) "
+        "VALUES ('E2E Supplier Two', '201222222222', 'الجيزة', 'سامي') RETURNING id;"
+    )
+    two_pos = []
+    two_items = []
+    for idx5, (spo, qty) in enumerate((("SPO-TWO-A", 4), ("SPO-TWO-B", 5)), start=1):
+        po = sql(
+            f"INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+            f"VALUES ('{spo}', '{spo}', 'draft') RETURNING id;"
+        )
+        cpo = sql(
+            f"INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_name, status) "
+            f"VALUES ('CPO-TWO-{idx5}', 'P26E-TWO-{idx5}', 'عميل {idx5}', 'confirmed') RETURNING id;"
+        )
+        cpi = sql(
+            f"INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+            f"VALUES ({cpo}, 'بند {idx5}', {qty}, 'قطعة') RETURNING id;"
+        )
+        item = sql(
+            f"INSERT INTO purchase_order_items "
+            f"(po_id, line_item, description, qty, uom, supplier_id, line_status, customer_po_item_id) "
+            f"VALUES ({po}, '1', 'بند {idx5}', {qty}, 'قطعة', {two_sup}, 'pending', {cpi}) "
+            f"RETURNING id;"
+        )
+        sql(
+            f"INSERT INTO work_order_assignments "
+            f"(po_id, po_item_id, kind, status, hr_employee_id, representative_name, "
+            f" representative_phone) "
+            f"VALUES ({po}, {item}, 'receipt', 'sent', {emp}, 'مندوب اختبار', '201000000001');"
+        )
+        two_pos.append(po)
+        two_items.append(int(item))
+
+    status, p8 = api("GET", "/api/mobile/pickups", token)
+    two_cards = [t for t in p8.get("tasks", []) if t.get("supplier", {}).get("id") == int(two_sup)]
+    check("a two-PO supplier shows exactly one card", len(two_cards) == 1,
+          f"cards={len(two_cards)}")
+    if len(two_cards) == 1:
+        nos = two_cards[0].get("poNos") or []
+        check("the card lists both purchase orders",
+              "SPO-TWO-A" in nos and "SPO-TWO-B" in nos, f"poNos={nos}")
+        check("the card counts both lines", two_cards[0].get("distinctItemCount") == 2,
+              f"distinctItemCount={two_cards[0].get('distinctItemCount')}")
+
+        # The detail behind that one card must carry both POs' lines.
+        status, d8 = api("GET", f"/api/mobile/pickups/{two_cards[0]['assignmentId']}", token)
+        check("the supplier detail loads", status == 200, f"status={status}")
+        if status == 200:
+            detail_pos = set()
+            for g in d8.get("items", []):
+                for a in g.get("allocations", []):
+                    detail_pos.add(a.get("poId"))
+            check("the detail spans both purchase orders",
+                  len(detail_pos) == 2, f"poIds={detail_pos}")
+            check("the detail header lists both purchase orders",
+                  set(d8.get("poNos") or []) == {"SPO-TWO-A", "SPO-TWO-B"},
+                  f"poNos={d8.get('poNos')}")
 
     print("\n[13] maintenance mode freezes operations but not the account")
     sql(

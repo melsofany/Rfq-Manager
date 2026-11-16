@@ -145,6 +145,35 @@ export function hasOutstandingQty(orderedQty: number | null, acceptedQty: number
   return acceptedQty < ordered - 1e-6;
 }
 
+/** One supplier the rep visits once, with every outstanding PO folded into it. */
+export interface SupplierCard {
+  supplierId: number;
+  poIds: number[];
+  poNos: string[];
+}
+
+/**
+ * Fold pickup allocations into ONE card per supplier.
+ *
+ * The rep visits a supplier, not a purchase order, so a supplier with two POs
+ * must produce a single card — otherwise the same supplier shows twice and the
+ * rep believes there are two stops. Allocation order is preserved, so the first
+ * PO of a supplier stays its headline PO number.
+ */
+export function groupSupplierCards(
+  allocations: { supplierId: number | null; poId: number; poNo: string }[],
+): SupplierCard[] {
+  const cards = new Map<number, SupplierCard>();
+  for (const a of allocations) {
+    if (a.supplierId == null) continue;
+    const card = cards.get(a.supplierId) ?? { supplierId: a.supplierId, poIds: [], poNos: [] };
+    if (!card.poIds.includes(a.poId)) card.poIds.push(a.poId);
+    if (a.poNo && !card.poNos.includes(a.poNo)) card.poNos.push(a.poNo);
+    cards.set(a.supplierId, card);
+  }
+  return [...cards.values()];
+}
+
 /** How many distinct supplier POs a group spans. */
 export function supplierPoCount(group: ConsolidatedGroup): number {
   return new Set(group.allocations.map((a) => a.poNo)).size;

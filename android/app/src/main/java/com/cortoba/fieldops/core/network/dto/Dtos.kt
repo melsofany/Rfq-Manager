@@ -93,6 +93,9 @@ data class PickupTask(
     val assignmentId: Int? = null,
     val poId: Int,
     val poNo: String,
+    /** Every outstanding PO of this supplier — the card is one supplier. */
+    val poIds: List<Int> = emptyList(),
+    val poNos: List<String> = emptyList(),
     val status: String,
     /**
      * Settlement state for the supplier card — "unpaid" | "partial" | "paid".
@@ -139,6 +142,8 @@ data class PickupDetailResponse(
     val status: String,
     val executorRole: String = "owner",
     val po: PoRef? = null,
+    /** Every PO folded into this supplier card, for the header. */
+    val poNos: List<String> = emptyList(),
     val supplier: SupplierDto? = null,
     val paymentStatus: String = "unpaid",
     val items: List<ConsolidatedItem> = emptyList(),
