@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   consolidatePickupLines,
   groupKeyFor,
+  groupSupplierCards,
   customerPoNosOf,
   groupAssignmentsByCustomer,
   hasOutstandingQty,
@@ -253,5 +254,48 @@ describe("groupAssignmentsByCustomer", () => {
       { customerPoId: 10, status: "sent", customerId: 7, customerName: "أ" },
     ]);
     expect(groups[0].customerPoIds).toEqual([10]);
+  });
+});
+
+describe("groupSupplierCards", () => {
+  it("folds two POs of one supplier into a single card", () => {
+    const cards = groupSupplierCards([
+      { supplierId: 57, poId: 110, poNo: "SPO-A" },
+      { supplierId: 57, poId: 111, poNo: "SPO-B" },
+    ]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].supplierId).toBe(57);
+    expect(cards[0].poIds).toEqual([110, 111]);
+    expect(cards[0].poNos).toEqual(["SPO-A", "SPO-B"]);
+  });
+
+  it("keeps different suppliers apart", () => {
+    const cards = groupSupplierCards([
+      { supplierId: 57, poId: 110, poNo: "SPO-A" },
+      { supplierId: 369, poId: 109, poNo: "SPO-B" },
+    ]);
+    expect(cards.map((c) => c.supplierId)).toEqual([57, 369]);
+  });
+
+  it("keeps a multi-supplier PO as one card per supplier", () => {
+    const cards = groupSupplierCards([
+      { supplierId: 1, poId: 5, poNo: "SPO-MULTI" },
+      { supplierId: 2, poId: 5, poNo: "SPO-MULTI" },
+    ]);
+    expect(cards).toHaveLength(2);
+    expect(cards.every((c) => c.poIds.length === 1)).toBe(true);
+  });
+
+  it("does not duplicate a PO reached through several lines", () => {
+    const cards = groupSupplierCards([
+      { supplierId: 57, poId: 110, poNo: "SPO-A" },
+      { supplierId: 57, poId: 110, poNo: "SPO-A" },
+    ]);
+    expect(cards[0].poIds).toEqual([110]);
+    expect(cards[0].poNos).toEqual(["SPO-A"]);
+  });
+
+  it("drops lines with no supplier", () => {
+    expect(groupSupplierCards([{ supplierId: null, poId: 1, poNo: "SPO-X" }])).toEqual([]);
   });
 });

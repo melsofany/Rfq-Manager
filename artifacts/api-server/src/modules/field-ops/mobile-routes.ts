@@ -51,6 +51,7 @@ import {
   auditFieldOperation,
   loadFieldOpsSettings,
 } from "./service";
+import { groupSupplierCards } from "./consolidation";
 import { paymentStatusByPair } from "./payment-status";
 import { recomputeItemTotals } from "../po/receipts";
 import {
@@ -293,6 +294,76 @@ async function notifyDeliveryAvailability(
   }
 }
 
+/**
+ * The receipt assignments that belong to the same SUPPLIER card as `assignment`
+ * — every outstanding line of that supplier across all of its POs, plus any
+ * legacy whole-PO assignment on those POs.
+ *
+ * The list shows ONE card per supplier (a supplier is a single visit), so both
+ * the detail screen and the "did the card close?" check must use this same set.
+ * Scoping either one to a single PO would leave the card open after the rep had
+ * settled everything, or hide lines the rep can still receive.
+ */
+async function receiptSupplierSiblingIds(
+  actorHrEmployeeId: number,
+  assignment: { id: number; poId: number; poItemId: number | null },
+): Promise<number[]> {
+  const visible = await visibleAssignmentsFor(actorHrEmployeeId, "receipt");
+  const visibleRows = visible.assignmentIds.length
+    ? await db
+        .select({
+          id: workOrderAssignmentsTable.id,
+          poId: workOrderAssignmentsTable.poId,
+          poItemId: workOrderAssignmentsTable.poItemId,
+        })
+        .from(workOrderAssignmentsTable)
+        .where(
+          and(
+            eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+            inArray(workOrderAssignmentsTable.id, visible.assignmentIds),
+          ),
+        )
+    : [];
+
+  let tappedSupplierId: number | null = null;
+  if (assignment.poItemId != null) {
+    const [item] = await db
+      .select({ supplierId: purchaseOrderItemsTable.supplierId })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.id, assignment.poItemId));
+    tappedSupplierId = item?.supplierId ?? null;
+  }
+
+  if (tappedSupplierId == null) {
+    // Legacy whole-PO assignment: the card is its own PO.
+    return visibleRows.filter((r) => r.poId === assignment.poId).map((r) => r.id);
+  }
+
+  const poIds = [...new Set(visibleRows.map((r) => r.poId))];
+  const poLineRows = poIds.length
+    ? await db
+        .select({ id: purchaseOrderItemsTable.id, poId: purchaseOrderItemsTable.poId })
+        .from(purchaseOrderItemsTable)
+        .where(
+          and(
+            inArray(purchaseOrderItemsTable.poId, poIds),
+            eq(purchaseOrderItemsTable.supplierId, tappedSupplierId),
+          ),
+        )
+    : [];
+  const supplierItemIds = new Set(poLineRows.map((r) => r.id));
+  const supplierPoIds = new Set(poLineRows.map((r) => r.poId));
+
+  const ids = visibleRows
+    .filter((r) => r.poItemId != null && supplierItemIds.has(r.poItemId))
+    .map((r) => r.id);
+  for (const r of visibleRows) {
+    if (r.poItemId == null && supplierPoIds.has(r.poId)) ids.push(r.id);
+  }
+  if (!ids.includes(assignment.id)) ids.push(assignment.id);
+  return ids;
+}
+
 router.get("/pickups", async (req, res): Promise<void> => {
   const actor = actorOf(req);
   const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "receipt");
@@ -320,17 +391,19 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const poMap = new Map(poRows.map((p) => [p.id, p]));
 
-  // One card per (supplier, PO) pair. A PO can carry lines from several
-  // suppliers; keying by PO alone collapsed them onto the first supplier's
-  // card and made the detail screen show another supplier's lines inside it.
+  // One card per SUPPLIER. A supplier the rep visits is a single stop, so two
+  // of its purchase orders must never split into two cards that look like two
+  // suppliers. Every outstanding PO of that supplier folds into the one card,
+  // which is why the card carries `poNos` (and keeps `poNo` as the first, for
+  // older clients).
   const allAllocations = groups.flatMap((g) => g.allocations);
-  const pairMap = new Map<string, { poId: number; supplierId: number }>();
-  for (const a of allAllocations) {
-    if (a.supplierId == null) continue;
-    const key = `${a.poId}:${a.supplierId}`;
-    if (!pairMap.has(key)) pairMap.set(key, { poId: a.poId, supplierId: a.supplierId });
-  }
-  const activePairs = [...pairMap.values()];
+  const cards = groupSupplierCards(
+    allAllocations.map((a) => ({
+      supplierId: a.supplierId,
+      poId: a.poId,
+      poNo: poMap.get(a.poId)?.poNo ?? "",
+    })),
+  );
 
   const supplierRows = groups.length
     ? await db
@@ -345,8 +418,8 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const supplierMap = new Map(supplierRows.map((s) => [s.id, s]));
 
-  // assignmentId must point at a line that belongs to this (po, supplier) pair,
-  // so the detail endpoint can scope itself to the same supplier.
+  // assignmentId must point at a line that belongs to this supplier, so the
+  // detail endpoint can scope itself to the same supplier.
   const assignmentByItem = new Map<number, number>();
   const wholePoAssignment = new Map<number, number>();
   for (const a of assignments) {
@@ -354,34 +427,49 @@ router.get("/pickups", async (req, res): Promise<void> => {
     else if (!wholePoAssignment.has(a.poId)) wholePoAssignment.set(a.poId, a.id);
   }
 
-  const paymentStatus = await paymentStatusByPair(activePairs);
+  const paymentStatus = await paymentStatusByPair(
+    cards.flatMap((c) => c.poIds.map((poId) => ({ poId, supplierId: c.supplierId }))),
+  );
 
-  const tasks = activePairs.map(({ poId, supplierId }) => {
-    const po = poMap.get(poId);
-    const supplier = supplierMap.get(supplierId);
-    const pairAllocations = allAllocations.filter(
-      (a) => a.poId === poId && a.supplierId === supplierId,
-    );
+  const tasks = cards.map((card) => {
+    const supplier = supplierMap.get(card.supplierId);
+    const supplierAllocations = allAllocations.filter((a) => a.supplierId === card.supplierId);
     const poGroups = groups.filter((g) =>
-      g.allocations.some((a) => a.poId === poId && a.supplierId === supplierId),
+      g.allocations.some((a) => a.supplierId === card.supplierId),
     );
     const assignmentId =
-      pairAllocations
+      supplierAllocations
         .map((a) => assignmentByItem.get(a.poItemId))
         .find((id): id is number => id != null) ??
-      wholePoAssignment.get(poId) ??
+      card.poIds
+        .map((poId) => wholePoAssignment.get(poId))
+        .find((id): id is number => id != null) ??
       null;
+    // The card is only «paid» when every one of its POs is settled.
+    const settled = card.poIds.map((poId) => paymentStatus.get(`${poId}:${card.supplierId}`));
+    const payment =
+      settled.length && settled.every((s) => s === "paid")
+        ? "paid"
+        : settled.some((s) => s === "paid" || s === "partial")
+          ? "partial"
+          : "unpaid";
+    const poDate = card.poIds
+      .map((poId) => poMap.get(poId)?.createdAt)
+      .filter((d): d is Date => d instanceof Date)
+      .sort((a, b) => a.getTime() - b.getTime())[0];
     return {
       assignmentId,
-      poId,
-      poNo: po?.poNo ?? "",
+      poId: card.poIds[0],
+      poNo: card.poNos[0] ?? "",
+      poIds: card.poIds,
+      poNos: card.poNos,
       status: assignments.find((a) => a.id === assignmentId)?.status ?? "sent",
       // Settlement state only — deliberately no due/paid amounts. The
       // representative needs to know "should I go to this supplier", not the
       // company's ledger figures.
-      paymentStatus: paymentStatus.get(`${poId}:${supplierId}`) ?? "unpaid",
-      poDate: po?.createdAt?.toISOString() ?? null,
-      notes: po?.notes ?? null,
+      paymentStatus: payment,
+      poDate: poDate?.toISOString() ?? null,
+      notes: null,
       supplier: supplier
         ? {
             id: supplier.id,
@@ -392,7 +480,8 @@ router.get("/pickups", async (req, res): Promise<void> => {
           }
         : null,
       distinctItemCount: poGroups.length,
-      totalRequiredQty: Math.round(pairAllocations.reduce((s, a) => s + a.qty, 0) * 10000) / 10000,
+      totalRequiredQty:
+        Math.round(supplierAllocations.reduce((s, a) => s + a.qty, 0) * 10000) / 10000,
     };
   });
 
@@ -426,72 +515,52 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  // The list card is per (supplier, PO), so the detail must stay scoped to that
-  // supplier. Determine the tapped line's supplier first, then load only that
-  // supplier's sibling lines — a multi-supplier PO must not leak another
-  // supplier's items into this card.
-  let tappedSupplierId: number | null = null;
-  if (assignment.poItemId != null) {
-    const [item] = await db
-      .select({ supplierId: purchaseOrderItemsTable.supplierId })
-      .from(purchaseOrderItemsTable)
-      .where(eq(purchaseOrderItemsTable.id, assignment.poItemId));
-    tappedSupplierId = item?.supplierId ?? null;
-  }
-
-  const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "receipt");
-  const siblingRows = assignmentIds.length
+  // The list card is one SUPPLIER, so the detail shows every outstanding line
+  // of that supplier across all of its POs — the rep visits the supplier once.
+  const siblingIds = await receiptSupplierSiblingIds(actor.hrEmployeeId, assignment);
+  const siblingRows = siblingIds.length
     ? await db
-        .select({ id: workOrderAssignmentsTable.id, poItemId: workOrderAssignmentsTable.poItemId })
+        .select({ poItemId: workOrderAssignmentsTable.poItemId })
         .from(workOrderAssignmentsTable)
-        .where(
-          and(
-            eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
-            eq(workOrderAssignmentsTable.poId, assignment.poId),
-            inArray(workOrderAssignmentsTable.id, assignmentIds),
-          ),
-        )
+        .where(inArray(workOrderAssignmentsTable.id, siblingIds))
     : [];
-
-  let siblingIds: number[];
-  if (tappedSupplierId != null) {
-    const itemIds = siblingRows.map((r) => r.poItemId).filter((x): x is number => x != null);
-    const supplierItemIds = new Set<number>();
-    if (itemIds.length) {
-      const items = await db
-        .select({ id: purchaseOrderItemsTable.id })
-        .from(purchaseOrderItemsTable)
-        .where(
-          and(
-            inArray(purchaseOrderItemsTable.id, itemIds),
-            eq(purchaseOrderItemsTable.supplierId, tappedSupplierId),
-          ),
-        );
-      for (const it of items) supplierItemIds.add(it.id);
-    }
-    siblingIds = siblingRows
-      .filter((r) => r.poItemId != null && supplierItemIds.has(r.poItemId))
-      .map((r) => r.id);
-  } else {
-    siblingIds = siblingRows.map((r) => r.id);
-  }
+  const siblingItemIds = siblingRows.map((r) => r.poItemId).filter((x): x is number => x != null);
+  const tappedSupplierId = siblingItemIds.length
+    ? ((
+        await db
+          .select({ supplierId: purchaseOrderItemsTable.supplierId })
+          .from(purchaseOrderItemsTable)
+          .where(inArray(purchaseOrderItemsTable.id, siblingItemIds))
+          .limit(1)
+      )[0]?.supplierId ?? null)
+    : null;
 
   // Only outstanding lines belong in the receiving screen: a fully received
   // line (its ordered quantity already collected) must disappear, not linger
   // with «required 0, received N» forever.
   const groups = await buildPickupGroups(siblingIds.length ? siblingIds : [assignment.id]);
-  const [po] = await db
-    .select({
-      id: purchaseOrdersTable.id,
-      poNo: purchaseOrdersTable.internalPoNo,
-      notes: purchaseOrdersTable.notes,
-      createdAt: purchaseOrdersTable.createdAt,
-    })
-    .from(purchaseOrdersTable)
-    .where(eq(purchaseOrdersTable.id, assignment.poId));
 
-  // Supplier of this PO (first line's supplier).
-  const supplierId = groups.flatMap((g) => g.allocations)[0]?.supplierId ?? null;
+  // The card spans several POs now, so the header must show all of them.
+  const groupPoIds = [...new Set(groups.flatMap((g) => g.allocations).map((a) => a.poId))];
+  const poRows = groupPoIds.length
+    ? await db
+        .select({
+          id: purchaseOrdersTable.id,
+          poNo: purchaseOrdersTable.internalPoNo,
+          notes: purchaseOrdersTable.notes,
+          createdAt: purchaseOrdersTable.createdAt,
+        })
+        .from(purchaseOrdersTable)
+        .where(inArray(purchaseOrdersTable.id, groupPoIds))
+    : [];
+  const poRowMap = new Map(poRows.map((p) => [p.id, p]));
+  const primaryPo = poRowMap.get(assignment.poId) ?? poRows[0];
+  const poNos = groupPoIds.map((id) => poRowMap.get(id)?.poNo).filter((x): x is string => !!x);
+
+  // Supplier of the card: the tapped line's supplier (all lines are scoped to
+  // it above).
+  const supplierId =
+    tappedSupplierId ?? groups.flatMap((g) => g.allocations)[0]?.supplierId ?? null;
   const supplier =
     supplierId != null
       ? (
@@ -508,20 +577,39 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
         )[0]
       : null;
 
-  const paymentStatus =
+  // «paid» only when every PO of the card is settled — the rep is told to go
+  // once, so the card must not read paid while another order is still owed.
+  const settledStatuses =
     supplierId != null
-      ? ((await paymentStatusByPair([{ poId: assignment.poId, supplierId }])).get(
-          `${assignment.poId}:${supplierId}`,
-        ) ?? "unpaid")
+      ? await paymentStatusByPair(groupPoIds.map((poId) => ({ poId, supplierId })))
+      : null;
+  const paymentStatus =
+    supplierId != null && groupPoIds.length
+      ? (() => {
+          const settled = groupPoIds.map(
+            (poId) => settledStatuses?.get(`${poId}:${supplierId}`) ?? "unpaid",
+          );
+          if (settled.every((s) => s === "paid")) return "paid";
+          if (settled.some((s) => s === "paid" || s === "partial")) return "partial";
+          return "unpaid";
+        })()
       : "unpaid";
 
   res.json({
     assignmentId: assignment.id,
     status: assignment.status,
     executorRole: auth.value?.role ?? "owner",
-    po: po
-      ? { id: po.id, poNo: po.poNo, notes: po.notes, poDate: po.createdAt.toISOString() }
+    po: primaryPo
+      ? {
+          id: primaryPo.id,
+          poNo: primaryPo.poNo,
+          notes: primaryPo.notes,
+          poDate: primaryPo.createdAt.toISOString(),
+        }
       : null,
+    // Every purchase order folded into this supplier card, so the header can
+    // show them all instead of only the tapped one.
+    poNos,
     supplier,
     paymentStatus,
     items: groups,
@@ -592,10 +680,23 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
     }
   }
 
+  // The card the rep is looking at spans every outstanding PO of this
+  // supplier, so a submission may carry lines from more than the assignment's
+  // own PO. Resolve the card's lines once and validate against them.
+  const cardSiblingIds = await receiptSupplierSiblingIds(actor.hrEmployeeId, assignment);
+  const cardGroups = await buildPickupGroups(
+    cardSiblingIds.length ? cardSiblingIds : [assignment.id],
+    { includeCompleted: true },
+  );
+  const cardLineById = new Map(
+    cardGroups.flatMap((g) => g.allocations).map((a) => [a.poItemId, a]),
+  );
+
   // Validate EVERY line before writing ANY — a partial write would corrupt the
   // totals and leave the PO in a state no operator asked for.
   const prepared: {
     poItemId: number;
+    poId: number;
     receivedQty: number;
     acceptedQty: number;
     rejectedQty: number;
@@ -609,17 +710,9 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       res.status(400).json({ error: "بند غير صالح في الطلب" });
       return;
     }
-    const [line] = await db
-      .select({
-        id: purchaseOrderItemsTable.id,
-        poId: purchaseOrderItemsTable.poId,
-        qty: purchaseOrderItemsTable.qty,
-        accepted: purchaseOrderItemsTable.totalAcceptedQty,
-      })
-      .from(purchaseOrderItemsTable)
-      .where(eq(purchaseOrderItemsTable.id, poItemId));
-    // The line must belong to the PO of this assignment — never another PO.
-    if (!line || line.poId !== assignment.poId) {
+    // The line must belong to THIS supplier card — never another supplier's.
+    const cardLine = cardLineById.get(poItemId);
+    if (!cardLine) {
       res.status(400).json({ error: "البند لا يتبع أمر الشراء الخاص بالمهمة" });
       return;
     }
@@ -627,8 +720,8 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
     const acceptedQty = toNum(item.acceptedQty) ?? receivedQty;
     const rejectedQty = toNum(item.rejectedQty) ?? 0;
     const check = checkReceiptQuantities({
-      orderedQty: toNum(line.qty),
-      alreadyAccepted: toNum(line.accepted) ?? 0,
+      orderedQty: toNum(cardLine.qty),
+      alreadyAccepted: toNum(cardLine.acceptedQty) ?? 0,
       receivedQty,
       acceptedQty,
       rejectedQty,
@@ -641,6 +734,7 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       acceptedQty === 0 ? "rejected" : acceptedQty < receivedQty ? "partial" : "received";
     prepared.push({
       poItemId,
+      poId: cardLine.poId,
       receivedQty,
       acceptedQty,
       rejectedQty,
@@ -660,7 +754,7 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       .insert(poItemReceiptsTable)
       .values({
         poItemId: p.poItemId,
-        poId: assignment.poId,
+        poId: p.poId,
         assignmentId: assignment.id,
         receivedQty: String(p.receivedQty),
         acceptedQty: String(p.acceptedQty),
@@ -679,17 +773,24 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
     await recomputeItemTotals(p.poItemId);
   }
 
-  // Mark the assignment received and record the ACTUAL executor (which differs
-  // from the responsible rep when the task was delegated).
+  // Mark the card's assignments received and record the ACTUAL executor (which
+  // differs from the responsible rep when the task was delegated).
   //
-  // The check covers EVERY line of this task, not just the lines in this
-  // submission. Now that each button confirms on its own, a rep can receive one
-  // line per tap — and the task must stay open until the last line is settled,
-  // or a tap on a single line would silently close work that is still owed.
-  // `buildPickupGroups(includeCompleted)` is the same source the list uses, so
-  // "closed" here and "hidden" there can never disagree.
-  const taskGroups = await buildPickupGroups([assignment.id], { includeCompleted: true });
-  const anyOutstanding = taskGroups.some((g) =>
+  // The check covers EVERY line of the CARD (all of the supplier's POs), not
+  // just the lines in this submission. Each button confirms on its own, so a
+  // rep can receive one line per tap — and the card must stay open until the
+  // last line is settled, or a tap on a single line would silently close work
+  // that is still owed. Every sibling assignment of the card is updated too, so
+  // the detail and list never disagree. `buildPickupGroups(includeCompleted)` is
+  // the same source the list uses, so "closed" here and "hidden" there can never
+  // disagree.
+  // Rebuilt AFTER the inserts above: the pre-validation snapshot cannot know
+  // about the receipt we just wrote.
+  const closeGroups = await buildPickupGroups(
+    cardSiblingIds.length ? cardSiblingIds : [assignment.id],
+    { includeCompleted: true },
+  );
+  const anyOutstanding = closeGroups.some((g) =>
     g.allocations.some((a) => hasOutstandingQty(a.qty, a.acceptedQty)),
   );
   await db
@@ -699,7 +800,12 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       performedByHrEmployeeId: actor.hrEmployeeId,
       updatedAt: new Date(),
     })
-    .where(eq(workOrderAssignmentsTable.id, assignment.id));
+    .where(
+      inArray(
+        workOrderAssignmentsTable.id,
+        cardSiblingIds.length ? cardSiblingIds : [assignment.id],
+      ),
+    );
 
   await auditFieldOperation({
     action: "mobile.receipt_confirmed",
@@ -722,7 +828,7 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       .from(purchaseOrderItemsTable)
       .where(eq(purchaseOrderItemsTable.id, p.poItemId));
     try {
-      await applyReceiptSideEffects(assignment.poId, p.poItemId, line?.lineStatus ?? "pending");
+      await applyReceiptSideEffects(p.poId, p.poItemId, line?.lineStatus ?? "pending");
     } catch (err) {
       // Never block a confirmed receipt on a downstream chaining failure.
       logger.warn({ err, poItemId: p.poItemId }, "mobile receipt side-effects failed");

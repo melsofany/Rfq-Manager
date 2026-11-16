@@ -165,6 +165,14 @@ fun PickupDetailScreen(
                                         }
                                     }
                                     Spacer(Modifier.height(8.dp))
+                                    val poNos = data.poNos.ifEmpty {
+                                        listOfNotNull(data.po?.poNo)
+                                    }
+                                    if (poNos.size == 1) {
+                                        InfoRow("أمر الشراء", poNos.first())
+                                    } else if (poNos.size > 1) {
+                                        InfoRow("أوامر الشراء", poNos.joinToString("، "))
+                                    }
                                     InfoRow("تاريخ الأمر", formatDate(data.po?.poDate))
                                     InfoRow("المسؤول", data.representativeName)
                                     if (data.executorRole == "delegate") {

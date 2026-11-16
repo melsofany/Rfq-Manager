@@ -146,7 +146,7 @@ fun PickupListScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("الموردون") }
                         }
 
-                        items(data.tasks, key = { "task-${it.poId}-${it.supplier?.id ?: "nosup"}" }) { task ->
+                        items(data.tasks, key = { "supplier-${it.supplier?.id ?: it.poId}" }) { task ->
                             SupplierSquare(
                                 task = task,
                                 onClick = { onOpen(task.assignmentId ?: task.poId) },
@@ -185,12 +185,17 @@ fun SupplierSquare(task: PickupTask, onClick: () -> Unit, modifier: Modifier = M
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(6.dp))
+            // One card per supplier: show every order folded into it, not just
+            // the first, so the rep sees the full visit.
+            val poNos = task.poNos.ifEmpty { listOf(task.poNo) }
             Text(
-                text = "أمر شراء ${task.poNo}",
+                text = if (poNos.size == 1) "أمر شراء ${poNos.first()}"
+                else "أوامر شراء: ${poNos.joinToString("، ")}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(8.dp))
             StatusChip(task.status)
