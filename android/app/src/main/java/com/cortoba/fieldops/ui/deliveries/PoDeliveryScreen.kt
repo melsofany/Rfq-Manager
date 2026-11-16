@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -285,6 +286,10 @@ private fun DeliveryLineCard(
     var showReasonMenu by remember { mutableStateOf(false) }
     var showRejectDialog by remember { mutableStateOf(false) }
 
+    // A line waiting for its supplier receipt is visible but inert: the rep sees
+    // the work exists, and every action stays disabled until the goods arrive.
+    val actionsEnabled = !submitting && entry.isDeliverable
+
     CreamCard {
         Column {
             Text(
@@ -292,6 +297,10 @@ private fun DeliveryLineCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
+            if (entry.awaitingSupplierReceipt) {
+                Spacer(Modifier.height(6.dp))
+                AwaitingSupplierReceiptChip()
+            }
             InfoRow("المطلوب", formatQty(entry.orderedQty))
             InfoRow("المتاح للتسليم", formatQty(entry.availableQty), emphasize = true)
             if (entry.alreadyDeliveredQty > 0) {
@@ -307,24 +316,24 @@ private fun DeliveryLineCard(
                 ReceiptLikeActionButton(
                     text = "كلي",
                     color = StatusGreen,
-                    enabled = !submitting,
+                    enabled = actionsEnabled,
                     onClick = onFull,
                 )
                 ReceiptLikeActionButton(
                     text = "جزئي",
                     color = StatusBlue,
-                    enabled = !submitting,
+                    enabled = actionsEnabled,
                     onClick = { showPartial = !showPartial },
                 )
                 ReceiptLikeActionButton(
                     text = "رفض",
                     color = StatusAmber,
-                    enabled = !submitting,
+                    enabled = actionsEnabled,
                     onClick = { showRejectDialog = true },
                 )
             }
 
-            if (showPartial) {
+            if (showPartial && actionsEnabled) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = entry.deliveredQty,
@@ -362,6 +371,23 @@ private fun DeliveryLineCard(
                 onReasonChange(reason)
                 onReject()
             },
+        )
+    }
+}
+
+/** Marks a line whose supplier PO has not been received yet. */
+@Composable
+private fun AwaitingSupplierReceiptChip() {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = StatusBlue.copy(alpha = 0.12f),
+    ) {
+        Text(
+            text = "بانتظار استلام المورد",
+            color = StatusBlue,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
 }

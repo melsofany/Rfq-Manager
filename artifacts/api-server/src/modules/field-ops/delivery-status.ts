@@ -17,6 +17,12 @@ export interface DeliveryLineState {
   rejectedQty: number;
   /** Hard ceiling: what was received from the supplier (falls back to ordered). */
   acceptedFromSupplier: number | null;
+  /**
+   * The line is tied to a supplier PO that has not been received yet. It still
+   * has work outstanding (the ordered quantity), so it must never read as
+   * "settled" — otherwise a wholly-unreceived order would look fully rejected.
+   */
+  awaitingSupplierReceipt?: boolean;
 }
 
 export type PoDeliveryStatus = "completed" | "in_progress" | "fully_rejected";
@@ -30,8 +36,27 @@ export const PO_DELIVERY_STATUS_LABEL: Record<PoDeliveryStatus, string> = {
 
 /** How much of one line still has to be settled (delivered or rejected). */
 export function lineRemaining(line: DeliveryLineState): number {
+  // Nothing has arrived from the supplier yet, so the whole ordered quantity is
+  // still outstanding — the supplier ceiling does not apply until goods land.
+  if (line.awaitingSupplierReceipt) {
+    return Math.max(0, line.orderedQty - line.deliveredQty - line.rejectedQty);
+  }
   const ceiling = line.acceptedFromSupplier != null ? line.acceptedFromSupplier : line.orderedQty;
   return Math.max(0, ceiling - line.deliveredQty - line.rejectedQty);
+}
+
+/**
+ * Whether a delivery line is still work the rep must see.
+ *
+ * A line counts as outstanding when there is quantity to hand over OR when it
+ * is still waiting for its supplier receipt — a line that has not arrived is
+ * work in progress, not a line that can be dropped from the list.
+ */
+export function isOutstandingDeliveryLine(line: {
+  availableQty: number;
+  awaitingSupplierReceipt?: boolean;
+}): boolean {
+  return line.availableQty > 1e-6 || line.awaitingSupplierReceipt === true;
 }
 
 /**

@@ -120,13 +120,37 @@ export async function recomputeItemTotals(customerPoItemId: number): Promise<voi
     .where(eq(customerPoItemsTable.id, customerPoItemId));
 }
 
+/** Where a customer line stands with respect to the supplier who supplies it. */
+export interface SupplierReceiptState {
+  /**
+   * true when the line is tied to a LIVE supplier PO and must therefore be
+   * received before it can be delivered. The app shows such a line but cannot
+   * execute it yet.
+   */
+  awaitingReceipt: boolean;
+  /**
+   * Ceiling on deliverable quantity from the supplier side.
+   * null means "unguarded": deliver up to the ordered quantity.
+   */
+  acceptedQty: number | null;
+}
+
 /**
- * Sum of accepted qty received from the supplier for a customer_po_item.
- * Sums across all purchase_order_items linked to this customer_po_item via
- * customerPoItemId. Returns null when no supplier link exists (free/manual
- * lines) — in that case the guard is skipped.
+ * Resolve the supplier side of one customer_po_item.
+ *
+ * A customer line is supplied in one of two ways:
+ *  - a purchase order was issued to a supplier → the goods must be RECEIVED
+ *    first, so the line waits and can only be delivered up to what was accepted;
+ *  - nothing was issued (the rep buys it on the street, outside the system) →
+ *    the line is deliverable immediately, up to the ordered quantity.
+ *
+ * A supplier PO that was cancelled or rejected no longer supplies the line, so
+ * it falls back to the second case: the line becomes deliverable from an
+ * alternative source instead of waiting forever for goods that will never come.
  */
-export async function acceptedQtyFromSupplier(customerPoItemId: number): Promise<number | null> {
+export async function supplierReceiptState(
+  customerPoItemId: number,
+): Promise<SupplierReceiptState> {
   const rows = await db
     .select({
       accepted: purchaseOrderItemsTable.totalAcceptedQty,
@@ -134,11 +158,20 @@ export async function acceptedQtyFromSupplier(customerPoItemId: number): Promise
     })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
-  if (!rows.length) return null; // no supplier link → unguarded
-  // Only count lines that were actually received (not pending/rejected/cancelled).
-  return rows
-    .filter((r) => r.lineStatus !== "rejected" && r.lineStatus !== "cancelled")
-    .reduce((acc, r) => acc + (toNum(r.accepted) ?? 0), 0);
+  const live = rows.filter((r) => r.lineStatus !== "rejected" && r.lineStatus !== "cancelled");
+  // No supplier link at all, or every supplier line is cancelled/rejected:
+  // nothing is coming from a supplier, so the line is bought outside the system.
+  if (!live.length) return { awaitingReceipt: false, acceptedQty: null };
+  const accepted = live.reduce((acc, r) => acc + (toNum(r.accepted) ?? 0), 0);
+  return { awaitingReceipt: accepted <= 1e-6, acceptedQty: accepted };
+}
+
+/**
+ * Accepted qty received from the supplier for a customer_po_item, or null when
+ * the line is unguarded (no supplier, or the supplier PO was cancelled).
+ */
+export async function acceptedQtyFromSupplier(customerPoItemId: number): Promise<number | null> {
+  return (await supplierReceiptState(customerPoItemId)).acceptedQty;
 }
 
 // GET /customer-po/:id/deliveries — list all delivery rows for a customer PO.

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computePoDeliveryStatus,
+  isOutstandingDeliveryLine,
   lineRemaining,
   PO_DELIVERY_STATUS_LABEL,
   type DeliveryLineState,
@@ -22,6 +23,22 @@ describe("lineRemaining", () => {
   });
   it("never goes below zero", () => {
     expect(lineRemaining(line({ deliveredQty: 20 }))).toBe(0);
+  });
+});
+
+describe("isOutstandingDeliveryLine", () => {
+  it("is outstanding when there is quantity to hand over", () => {
+    expect(isOutstandingDeliveryLine({ availableQty: 3 })).toBe(true);
+  });
+  it("is outstanding while waiting for the supplier receipt", () => {
+    expect(isOutstandingDeliveryLine({ availableQty: 0, awaitingSupplierReceipt: true })).toBe(
+      true,
+    );
+  });
+  it("is not outstanding once settled", () => {
+    expect(isOutstandingDeliveryLine({ availableQty: 0, awaitingSupplierReceipt: false })).toBe(
+      false,
+    );
   });
 });
 
@@ -64,6 +81,34 @@ describe("computePoDeliveryStatus", () => {
 
   it("treats a delivered-plus-rejected line as settled", () => {
     expect(computePoDeliveryStatus([line({ deliveredQty: 7, rejectedQty: 3 })])).toBe("completed");
+  });
+
+  it("keeps an unreceived supplier line outstanding (not settled)", () => {
+    // Supplier PO issued but nothing received yet: the whole ordered qty is
+    // still to come, so the line must not read as settled.
+    expect(lineRemaining(line({ acceptedFromSupplier: 0, awaitingSupplierReceipt: true }))).toBe(
+      10,
+    );
+    expect(
+      computePoDeliveryStatus([line({ acceptedFromSupplier: 0, awaitingSupplierReceipt: true })]),
+    ).toBe("in_progress");
+  });
+
+  it("does not call a wholly-unreceived order fully rejected", () => {
+    expect(
+      computePoDeliveryStatus([
+        line({ acceptedFromSupplier: 0, awaitingSupplierReceipt: true }),
+        line({ orderedQty: 4, acceptedFromSupplier: 0, awaitingSupplierReceipt: true }),
+      ]),
+    ).toBe("in_progress");
+  });
+
+  it("settles an awaiting line once it is received and delivered", () => {
+    expect(
+      computePoDeliveryStatus([
+        line({ acceptedFromSupplier: 10, deliveredQty: 10, awaitingSupplierReceipt: false }),
+      ]),
+    ).toBe("completed");
   });
 
   it("has a human label for every status", () => {

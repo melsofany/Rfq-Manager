@@ -43,7 +43,7 @@ import {
   hasOutstandingQty,
   type PickupLine,
 } from "./consolidation";
-import { computePoDeliveryStatus } from "./delivery-status";
+import { computePoDeliveryStatus, isOutstandingDeliveryLine } from "./delivery-status";
 import {
   hasActiveFieldAssignment,
   visibleAssignmentsFor,
@@ -56,6 +56,7 @@ import { paymentStatusByPair } from "./payment-status";
 import { recomputeItemTotals } from "../po/receipts";
 import {
   acceptedQtyFromSupplier,
+  supplierReceiptState,
   recomputeItemTotals as recomputeDeliveryTotals,
 } from "../customer-po/deliveries";
 import { applyDeliverySideEffects, applyReceiptSideEffects } from "../communications/routes";
@@ -961,11 +962,14 @@ router.get("/deliveries", async (req, res): Promise<void> => {
     let availableQty = 0;
     for (const poId of g.customerPoIds) {
       const items = await deliveryItemsFor({ customerPoId: poId, customerPoItemId: null });
-      const remaining = items.filter((i) => i.availableQty > 0);
-      if (!remaining.length) continue;
+      // A line awaiting a supplier receipt is still work the rep must see, even
+      // though it cannot be delivered yet — so it keeps the PO (and the
+      // customer) on the list instead of hiding them until the goods arrive.
+      const outstanding = items.filter(isOutstandingDeliveryLine);
+      if (!outstanding.length) continue;
       deliverablePoCount += 1;
-      distinctItemCount += remaining.length;
-      availableQty += remaining.reduce((s, i) => s + i.availableQty, 0);
+      distinctItemCount += outstanding.length;
+      availableQty += outstanding.reduce((s, i) => s + i.availableQty, 0);
     }
     // Nothing left for this customer — drop the whole card.
     if (!deliverablePoCount) continue;
@@ -1031,7 +1035,8 @@ async function deliveryItemsFor(assignment: {
     const ordered = toNum(r.qty) ?? 0;
     const delivered = toNum(r.delivered) ?? 0;
     const rejected = toNum(r.rejected) ?? 0;
-    const accepted = await acceptedQtyFromSupplier(r.id);
+    const supplierState = await supplierReceiptState(r.id);
+    const accepted = supplierState.acceptedQty;
     const ceiling = accepted == null ? ordered : accepted;
     // A line is settled by BOTH a delivery and a customer rejection, so the
     // remaining quantity excludes rejected units. Otherwise a fully rejected
@@ -1049,6 +1054,9 @@ async function deliveryItemsFor(assignment: {
       deliveredQty: delivered,
       rejectedByCustomerQty: rejected,
       availableQty: Math.round(available * 10000) / 10000,
+      // A line whose supplier PO has not been received yet is SHOWN but cannot
+      // be executed: there is nothing in hand to hand over.
+      awaitingSupplierReceipt: supplierState.awaitingReceipt,
       deliveryStatus: r.deliveryStatus,
     });
   }
@@ -1146,7 +1154,7 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
     // Only orders with something left to settle appear here. A fully delivered
     // (or fully rejected) order is finished — the rep finds it in the delivery
     // history, not in the pending list.
-    if (!items.some((i) => i.availableQty > 0)) continue;
+    if (!items.some(isOutstandingDeliveryLine)) continue;
     const assignmentId = assignmentByPo.get(cpo.id);
     const assignment = assignments.find((a) => a.id === assignmentId);
     // The order status is DERIVED from its lines, never stored separately — so
@@ -1157,6 +1165,7 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
         deliveredQty: i.deliveredQty,
         rejectedQty: i.rejectedByCustomerQty ?? 0,
         acceptedFromSupplier: i.acceptedFromSupplierQty,
+        awaitingSupplierReceipt: i.awaitingSupplierReceipt,
       })),
     );
     const totalAmount = items.reduce((sum, i) => sum + (i.unitPrice ?? 0) * i.orderedQty, 0);

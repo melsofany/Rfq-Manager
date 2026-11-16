@@ -105,7 +105,9 @@ Rfq-Manager/
 | 1   | الإسناد تلقائي عند اختيار المندوب | `hr-field-assignment-routes.ts`          |
 | 2   | تجميع مع حفظ التتبع               | `consolidation.ts`                       |
 | 3   | تتبع كامل للمورد والعميل          | `allocations[]` لكل بند                  |
-| 4   | لا تسليم قبل استلام فعلي          | `checkDeliveryQuantities`                |
+| 4   | لا تسليم قبل استلام فعلي          | `checkDeliveryQuantities` + `supplierReceiptState` |
+| 4ب  | بند بانتظار المورد يظهر لكنه مقفول | `awaitingSupplierReceipt`                 |
+| 4ج  | مورد ملغي/مرفوض ⇒ البند يُسلَّم من مصدر بديل | `supplierReceiptState` (يتجاهل الملغي) |
 | 5   | لا خلط كميات بين أوامر العملاء    | تحقق على مستوى `customerPoId`            |
 | 6   | سجل تدقيق لكل عملية               | `field_operation_events`                 |
 | 7   | لا كتابة فوق السجلات التاريخية    | إدراج فقط، لا تحديث                      |

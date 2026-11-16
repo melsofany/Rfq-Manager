@@ -5527,3 +5527,37 @@ a rule the MODEL could satisfy on its own).
   panel shows the current state.
 
 2422 api-server tests pass; tsc (libs + api-server + portal) + prettier clean.
+
+## A supplier-linked line is SHOWN but locked until the supplier receipt lands
+
+- The delivery screen must list EVERY customer PO, including lines whose
+  supplier PO has not been received yet. Hiding them (the old behaviour, which
+  filtered on `availableQty > 0`) meant the rep could not see work already
+  committed to a customer.
+- Locked means locked, and the SERVER enforces it — the app only disables the
+  buttons. `supplierReceiptState()` (`modules/customer-po/deliveries.ts`) is the
+  single source: `{ awaitingReceipt, acceptedQty }`. `awaitingReceipt` is true
+  when the line has a LIVE supplier PO (not rejected/cancelled) whose accepted
+  qty is still zero; `acceptedQty` is the ceiling, or `null` when unguarded.
+- `acceptedQtyFromSupplier()` is now a thin wrapper over it, so the guard in
+  `POST /customer-po/:id/deliveries` and the mobile `confirm` route agree with
+  the list by construction. The list endpoint returns `awaitingSupplierReceipt`
+  per line; `isOutstandingDeliveryLine()` (`field-ops/delivery-status.ts`) keeps
+  such a line on the customer/delivery lists even at `availableQty == 0`.
+- A line with NO supplier PO (bought on the street) is deliverable at once. A
+  supplier PO that was CANCELLED or REJECTED no longer supplies the line, so it
+  falls back to that same unguarded case — the line becomes deliverable from an
+  alternative source instead of waiting forever for goods that will never come.
+  This is a deliberate decision: see the `deliveries-guard.test.ts` cases.
+- `lineRemaining()` treats an awaiting line as fully outstanding (the whole
+  ordered qty), otherwise a wholly-unreceived order would derive as
+  `fully_rejected` instead of `in_progress`.
+- Android side: `DeliveryItem.awaitingSupplierReceipt` (DTO) → `DeliveryEntry`
+  gains `isDeliverable = !awaitingSupplierReceipt && availableQty > 1e-6`, every
+  deliver/reject path guards on it, the qty field starts empty for an awaiting
+  line, and the card shows «بانتظار استلام المورد».
+- Verified: 2435 api-server tests, 42 Android unit tests (incl. the Robolectric
+  `DeliverySupplierReceiptTest` driving the real ViewModel), and E2E section 12f
+  (88/88 checks) against a real Postgres + built image.
+- Bump `versionCode` on every Android change or installs are not prompted (this
+  release: 28).
