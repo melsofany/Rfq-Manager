@@ -9,4 +9,10 @@
 export type ListPurchaseOrdersParams = {
 status?: string;
 search?: string;
+/**
+ * Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
 };

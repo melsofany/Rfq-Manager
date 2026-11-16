@@ -604,9 +604,15 @@ export const DeleteCustomerResponse = zod.void()
 /**
  * @summary List customer RFQs with optional search
  */
+export const listCustomerRfqsQueryLimitDefault = 200;
+export const listCustomerRfqsQueryLimitMax = 1000;
+
+
+
 export const ListCustomerRfqsQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listCustomerRfqsQueryLimitMax).default(listCustomerRfqsQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
 })
 
 export const ListCustomerRfqsResponseItem = zod.object({
@@ -934,9 +940,15 @@ export const DeleteCustomerRfqResponse = zod.void()
 /**
  * @summary List customer POs with optional search
  */
+export const listCustomerPosQueryLimitDefault = 200;
+export const listCustomerPosQueryLimitMax = 1000;
+
+
+
 export const ListCustomerPosQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listCustomerPosQueryLimitMax).default(listCustomerPosQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
 })
 
 export const ListCustomerPosResponseItem = zod.object({
@@ -1669,9 +1681,15 @@ export const LookupCustomerRfqResponse = zod.array(LookupCustomerRfqResponseItem
 /**
  * @summary List all purchase orders
  */
+export const listPurchaseOrdersQueryLimitDefault = 200;
+export const listPurchaseOrdersQueryLimitMax = 1000;
+
+
+
 export const ListPurchaseOrdersQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listPurchaseOrdersQueryLimitMax).default(listPurchaseOrdersQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
 })
 
 export const ListPurchaseOrdersResponseItem = zod.object({

@@ -233,6 +233,9 @@ let openOlderNotShown = 0;
 // The WHERE the open-requests query built, so a guard can prove the close-date
 // window is applied in SQL rather than by loading every request.
 let openRequestWhereCond: any = null;
+// WHERE built by the LIST route (search/status filter) — recorded so a guard can
+// prove the filter is applied in SQL rather than in JS.
+let listWhereCond: any = null;
 
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
@@ -325,19 +328,34 @@ const dbMock: any = {
             ? [{ rfq: detailRow }]
             : [];
         return chainable(wrapped, {
-          // list chains .orderBy; detail chains .where
+          // The LIST route chains .where(...).orderBy(...).limit(...) so it can
+          // filter and cap in SQL; the open-requests route chains
+          // .where(...).orderBy() and resolves there. Record the WHERE per
+          // caller so a guard can prove the filter is applied server-side.
           orderBy: vi.fn(() => chainable(listRows)),
-          where: vi.fn((cond: any) =>
-            // The open-requests query is the ONLY one that chains .where().orderBy()
-            // on this table, so ordering after the filter is what identifies it —
-            // and it is where the close-date window must be recorded for the guard.
-            chainable(wrapped, {
-              orderBy: vi.fn(() => {
-                openRequestWhereCond = cond;
-                return chainable(openRequestRows);
-              }),
-            }),
-          ),
+          where: vi.fn((cond: any) => {
+            const afterWhere = {
+              // Three callers chain .where() on this table:
+              //   .where().limit()            → DETAIL (one row)
+              //   .where().orderBy().limit()  → LIST   (filter + cap in SQL)
+              //   .where().orderBy() awaited  → OPEN-REQUESTS
+              orderBy: vi.fn(() =>
+                chainable(openRequestRows, {
+                  limit: vi.fn(() => {
+                    listWhereCond = cond;
+                    return chainable(listRows);
+                  }),
+                  then: (resolve: any) => {
+                    openRequestWhereCond = cond;
+                    return Promise.resolve(openRequestRows).then(resolve);
+                  },
+                }),
+              ),
+              limit: vi.fn(() => chainable(wrapped)),
+              then: (resolve: any) => Promise.resolve(wrapped).then(resolve),
+            };
+            return afterWhere as any;
+          }),
           limit: vi.fn(() => chainable(wrapped)),
         });
       }
@@ -889,6 +907,7 @@ beforeEach(() => {
   openSupplierRows = [];
   openOlderNotShown = 0;
   openRequestWhereCond = null;
+  listWhereCond = null;
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -1070,6 +1089,22 @@ describe("GET /api/customer-rfq (list)", () => {
     expect(res.body[0].requestStatus.supplierPriced).toBe(true);
     // No customer price yet → still "مُسعَّر من المورد".
     expect(res.body[0].requestStatus.stage).toBe("supplier_priced");
+  });
+
+  it("filters search + status in SQL, not in JS, and caps the page", async () => {
+    // The list used to load every request and filter in JS — 4,747 rows
+    // serialized to a 2.67 MB payload on every open (measured ~6 s live). The
+    // WHERE must now carry the term, and a LIMIT must bound the page; a mock
+    // that serves rows directly cannot see either, so assert the BUILT query.
+    listRows = [{ rfq: { ...insertedRfq, id: 9, internalNo: "CRFQ-9" } }];
+    const res = await request(testApp).get("/api/customer-rfq?search=ACME&status=sent&limit=50");
+    expect(res.status).toBe(200);
+    const cond = JSON.stringify(listWhereCond ?? {});
+    expect(cond).toContain("ACME");
+    expect(cond).toContain("sent");
+    // No search/status → no WHERE at all (the unbounded-in-query case is gone).
+    await request(testApp).get("/api/customer-rfq");
+    expect(listWhereCond ?? null).toBeNull();
   });
 
   it("marks an unpriced RFQ whose close date passed as expired", async () => {

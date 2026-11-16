@@ -43,7 +43,7 @@ import {
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { round2 } from "./tax";
-import { postJournalEntry, nextEntryNo, accountBalance } from "./posting";
+import { postJournalEntry, nextEntryNo, accountBalance, accountBalances } from "./posting";
 import { monthOf, assertMonthOpen } from "./closing";
 import { num as toNum, formatNum } from "./helpers";
 import {
@@ -534,9 +534,14 @@ router.get("/accounts/trial-balance", requireAuth, async (req, res): Promise<voi
   const lines = [];
   let totalDebit = 0;
   let totalCredit = 0;
+  const trialBalances = await accountBalances(
+    accounts.filter((a) => a.isActive).map((a) => a.code),
+    from,
+    to,
+  );
   for (const a of accounts) {
     if (!a.isActive) continue;
-    const bal = await accountBalance(a.code, from, to);
+    const bal = trialBalances.get(a.code) ?? { debit: 0, credit: 0, balance: 0 };
     // A trial balance shows each account's balance on the side it actually
     // sits: an account with a raw debit balance belongs in the debit column
     // even when its type is credit-natured (e.g. a contra account such as
@@ -583,9 +588,14 @@ router.get("/accounts/income-statement", requireAuth, async (req, res): Promise<
   const expenses = [];
   let totalRevenue = 0;
   let totalExpense = 0;
+  const incomeBalances = await accountBalances(
+    accounts.filter((a) => a.isActive).map((a) => a.code),
+    from,
+    to,
+  );
   for (const a of accounts) {
     if (!a.isActive) continue;
-    const bal = await accountBalance(a.code, from, to);
+    const bal = incomeBalances.get(a.code) ?? { debit: 0, credit: 0, balance: 0 };
     if (bal.balance === 0) continue;
     if (a.type !== "revenue" && a.type !== "expense") continue;
     const amount = signedFromRaw(a.type, bal.balance);
@@ -634,9 +644,14 @@ router.get("/accounts/balance-sheet", requireAuth, async (req, res): Promise<voi
   const totals = { assets: 0, liabilities: 0, equity: 0 };
   let totalRevenue = 0;
   let totalExpense = 0;
+  const sheetBalances = await accountBalances(
+    accounts.filter((a) => a.isActive).map((a) => a.code),
+    undefined,
+    asOf,
+  );
   for (const a of accounts) {
     if (!a.isActive) continue;
-    const bal = await accountBalance(a.code, undefined, asOf);
+    const bal = sheetBalances.get(a.code) ?? { debit: 0, credit: 0, balance: 0 };
     if (bal.balance === 0) continue;
     // Signed in the account's own normal direction, so a contra account nets
     // against its section (e.g. a credit balance sitting in an asset account).

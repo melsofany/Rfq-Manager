@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useListCustomerPos, getListCustomerPosQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,9 +49,10 @@ export default function CustomerDeliveriesPage() {
   const [loadingItems, setLoadingItems] = useState(false);
   const [deliveries, setDeliveries] = useState<Record<number, DeliveryRow[]>>({});
 
+  const debouncedSearch = useDebounced(search);
   const { data: pos, isLoading } = useListCustomerPos(
-    { search: search || undefined },
-    { query: { queryKey: getListCustomerPosQueryKey({ search: search || undefined }) } },
+    { search: debouncedSearch || undefined },
+    { query: { queryKey: getListCustomerPosQueryKey({ search: debouncedSearch || undefined }) } },
   );
 
   async function loadItems(poId: number) {

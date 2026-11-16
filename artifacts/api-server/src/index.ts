@@ -59,6 +59,14 @@ initDb()
     await markOrphanedJobs().catch((err) =>
       logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
     );
+    // Sweep inactive suppliers ONCE at boot instead of on every GET /suppliers
+    // (that read carried an 8.9 s UPDATE). Best-effort and idempotent.
+    const { deactivateInactiveSuppliers } = await import("./modules/users/suppliers");
+    await deactivateInactiveSuppliers()
+      .then((n) => {
+        if (n > 0) logger.info({ suppliers: n }, "suppliers: auto-deactivated unanswered");
+      })
+      .catch((err) => logger.warn({ err }, "suppliers: auto-deactivate sweep failed (non-fatal)"));
     // Repair the historical backlog of unclassified customer items with the
     // SAME deterministic rules as new items, and remember each decision by
     // identity. Idempotent (only NULL categories) and model-free, so it is safe

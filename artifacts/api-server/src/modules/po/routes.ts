@@ -86,7 +86,20 @@ async function generateInternalPoNoInTx(
 }
 
 router.get("/po", requireAuth, async (req, res): Promise<void> => {
-  const { status, search } = req.query as Record<string, string>;
+  const { status, search, limit } = req.query as Record<string, string>;
+
+  // Filter + cap in SQL (same reasoning as the customer-RFQ/PO lists): loading
+  // every order and filtering in JS grows without bound, and the search box
+  // re-issues the request as the operator types.
+  const conditions = [];
+  if (status) conditions.push(eq(purchaseOrdersTable.status, status));
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(
+      or(ilike(purchaseOrdersTable.internalPoNo, term), ilike(purchaseOrdersTable.sheetPoNo, term)),
+    );
+  }
+  const maxRows = Math.min(Math.max(parseInt(String(limit ?? "200"), 10) || 200, 1), 1000);
 
   const rows = await db
     .select({
@@ -95,17 +108,11 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
     })
     .from(purchaseOrdersTable)
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
-    .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`);
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`)
+    .limit(maxRows);
 
-  let filtered = rows;
-  if (status) filtered = filtered.filter((r) => r.po.status === status);
-  if (search) {
-    const s = search.toLowerCase();
-    filtered = filtered.filter(
-      (r) =>
-        r.po.internalPoNo.toLowerCase().includes(s) || r.po.sheetPoNo.toLowerCase().includes(s),
-    );
-  }
+  const filtered = rows;
 
   const poIds = filtered.map((r) => r.po.id);
   const itemCounts =

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useLocation } from "wouter";
 import { useListCustomerRfqs, getListCustomerRfqsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
@@ -87,10 +88,26 @@ function AllRequestsTab() {
   const [classifying, setClassifying] = useState(false);
   const canClassify = employee?.role === "admin" || employee?.role === "manager";
 
+  // The server caps the page (loading all 4,747 requests was a 2.67 MB / ~6 s
+  // response on every open). The cap must be VISIBLE — a silently truncated list
+  // reads as "these are all the requests". Must stay in step with the route's
+  // default limit in modules/customer-rfq/routes.ts.
+  const LIST_PAGE_SIZE = 200;
+
+  // Debounced so typing issues ONE request, not one per keystroke.
+  const debouncedSearch = useDebounced(search);
   const { data: rfqs, isLoading } = useListCustomerRfqs(
-    { search: search || undefined },
-    { query: { queryKey: getListCustomerRfqsQueryKey({ search: search || undefined }) } },
+    { search: debouncedSearch || undefined, limit: LIST_PAGE_SIZE },
+    {
+      query: {
+        queryKey: getListCustomerRfqsQueryKey({
+          search: debouncedSearch || undefined,
+          limit: LIST_PAGE_SIZE,
+        }),
+      },
+    },
   );
+  const capped = (rfqs?.length ?? 0) >= LIST_PAGE_SIZE;
 
   const runBulkClassify = async () => {
     setClassifying(true);
@@ -150,6 +167,11 @@ function AllRequestsTab() {
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {capped && (
+          <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-border">
+            يتم عرض أحدث {LIST_PAGE_SIZE} طلب فقط. استخدم البحث للوصول إلى طلب أقدم.
+          </div>
+        )}
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
         ) : !rfqs?.length ? (

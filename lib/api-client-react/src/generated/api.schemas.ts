@@ -1595,6 +1595,12 @@ export const ListCustomersActive = {
 export type ListCustomerRfqsParams = {
 search?: string;
 status?: string;
+/**
+ * Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
 };
 
 export type ListCustomerRfqNumbers200 = {
@@ -1682,6 +1688,12 @@ export const ListCustomerRfqSheetViewFacetsColumn = {
 export type ListCustomerPosParams = {
 search?: string;
 status?: string;
+/**
+ * Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
 };
 
 export type ListCustomerPosCustomerRfqs200 = {
@@ -1742,6 +1754,12 @@ export type ApproveOfferItem200 = {
 export type ListPurchaseOrdersParams = {
 status?: string;
 search?: string;
+/**
+ * Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.
+ * @minimum 1
+ * @maximum 1000
+ */
+limit?: number;
 };
 
 export type DeletePurchaseOrder200 = {

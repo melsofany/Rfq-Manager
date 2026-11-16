@@ -17,7 +17,7 @@ import {
   chartOfAccountsTable,
   ACCOUNT_CODES,
 } from "@workspace/db";
-import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
+import { eq, sql, and, gte, lte, desc, inArray } from "drizzle-orm";
 import { insertWithDocNo } from "./doc-numbering";
 import type { DbLike } from "./doc-numbering";
 import { round2 } from "./tax";
@@ -199,6 +199,49 @@ export async function accountBalance(
     credit += Number(r.credit ?? 0);
   }
   return { debit: round2(debit), credit: round2(credit), balance: round2(debit - credit) };
+}
+
+/**
+ * Balances for MANY account codes in ONE query. The per-code `accountBalance`
+ * loop is O(accounts) round trips — 34 on production for the analytics snapshot
+ * — which is fine for a single lookup but not for a dashboard that reads them
+ * all. Same rule (posted entries only), so both paths agree.
+ */
+export async function accountBalances(
+  codes: string[],
+  from?: string,
+  to?: string,
+): Promise<Map<string, { debit: number; credit: number; balance: number }>> {
+  const out = new Map<string, { debit: number; credit: number; balance: number }>();
+  for (const code of codes) out.set(code, { debit: 0, credit: 0, balance: 0 });
+  if (codes.length === 0) return out;
+  const rows = await db
+    .select({
+      accountCode: journalLinesTable.accountCode,
+      debit: journalLinesTable.debit,
+      credit: journalLinesTable.credit,
+      entryDate: journalEntriesTable.entryDate,
+      status: journalEntriesTable.status,
+    })
+    .from(journalLinesTable)
+    .innerJoin(journalEntriesTable, eq(journalLinesTable.entryId, journalEntriesTable.id))
+    .where(inArray(journalLinesTable.accountCode, codes));
+  for (const r of rows) {
+    if (r.status !== "posted") continue;
+    if (from && r.entryDate < from) continue;
+    if (to && r.entryDate > to) continue;
+    const e = out.get(r.accountCode) ?? { debit: 0, credit: 0, balance: 0 };
+    e.debit += Number(r.debit ?? 0);
+    e.credit += Number(r.credit ?? 0);
+    out.set(r.accountCode, e);
+  }
+  for (const [code, e] of out)
+    out.set(code, {
+      debit: round2(e.debit),
+      credit: round2(e.credit),
+      balance: round2(e.debit - e.credit),
+    });
+  return out;
 }
 
 export { eq, and, gte, lte, desc, sql };

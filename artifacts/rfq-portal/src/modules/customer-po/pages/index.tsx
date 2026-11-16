@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useLocation } from "wouter";
 import {
   useListCustomerPos,
@@ -53,10 +54,24 @@ export default function CustomerPoPage() {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<string>(allowedTabs[0] ?? "orders");
 
+  const debouncedSearch = useDebounced(search);
+  // The server caps the page (loading all 886 POs + their rollups was a 436 KB /
+  // ~4 s response on every open). The cap is shown, not silent — a truncated
+  // list that reads as complete is worse than a slower one. Keep in step with
+  // the route default in modules/customer-po/routes.ts.
+  const LIST_PAGE_SIZE = 200;
   const { data: pos, isLoading } = useListCustomerPos(
-    { search: search || undefined },
-    { query: { queryKey: getListCustomerPosQueryKey({ search: search || undefined }) } },
+    { search: debouncedSearch || undefined, limit: LIST_PAGE_SIZE },
+    {
+      query: {
+        queryKey: getListCustomerPosQueryKey({
+          search: debouncedSearch || undefined,
+          limit: LIST_PAGE_SIZE,
+        }),
+      },
+    },
   );
+  const capped = (pos?.length ?? 0) >= LIST_PAGE_SIZE;
 
   return (
     <Layout>
@@ -107,6 +122,11 @@ export default function CustomerPoPage() {
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
+              {capped && (
+                <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-border">
+                  يتم عرض أحدث {LIST_PAGE_SIZE} أمر فقط. استخدم البحث للوصول إلى أمر أقدم.
+                </div>
+              )}
               {isLoading ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
               ) : !pos?.length ? (

@@ -119,6 +119,17 @@ function selectBuilder(selection?: any) {
                 if (camel in r) return String(r[camel]) === String(val);
                 return true;
               });
+            } else if (c.__inArray) {
+              const [col, vals] = c.__inArray;
+              const snake = col?.name ?? String(col);
+              const camel = snake.replace(/_([a-z])/g, (_m: string, ch: string) =>
+                ch.toUpperCase(),
+              );
+              const allowed = (vals ?? []).map(String);
+              rows = rows.filter((r) => {
+                const v = snake in r ? r[snake] : r[camel];
+                return v == null ? false : allowed.includes(String(v));
+              });
             } else if (Array.isArray(c.values)) {
               const anyArg = c.values.find((v: any) => Array.isArray(v));
               if (anyArg) {
@@ -207,6 +218,8 @@ vi.mock("drizzle-orm", () => {
     // accountBalance() is called once per account, so the mock must actually
     // filter or every account would report the same total.
     eq: (a: any, b: any) => ({ __eq: [a, b], col: a, val: b }),
+    // accountBalances() filters journal_lines by a set of account codes.
+    inArray: (col: any, vals: any[]) => ({ __inArray: [col, vals] }),
     sql,
     and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
     desc: (a: any) => a,

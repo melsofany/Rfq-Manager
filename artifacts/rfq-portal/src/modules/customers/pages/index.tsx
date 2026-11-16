@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -23,11 +24,12 @@ export default function CustomersPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<number | null>(null);
 
+  const debouncedSearch = useDebounced(search);
   const { data: customers, isLoading } = useListCustomers(
-    { search: search || undefined },
+    { search: debouncedSearch || undefined },
     {
       query: {
-        queryKey: getListCustomersQueryKey({ search: search || undefined }),
+        queryKey: getListCustomersQueryKey({ search: debouncedSearch || undefined }),
       },
     },
   );

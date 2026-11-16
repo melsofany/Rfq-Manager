@@ -10,7 +10,7 @@ import {
   purchaseOrdersTable,
   purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
+import { eq, count, inArray, desc, sql, and, or, ilike, isNotNull, ne } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lockItemRows } from "../rfq/attribution";
 
@@ -343,17 +343,33 @@ async function resolveReceivedRollup(
       for (const d of dispatched) {
         if (d.sheetPoNo) poIdByNo.set(d.sheetPoNo.toLowerCase(), d.poId);
       }
-      // For each listed customer PO matched by number, load its items and count
-      // those whose lineItem matches an accepted supplier item.
+      // For each listed customer PO matched by number, count its items whose
+      // lineItem matches an accepted supplier item. One query for all listed
+      // CPOs instead of one per CPO (the per-CPO loop was a page-bounded N+1).
+      const listedCpoIds = Array.from(customerPoNoByPoId.keys());
+      const allCpoItems =
+        listedCpoIds.length > 0
+          ? await db
+              .select({
+                customerPoId: customerPoItemsTable.customerPoId,
+                id: customerPoItemsTable.id,
+                lineItem: customerPoItemsTable.lineItem,
+              })
+              .from(customerPoItemsTable)
+              .where(inArray(customerPoItemsTable.customerPoId, listedCpoIds))
+          : [];
+      const cpoItemsByPo = new Map<number, { id: number; lineItem: string | null }[]>();
+      for (const ci of allCpoItems) {
+        if (ci.customerPoId == null) continue;
+        const arr = cpoItemsByPo.get(ci.customerPoId) ?? [];
+        arr.push({ id: ci.id, lineItem: ci.lineItem });
+        cpoItemsByPo.set(ci.customerPoId, arr);
+      }
       for (const [cpoId, cpoNo] of customerPoNoByPoId) {
         const spoId = poIdByNo.get(cpoNo.toLowerCase());
         const acceptedLines = spoId != null ? acceptedByPo.get(spoId) : undefined;
         if (!acceptedLines) continue;
-        const cpoItems = await db
-          .select({ id: customerPoItemsTable.id, lineItem: customerPoItemsTable.lineItem })
-          .from(customerPoItemsTable)
-          .where(eq(customerPoItemsTable.customerPoId, cpoId));
-        for (const ci of cpoItems) {
+        for (const ci of cpoItemsByPo.get(cpoId) ?? []) {
           if (ci.lineItem && acceptedLines.has(ci.lineItem.trim())) {
             receivedItemIds.add(ci.id);
           }
@@ -457,25 +473,35 @@ function serialize(
 
 // GET /customer-po — list with optional search
 router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
-  const { search, status } = req.query as Record<string, string>;
+  const { search, status, limit } = req.query as Record<string, string>;
 
+  // Server-side search/filter + a bounded page. The route used to load all 886
+  // POs, filter in JS, then run three rollup queries over every one of them and
+  // serialize a 436 KB payload (~4 s measured) on every open. `search` is a SQL
+  // ILIKE and the page is capped, newest first.
+  const conditions = [];
+  if (status) conditions.push(eq(customerPosTable.status, status));
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(customerPosTable.internalPoNo, term),
+        ilike(customerPosTable.customerPoNo, term),
+        ilike(customerPosTable.buyerName, term),
+        ilike(customerPosTable.customerName, term),
+      ),
+    );
+  }
+
+  const maxRows = Math.min(Math.max(parseInt(String(limit ?? "200"), 10) || 200, 1), 1000);
   const rows = await db
     .select({ po: customerPosTable })
     .from(customerPosTable)
-    .orderBy(desc(customerPosTable.createdAt));
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(customerPosTable.createdAt))
+    .limit(maxRows);
 
-  let filtered = rows;
-  if (status) filtered = filtered.filter((r) => r.po.status === status);
-  if (search) {
-    const s = search.toLowerCase();
-    filtered = filtered.filter(
-      (r) =>
-        r.po.internalPoNo.toLowerCase().includes(s) ||
-        r.po.customerPoNo.toLowerCase().includes(s) ||
-        (r.po.buyerName ?? "").toLowerCase().includes(s) ||
-        (r.po.customerName ?? "").toLowerCase().includes(s),
-    );
-  }
+  const filtered = rows;
 
   const ids = filtered.map((r) => r.po.id);
   const counts =

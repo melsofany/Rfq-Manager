@@ -116,18 +116,24 @@ function firstSetArg(): any {
 }
 
 describe("suppliers auto-deactivate + manual reactivation", () => {
-  it("GET /suppliers runs the auto-deactivate sweep (db.execute) before listing", async () => {
-    // The list route: db.execute (sweep) then db.select (rows).
-    executeQueue.push({ rows: [] }); // sweep UPDATE result
+  it("GET /suppliers does NOT run the sweep — a page load must not carry a write", async () => {
+    // The sweep used to run on every GET and measured 8.9 s on production
+    // (a correlated MAX(created_at) per supplier group). It is now a boot-time
+    // job, so the LIST route must not call db.execute at all.
     selectQueue.push([baseRow]); // list rows
     const res = await request(testApp).get("/suppliers");
     expect(res.status).toBe(200);
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+
+  it("deactivateInactiveSuppliers runs the sweep once, reset-aware", async () => {
+    // The extracted job keeps the exact semantics the route used to run inline:
+    // the counter starts from GREATEST(last offer, last manual reactivation).
+    executeQueue.push({ rows: [] });
+    const { deactivateInactiveSuppliers } = await import("../../modules/users/suppliers");
+    await deactivateInactiveSuppliers();
     expect(db.execute).toHaveBeenCalledTimes(1);
-    // The sweep SQL must reference the reactivated_at column (reset-aware).
-    // drizzle's `sql` template returns a SQL object — JSON.stringify exposes
-    // its query text chunks.
-    const sqlObj = (db.execute as any).mock.calls[0][0];
-    const sqlText = JSON.stringify(sqlObj ?? {});
+    const sqlText = JSON.stringify((db.execute as any).mock.calls[0][0] ?? {});
     expect(sqlText).toMatch(/reactivated_at/i);
     expect(sqlText).toMatch(/GREATEST/i);
   });

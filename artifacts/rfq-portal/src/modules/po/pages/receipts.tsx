@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useLocation } from "wouter";
 import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -120,13 +121,14 @@ export default function GoodsReceiptPage() {
   }
 
   // Only dispatched (sent) POs are eligible for goods receipt.
+  const debouncedSearch = useDebounced(search);
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
-    { status: "sent", search: search || undefined },
+    { status: "sent", search: debouncedSearch || undefined },
     {
       query: {
         queryKey: getListPurchaseOrdersQueryKey({
           status: "sent",
-          search: search || undefined,
+          search: debouncedSearch || undefined,
         }),
       },
     },
