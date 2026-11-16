@@ -62,6 +62,7 @@ function chainableThenable(rows: any): any {
     innerJoin: vi.fn(() => api),
     where: vi.fn(() => chainableThenable(rows)),
     limit: vi.fn(() => chainableThenable(rows)),
+    offset: vi.fn(() => chainableThenable(rows)),
     orderBy: vi.fn(() => chainableThenable(rows)),
     groupBy: vi.fn(() => chainableThenable(rows)),
     then: (resolve: any) => Promise.resolve(rows).then(resolve),

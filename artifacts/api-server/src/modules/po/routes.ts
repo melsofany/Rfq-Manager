@@ -86,11 +86,12 @@ async function generateInternalPoNoInTx(
 }
 
 router.get("/po", requireAuth, async (req, res): Promise<void> => {
-  const { status, search, limit } = req.query as Record<string, string>;
+  const { status, search, limit, offset: offsetQ } = req.query as Record<string, string>;
 
-  // Filter + cap in SQL (same reasoning as the customer-RFQ/PO lists): loading
+  // Filter + page in SQL (same reasoning as the customer-RFQ/PO lists): loading
   // every order and filtering in JS grows without bound, and the search box
-  // re-issues the request as the operator types.
+  // re-issues the request as the operator types. `offset` keeps every row
+  // reachable so a bounded page is never a silent truncation.
   const conditions = [];
   if (status) conditions.push(eq(purchaseOrdersTable.status, status));
   if (search) {
@@ -100,6 +101,7 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
     );
   }
   const maxRows = Math.min(Math.max(parseInt(String(limit ?? "200"), 10) || 200, 1), 1000);
+  const offset = Math.max(parseInt(String(offsetQ ?? "0"), 10) || 0, 0);
 
   const rows = await db
     .select({
@@ -110,7 +112,8 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`)
-    .limit(maxRows);
+    .limit(maxRows)
+    .offset(offset);
 
   const filtered = rows;
 

@@ -607,12 +607,16 @@ export const DeleteCustomerResponse = zod.void()
 export const listCustomerRfqsQueryLimitDefault = 200;
 export const listCustomerRfqsQueryLimitMax = 1000;
 
+export const listCustomerRfqsQueryOffsetDefault = 0;
+export const listCustomerRfqsQueryOffsetMin = 0;
+
 
 
 export const ListCustomerRfqsQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
-  "limit": zod.coerce.number().min(1).max(listCustomerRfqsQueryLimitMax).default(listCustomerRfqsQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
+  "limit": zod.coerce.number().min(1).max(listCustomerRfqsQueryLimitMax).default(listCustomerRfqsQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is paged so a page load never serializes the whole table.'),
+  "offset": zod.coerce.number().min(listCustomerRfqsQueryOffsetMin).default(listCustomerRfqsQueryOffsetDefault).describe('Rows to skip (default 0). Lets the client page forward through the whole list, so a bounded page never hides rows.')
 })
 
 export const ListCustomerRfqsResponseItem = zod.object({
@@ -943,12 +947,16 @@ export const DeleteCustomerRfqResponse = zod.void()
 export const listCustomerPosQueryLimitDefault = 200;
 export const listCustomerPosQueryLimitMax = 1000;
 
+export const listCustomerPosQueryOffsetDefault = 0;
+export const listCustomerPosQueryOffsetMin = 0;
+
 
 
 export const ListCustomerPosQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
-  "limit": zod.coerce.number().min(1).max(listCustomerPosQueryLimitMax).default(listCustomerPosQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
+  "limit": zod.coerce.number().min(1).max(listCustomerPosQueryLimitMax).default(listCustomerPosQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is paged so a page load never serializes the whole table.'),
+  "offset": zod.coerce.number().min(listCustomerPosQueryOffsetMin).default(listCustomerPosQueryOffsetDefault).describe('Rows to skip (default 0). Lets the client page forward through the whole list, so a bounded page never hides rows.')
 })
 
 export const ListCustomerPosResponseItem = zod.object({
@@ -1684,12 +1692,16 @@ export const LookupCustomerRfqResponse = zod.array(LookupCustomerRfqResponseItem
 export const listPurchaseOrdersQueryLimitDefault = 200;
 export const listPurchaseOrdersQueryLimitMax = 1000;
 
+export const listPurchaseOrdersQueryOffsetDefault = 0;
+export const listPurchaseOrdersQueryOffsetMin = 0;
+
 
 
 export const ListPurchaseOrdersQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "search": zod.coerce.string().optional(),
-  "limit": zod.coerce.number().min(1).max(listPurchaseOrdersQueryLimitMax).default(listPurchaseOrdersQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is capped so a page load never serializes the whole table.')
+  "limit": zod.coerce.number().min(1).max(listPurchaseOrdersQueryLimitMax).default(listPurchaseOrdersQueryLimitDefault).describe('Maximum rows to return (default 200, max 1000). The list is paged so a page load never serializes the whole table.'),
+  "offset": zod.coerce.number().min(listPurchaseOrdersQueryOffsetMin).default(listPurchaseOrdersQueryOffsetDefault).describe('Rows to skip (default 0). Lets the client page forward through the whole list, so a bounded page never hides rows.')
 })
 
 export const ListPurchaseOrdersResponseItem = zod.object({

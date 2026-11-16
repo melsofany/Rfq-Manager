@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useDebounced } from "@/hooks/use-debounced";
+import { usePagedList } from "@/hooks/use-paged-list";
 import { useLocation } from "wouter";
-import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
+import { listPurchaseOrders } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -49,26 +50,25 @@ export default function PurchaseOrdersListPage() {
   const [adding, setAdding] = useState(false);
 
   const debouncedSearch = useDebounced(search);
-  // The server caps the page so a list open never serializes the whole table.
-  // Keep in step with the route default in modules/po/routes.ts.
-  const LIST_PAGE_SIZE = 200;
-  const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
-    {
-      status: status !== "all" ? status : undefined,
-      search: debouncedSearch || undefined,
-      limit: LIST_PAGE_SIZE,
-    },
-    {
-      query: {
-        queryKey: getListPurchaseOrdersQueryKey({
-          status: status !== "all" ? status : undefined,
-          search: debouncedSearch || undefined,
-          limit: LIST_PAGE_SIZE,
-        }),
-      },
-    },
-  );
-  const capped = (purchaseOrders?.length ?? 0) >= LIST_PAGE_SIZE;
+  // The server pages the list so an open never serializes the whole table. Every
+  // page stays REACHABLE via «تحميل المزيد», so a bounded page can never read as
+  // the whole set.
+  const {
+    rows: purchaseOrders,
+    isLoading,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+  } = usePagedList({
+    queryKey: ["purchase-orders", status, debouncedSearch],
+    fetchPage: ({ limit, offset }) =>
+      listPurchaseOrders({
+        status: status !== "all" ? status : undefined,
+        search: debouncedSearch || undefined,
+        limit,
+        offset,
+      }),
+  });
 
   // Load per-PO receipt progress (received/rejected/total) for the list badge.
   // Live-refreshes via the same SSE stream the receipts tab uses.
@@ -243,11 +243,6 @@ export default function PurchaseOrdersListPage() {
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              {capped && (
-                <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-border">
-                  يتم عرض أحدث {LIST_PAGE_SIZE} أمر شراء فقط. استخدم البحث للوصول إلى أمر أقدم.
-                </div>
-              )}
               {isLoading ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
               ) : purchaseOrders?.length === 0 ? (
@@ -444,6 +439,18 @@ export default function PurchaseOrdersListPage() {
                       ))}
                     </tbody>
                   </table>
+                  {hasMore && (
+                    <div className="p-3 text-center border-t border-border">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadMore}
+                        disabled={isLoadingMore}
+                      >
+                        {isLoadingMore ? "جارٍ التحميل..." : "تحميل المزيد"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

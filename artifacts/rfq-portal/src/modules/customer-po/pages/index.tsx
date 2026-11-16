@@ -1,11 +1,8 @@
 import { useState } from "react";
 import { useDebounced } from "@/hooks/use-debounced";
+import { usePagedList } from "@/hooks/use-paged-list";
 import { useLocation } from "wouter";
-import {
-  useListCustomerPos,
-  getListCustomerPosQueryKey,
-  type CustomerPoFulfillmentStatus,
-} from "@workspace/api-client-react";
+import { listCustomerPos, type CustomerPoFulfillmentStatus } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,23 +52,20 @@ export default function CustomerPoPage() {
   const [tab, setTab] = useState<string>(allowedTabs[0] ?? "orders");
 
   const debouncedSearch = useDebounced(search);
-  // The server caps the page (loading all 886 POs + their rollups was a 436 KB /
-  // ~4 s response on every open). The cap is shown, not silent — a truncated
-  // list that reads as complete is worse than a slower one. Keep in step with
-  // the route default in modules/customer-po/routes.ts.
-  const LIST_PAGE_SIZE = 200;
-  const { data: pos, isLoading } = useListCustomerPos(
-    { search: debouncedSearch || undefined, limit: LIST_PAGE_SIZE },
-    {
-      query: {
-        queryKey: getListCustomerPosQueryKey({
-          search: debouncedSearch || undefined,
-          limit: LIST_PAGE_SIZE,
-        }),
-      },
-    },
-  );
-  const capped = (pos?.length ?? 0) >= LIST_PAGE_SIZE;
+  // The server pages the list (loading all 886 POs and their rollups was ~4 s on
+  // every open). Every page stays REACHABLE via «تحميل المزيد», so a bounded page
+  // can never read as the whole set.
+  const {
+    rows: pos,
+    isLoading,
+    hasMore,
+    isLoadingMore,
+    loadMore,
+  } = usePagedList({
+    queryKey: ["customer-pos", debouncedSearch],
+    fetchPage: ({ limit, offset }) =>
+      listCustomerPos({ search: debouncedSearch || undefined, limit, offset }),
+  });
 
   return (
     <Layout>
@@ -122,11 +116,6 @@ export default function CustomerPoPage() {
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
-              {capped && (
-                <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-border">
-                  يتم عرض أحدث {LIST_PAGE_SIZE} أمر فقط. استخدم البحث للوصول إلى أمر أقدم.
-                </div>
-              )}
               {isLoading ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
               ) : !pos?.length ? (
@@ -213,6 +202,18 @@ export default function CustomerPoPage() {
                       ))}
                     </tbody>
                   </table>
+                  {hasMore && (
+                    <div className="p-3 text-center border-t border-border">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadMore}
+                        disabled={isLoadingMore}
+                      >
+                        {isLoadingMore ? "جارٍ التحميل..." : "تحميل المزيد"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
