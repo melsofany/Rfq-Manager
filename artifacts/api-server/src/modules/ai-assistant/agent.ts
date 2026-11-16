@@ -13,6 +13,7 @@ import {
 } from "./llm";
 import { loadSettings, modelForPath, MAX_HISTORY, type AiSettings } from "./config";
 import { recallMemories, renderMemoryBlock, distillMemories } from "./memory";
+import { planFor, renderPlan } from "./task-plan";
 import {
   toolDefinitions,
   executeTool,
@@ -327,6 +328,10 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
   const stateBlock = renderConversationState(conversationState);
   const orgProfilesBlock = renderOrgProfilesBlock(orgProfiles);
   const learningLead = renderLearningLead({ memories, orgProfiles, vocabulary });
+  // An explicit plan keeps a multi-step request on track: without it each round
+  // re-decides the task from the recent transcript and the later steps are
+  // dropped (the OpenManus `PlanningFlow` discipline).
+  const planBlock = renderPlan(planFor(userText));
 
   const system: ChatMessage = {
     role: "system",
@@ -336,6 +341,7 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
       stateBlock +
       memoryBlock +
       learningLead +
+      planBlock +
       vocabularyBlock +
       orgProfilesBlock,
   };
