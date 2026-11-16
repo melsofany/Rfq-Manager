@@ -38,38 +38,7 @@ import {
   sendDeliveryRejectionReasonOptions,
   CUSTOMER_REJECTION_REASONS,
   formatQty as formatWaQty,
-  sendSupplierRequestPicker,
-  sendSupplierRequestConfirmed,
-  sendSupplierRequestHandedOff,
-  sendSupplierBotMainMenu,
-  sendSupplierBotRequestList,
-  sendSupplierBotItemList,
-  sendSupplierBotItemDetail,
-  sendSupplierBotItemSummary,
-  sendSupplierBotConfirm,
-  notifyEmployeeOfSupplierReply,
-  notifyEmployeeOfSupplierRequest,
 } from "./service";
-import {
-  listSupplierOpenRequests,
-  listSupplierRequestItems,
-  supplierMayAnswer,
-  loadSession,
-  saveSession,
-  clearSession,
-  upsertDraft,
-  loadDrafts,
-  loadSupplierRequestItemsWithDrafts,
-  summariseDrafts,
-  confirmDrafts,
-  itemLabel,
-  parsePrice,
-  parseDeliveryDays,
-  isSkip,
-  stepPrompt,
-  STEP_ORDER,
-  type BotStep,
-} from "./supplier-bot";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
@@ -80,12 +49,7 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50
 
 import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
-import {
-  openPricingRequestsForSupplier,
-  responsibleEmployeeFor,
-  pickRequestFromText,
-  supplierByPhone,
-} from "./supplier-requests";
+import { supplierByPhone } from "./supplier-requests";
 
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
@@ -94,8 +58,17 @@ const WA_TOKEN = process.env.WHATSAPP_TOKEN;
 const WA_PHONE_ID = PHONE_NUMBER_ID;
 const WA_API_VERSION = "v22.0";
 
-function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+export function normalizePhone(phone: string): string {
+  // Strip the invisible directional/formatting marks that paste in from
+  // WhatsApp and browsers. A supplier whose stored phone carried one
+  // (\u2066+201155351999) never matched the bare wa_id the webhook sends, so
+  // their inbound rows were stored with supplier_id = NULL and the chat list —
+  // which groups by (phone, supplier_id) — split one conversation in two.
+  // eslint-disable-next-line no-control-regex
+  let cleaned = phone
+    .replace(/[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g, "")
+    .replace(/[\s\-()]/g, "")
+    .replace(/^\+/, "");
   if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
   if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
   if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
@@ -206,15 +179,6 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
       // backfill replays it into the console as a phantom staff thread.
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
-    } else if (await handleSupplierBotMessage(from, msg)) {
-      // Interactive supplier bot owns this message (sup_ menu or a supplier's
-      // step answer). Sits after the rep bot so a number that is BOTH a rep and
-      // a supplier keeps its rep behaviour, and before the generic handler so
-      // the bot's menus are not echoed into the shared inbox.
-      logger.info({ from }, "Supplier bot message handled");
-    } else if (await handleSupplierRequestPick(from, msg)) {
-      // Supplier tapped a request button — the conversation is now filed there.
-      logger.info({ from }, "Supplier request pick handled");
     } else if (msg.type === "interactive" && (await handleWorkOrderButton(from, msg))) {
       logger.info({ from }, "Work-order interactive button handled");
     } else {
@@ -352,11 +316,6 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
-      } else if (await handleSupplierBotMessage(from, message)) {
-        // Interactive supplier bot — same order as the library path above.
-        logger.info({ from }, "Supplier bot message handled");
-      } else if (await handleSupplierRequestPick(from, message)) {
-        logger.info({ from }, "Supplier request pick handled");
       } else if (message.type === "interactive" && (await handleWorkOrderButton(from, message))) {
         logger.info({ from }, "Work-order interactive button handled");
       } else {
@@ -1039,674 +998,6 @@ async function repDeliveryItems(
     qty: formatWaQty(r.qty),
     statusHint: r.deliveryStatus === "partial" ? "تسليم جزئي" : "بانتظار التسليم",
   }));
-}
-
-/**
- * Supplier request picker.
- *
- * A supplier with several open pricing requests sends a message we cannot
- * attribute to one request. Rather than guess (a wrong guess files a price under
- * the wrong request and the wrong employee), the bot shows their open requests
- * as tappable buttons and the tap is what assigns the conversation.
- *
- * Returns true when the message was consumed by this flow, so the caller stops
- * before the generic inbound handler.
- */
-async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Promise<boolean> {
-  const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
-  if (!payload.startsWith("rfq_pick:")) return false;
-
-  const rfqId = Number(payload.split(":")[1]);
-  if (!Number.isFinite(rfqId)) return false;
-
-  const supplier = await supplierByPhone(phone);
-  if (!supplier) {
-    await sendWhatsAppText(phone, "هذا الرقم غير مسجّل كمورد لدينا. تواصل مع الإدارة.");
-    return true;
-  }
-  // Re-read the open set: the request must still be open and belong to THIS
-  // supplier, or a stale button could file a reply against another supplier's
-  // request.
-  const open = await openPricingRequestsForSupplier(supplier.id);
-  const chosen = open.find((r) => r.rfqId === rfqId);
-  if (!chosen) {
-    await sendWhatsAppText(phone, "هذا الطلب لم يعد مفتوحاً. اختر من الطلبات الحالية.");
-    await sendSupplierRequestPicker(phone, open);
-    return true;
-  }
-
-  // Point the conversation at the chosen request so the reply that follows is
-  // filed there, and tell the supplier who is handling it.
-  // The pick CONFIRMS THE HAND-OFF, not a data-entry session: the bot's job is
-  // to route the supplier to the employee who owns the request. Recording it is
-  // what makes the hand-off real — the invitation below («أرسل عرضك هنا
-  // مباشرة») is only honoured if the bot knows to stay out of the thread.
-  await saveSession({
-    phone,
-    supplierId: supplier.id,
-    rfqId: chosen.rfqId,
-    rfqItemId: null,
-    step: "handed_off",
-  });
-  const chosenItems = await listSupplierRequestItems(supplier.id, chosen.rfqId);
-  await sendSupplierRequestHandedOff(
-    phone,
-    chosen.internalRfqNo,
-    chosen.employeeName,
-    chosenItems.length,
-  );
-  broadcastWaEvent({ type: "new_message", phone });
-  return true;
-}
-
-/**
- * ── Interactive supplier bot ─────────────────────────────────────────────────
- *
- * The supplier-facing counterpart of the representative bot. A supplier opens
- * the menu with any message, browses THEIR OWN open pricing requests, opens an
- * item, answers it step by step, and confirms — at which point the answers are
- * written as an unapproved offer for an employee to review.
- *
- * Returns true when the bot owned the message, so the caller stops before the
- * generic inbound handler. Returns false for anything that is not the supplier
- * flow (no `sup_` payload and not a supplier's plain text), which is what keeps
- * ordinary supplier chat working exactly as before.
- */
-/**
- * The supplier bot intercepts plain text from a REGISTERED supplier, which is a
- * behaviour change on a live channel: a supplier typing an ordinary question now
- * gets the bot menu instead of the human chat. Ship it enabled (that is the
- * requested behaviour) but keep a kill-switch, so if a supplier is mid-quote and
- * the flow misbehaves the operator can set SUPPLIER_BOT_ENABLED=false and the
- * message falls through to the ordinary handler on the next deploy — no code
- * revert, no data migration.
- */
-function supplierBotEnabled(): boolean {
-  return process.env.SUPPLIER_BOT_ENABLED !== "false";
-}
-
-/**
- * Record an inbound supplier message the bot consumed.
- *
- * The bot answers a supplier BEFORE the generic handler runs, so without this
- * the message would never reach the chat log the employee reads — the prices,
- * availability and notes would exist only inside the bot session.
- *
- * Best-effort by design: a DB hiccup must never cost the supplier their answer.
- */
-async function recordSupplierBotInbound(opts: {
-  phone: string;
-  waMessageId: string | undefined;
-  msg: ServerMessage;
-  supplierId: number;
-  supplierName?: string | null;
-  rfqId?: number | null;
-  employeeId?: number | null;
-  employeeName?: string | null;
-}): Promise<void> {
-  try {
-    const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(opts.msg);
-    if (opts.waMessageId) {
-      const existing = await db
-        .select({ id: whatsappChatsTable.id })
-        .from(whatsappChatsTable)
-        .where(eq(whatsappChatsTable.waMessageId, opts.waMessageId))
-        .limit(1);
-      // Idempotent: a redelivered webhook must not double the thread.
-      if (existing.length === 0) {
-        // Same shared builder as the other two inbound writers. This path used
-        // to write its own field list and therefore dropped `reply_to_message_id`
-        // and the contact name — the third copy of one row description.
-        await db
-          .insert(whatsappChatsTable)
-          .values(
-            inboundChatValues(
-              opts.phone,
-              opts.msg,
-              opts.supplierName ?? null,
-              opts.supplierId ?? null,
-            ),
-          );
-      }
-    }
-    // Store the FILE, as the generic inbound path does: a supplier who sends
-    // their quote as a PDF while the bot is open must not lose it.
-    if (mediaId) void downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream");
-  } catch (err) {
-    logger.warn({ err, phone: opts.phone }, "Supplier bot: inbound record failed — non-fatal");
-  }
-}
-
-export async function handleSupplierBotMessage(
-  phone: string,
-  msg: ServerMessage,
-): Promise<boolean> {
-  if (!supplierBotEnabled()) return false;
-
-  const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
-  const isBotPayload = payload.startsWith("sup_");
-  const text = msg.type === "text" ? (msg.text?.body ?? "").trim() : "";
-
-  // Resolve the supplier FIRST. An unregistered number gets the ordinary chat
-  // flow — the bot must not become a way for a stranger to browse anything.
-  const supplier = await supplierByPhone(phone);
-  if (!supplier) return false;
-
-  const session = await loadSession(phone);
-
-  // A `sup_` payload from a stale menu is still ours: answer with the menu
-  // rather than letting it fall through to the generic handler, which would
-  // look like the bot ignoring the tap.
-  if (!isBotPayload && !text) return false;
-
-  // After a hand-off the thread belongs to the employee. The supplier was told
-  // to send the quote HERE, so answering with the menu would swallow exactly
-  // the message the bot asked for — and force a fresh request pick every time.
-  // Explicit taps still work, so the supplier can reopen the bot on purpose.
-  if (!isBotPayload && session?.step === "handed_off") return false;
-
-  // We are about to consume this message, so the generic handler will never see
-  // it — record it ourselves, once, for every branch below.
-  await recordSupplierBotInbound({
-    phone,
-    waMessageId: msg.id,
-    msg,
-    supplierId: supplier.id,
-    supplierName: supplier.name,
-    rfqId: session?.rfqId ?? null,
-  });
-
-  try {
-    // ── Explicit taps ────────────────────────────────────────────────────────
-    if (isBotPayload) {
-      const [head, a, b] = payload.split(":");
-
-      if (head === "sup_menu") {
-        if (a === "myrfqs") {
-          const open = await listSupplierOpenRequests(supplier.id);
-          await sendSupplierBotRequestList(phone, open, 1);
-          await clearSession(phone);
-          return true;
-        }
-        if (a === "back") {
-          await sendSupplierBotMainMenu(phone, supplier.name);
-          await clearSession(phone);
-          return true;
-        }
-        if (a === "help") {
-          await sendWhatsAppText(
-            phone,
-            "كيفية الاستخدام:\n" +
-              "1) اضغط «طلبات التسعير» لعرض طلباتكم المفتوحة.\n" +
-              "2) اختر الطلب المطلوب — وسيتم تحويلك للموظف المسؤول عنه.\n" +
-              "3) أرسل عرضك في المحادثة مباشرة (نصًا أو ملف PDF أو صورة).\n\n" +
-              "الموظف المسؤول يستلم عرضك داخل النظام ويتابع معك.",
-          );
-          return true;
-        }
-        if (a === "agent") {
-          await requestHumanAgent(phone, supplier.id, session?.rfqId ?? null);
-          return true;
-        }
-        return true;
-      }
-
-      if (head === "sup_page") {
-        const page = Number(a) || 1;
-        const open = await listSupplierOpenRequests(supplier.id);
-        await sendSupplierBotRequestList(phone, open, page);
-        return true;
-      }
-
-      if (head === "sup_rfq") {
-        const rfqId = Number(a);
-        if (!Number.isFinite(rfqId)) return true;
-        // Authorise at the moment of USE, not when the menu was drawn: the
-        // request may have been closed or re-sent since.
-        const allowed = await supplierMayAnswer(supplier.id, rfqId);
-        if (!allowed.ok) {
-          await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
-          const open = await listSupplierOpenRequests(supplier.id);
-          await sendSupplierBotRequestList(phone, open, 1);
-          return true;
-        }
-        const items = await listSupplierRequestItems(supplier.id, rfqId);
-        await saveSession({
-          phone,
-          supplierId: supplier.id,
-          rfqId,
-          rfqItemId: null,
-          step: null,
-        });
-        await sendSupplierBotItemList(
-          phone,
-          await rfqNoOf(rfqId),
-          items.map((it) => ({
-            id: it.id,
-            label: itemLabel(it),
-            qty: it.qty,
-            uom: it.uom,
-            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
-          })),
-          1,
-        );
-        return true;
-      }
-
-      if (head === "sup_ipage") {
-        const page = Number(a) || 1;
-        if (!session?.rfqId) return true;
-        const items = await listSupplierRequestItems(supplier.id, session.rfqId);
-        await sendSupplierBotItemList(
-          phone,
-          await rfqNoOf(session.rfqId),
-          items.map((it) => ({
-            id: it.id,
-            label: itemLabel(it),
-            qty: it.qty,
-            uom: it.uom,
-            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
-          })),
-          page,
-        );
-        return true;
-      }
-
-      if (head === "sup_back") {
-        if (a === "items" && session?.rfqId) {
-          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
-          await sendSupplierBotItemList(
-            phone,
-            await rfqNoOf(session.rfqId),
-            items.map((it) => ({
-              id: it.id,
-              label: itemLabel(it),
-              qty: it.qty,
-              uom: it.uom,
-              answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
-            })),
-            1,
-          );
-          await saveSession({
-            phone,
-            supplierId: supplier.id,
-            rfqId: session.rfqId,
-            rfqItemId: null,
-            step: null,
-          });
-          return true;
-        }
-        await sendSupplierBotMainMenu(phone, supplier.name);
-        await clearSession(phone);
-        return true;
-      }
-
-      if (head === "sup_item") {
-        const itemId = Number(a);
-        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
-        await showItemDetail(phone, supplier.id, session.rfqId, itemId);
-        return true;
-      }
-
-      if (head === "sup_send_offer") {
-        // The bot ROUTES; it does not collect the quote. Tapping a request used
-        // to open a per-item wizard («متاح؟ / السعر؟ / مدة التوريد؟») that asked
-        // the supplier for the figures the responsible employee negotiates —
-        // and left the answer outside the console thread, which is where the
-        // employee works. Both buttons now hand the conversation over.
-        if (!session?.rfqId) return true;
-        const rfqNo = await rfqNoOf(session.rfqId);
-        const items = await listSupplierRequestItems(supplier.id, session.rfqId);
-        const owner = await responsibleEmployeeFor(supplier.id, session.rfqId);
-        const note = b === "0" ? "غير متاح" : "متاح";
-        // The tap itself is part of the conversation, so it is mirrored — the
-        // employee sees the supplier answered, not just that a menu was opened.
-        await sendSupplierRequestHandedOff(phone, rfqNo, owner?.employeeName ?? null, items.length);
-        broadcastWaEvent({ type: "new_message", phone });
-        await clearSession(phone);
-        return true;
-      }
-
-      if (head === "sup_confirm") {
-        const confirmed = a === "1";
-        if (!session?.rfqId) return true;
-        if (!confirmed) {
-          await sendWhatsAppText(
-            phone,
-            "تمام، تم الحفظ. يمكنك استكمال الرد في أي وقت من «طلبات التسعير».",
-          );
-          await clearSession(phone);
-          return true;
-        }
-        const result = await confirmDrafts(supplier.id, session.rfqId);
-        if (!result.ok) {
-          const why =
-            result.reason === "no_priced_items"
-              ? "لم تقم بإدخال أي سعر بعد. أدخل سعراً لبند واحد على الأقل ثم أرسل الرد."
-              : "تعذّر حفظ الرد حالياً. حاول مرة أخرى بعد قليل.";
-          await sendWhatsAppText(phone, why);
-          return true;
-        }
-        const rfqNo = await rfqNoOf(session.rfqId);
-        await sendWhatsAppText(
-          phone,
-          `✅ تم إرسال ردكم على الطلب ${rfqNo} (${result.savedItems} بند).\n` +
-            "سيتم مراجعته من قبل الموظف المسؤول وسنوافيكم بالنتيجة.",
-        );
-        // Tell the responsible employee. Best-effort: the offer is already
-        // saved, and a notification failure must not look like a failed reply.
-        void notifyResponsibleEmployee(
-          supplier.id,
-          session.rfqId,
-          result.savedItems ?? 0,
-          result.approvalsCleared ?? 0,
-        );
-        await clearSession(phone);
-        return true;
-      }
-
-      return true;
-    }
-
-    // ── Free text: either a step answer or a request to open the bot ─────────
-    if (session?.step && session.rfqId && session.rfqItemId) {
-      const allowed = await supplierMayAnswer(supplier.id, session.rfqId);
-      if (!allowed.ok) {
-        await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
-        await clearSession(phone);
-        return true;
-      }
-      await advanceStep(phone, supplier.id, session.rfqId, session.rfqItemId, session.step, text);
-      return true;
-    }
-
-    // No active step: any plain text from a supplier opens the main menu. The
-    // message was already recorded and mirrored above, so answering here loses
-    // nothing from the console's point of view.
-    await sendSupplierBotMainMenu(phone, supplier.name);
-    return true;
-  } catch (err) {
-    logger.error({ err, phone }, "Supplier bot handling error");
-    // Swallow: the inbound message was recorded before this point, and a bot
-    // fault must not surface as silence.
-    return true;
-  }
-}
-
-/** Send one item's detail screen. */
-async function showItemDetail(
-  phone: string,
-  supplierId: number,
-  rfqId: number,
-  itemId: number,
-): Promise<void> {
-  const items = await listSupplierRequestItems(supplierId, rfqId);
-  const item = items.find((i) => i.id === itemId);
-  if (!item) {
-    await sendWhatsAppText(phone, "هذا البند لم يعد موجوداً في الطلب.");
-    return;
-  }
-  await sendSupplierBotItemDetail(phone, await rfqNoOf(rfqId), {
-    id: item.id,
-    lineItem: item.lineItem,
-    partNo: item.partNo,
-    description: item.description,
-    uom: item.uom,
-    qty: item.qty,
-    referencePrice: null,
-  });
-}
-
-async function itemLabelOf(rfqId: number, itemId: number): Promise<string> {
-  const [row] = await db
-    .select({
-      partNo: rfqItemsTable.partNo,
-      lineItem: rfqItemsTable.lineItem,
-      description: rfqItemsTable.description,
-    })
-    .from(rfqItemsTable)
-    .where(and(eq(rfqItemsTable.rfqId, rfqId), eq(rfqItemsTable.id, itemId)))
-    .limit(1);
-  return row ? itemLabel(row) : `#${itemId}`;
-}
-
-async function rfqNoOf(rfqId: number): Promise<string> {
-  const [row] = await db
-    .select({ no: rfqTable.internalRfqNo })
-    .from(rfqTable)
-    .where(eq(rfqTable.id, rfqId))
-    .limit(1);
-  return row?.no ?? `#${rfqId}`;
-}
-
-/**
- * Apply one free-text answer to the item's draft and ask the next question.
- *
- * The ladder is walked one field at a time; «تخطي» advances an OPTIONAL field
- * without a value. The price is the only field that must parse — re-asking on an
- * unparsable price is correct, while storing a 0 would create a fake zero quote.
- */
-async function advanceStep(
-  phone: string,
-  supplierId: number,
-  rfqId: number,
-  itemId: number,
-  step: BotStep,
-  text: string,
-): Promise<void> {
-  const label = await itemLabelOf(rfqId, itemId);
-  const skip = isSkip(text);
-
-  switch (step) {
-    case "await_price": {
-      const price = parsePrice(text);
-      if (price == null) {
-        await sendWhatsAppText(phone, "لم أتعرف على السعر. اكتب السعر بالأرقام فقط، مثال: 120");
-        return;
-      }
-      await upsertDraft(supplierId, rfqId, itemId, { unitPrice: price, currency: "EGP" });
-      break;
-    }
-    case "await_delivery": {
-      if (!skip) {
-        const days = parseDeliveryDays(text);
-        if (days == null) {
-          await sendWhatsAppText(phone, "اكتب عدد الأيام بالأرقام، مثال: 7 — أو «تخطي».");
-          return;
-        }
-        await upsertDraft(supplierId, rfqId, itemId, { deliveryDays: days });
-      }
-      break;
-    }
-    case "await_origin":
-      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { originCountry: text });
-      break;
-    case "await_brand":
-      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { brand: text });
-      break;
-    case "await_notes":
-      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { notes: text });
-      break;
-  }
-
-  const idx = STEP_ORDER.indexOf(step);
-  const next = STEP_ORDER[idx + 1];
-  if (next) {
-    await saveSession({ phone, supplierId, rfqId, rfqItemId: itemId, step: next });
-    await sendWhatsAppText(phone, stepPrompt(next, label));
-    return;
-  }
-
-  // Item complete — show what was recorded, then offer the next step so the
-  // supplier is never left at a dead end.
-  const drafts = await loadDrafts(supplierId, rfqId);
-  const d = drafts.get(itemId);
-  await saveSession({ phone, supplierId, rfqId, rfqItemId: null, step: null });
-  await sendSupplierBotItemSummary(phone, label, {
-    availability: d?.availability ?? "available",
-    unitPrice: d?.unitPrice ?? null,
-    currency: d?.currency ?? null,
-    deliveryDays: d?.deliveryDays ?? null,
-    originCountry: d?.originCountry ?? null,
-    brand: d?.brand ?? null,
-    notes: d?.notes ?? null,
-  });
-  const items = await listSupplierRequestItems(supplierId, rfqId);
-  await sendSupplierBotItemList(
-    phone,
-    await rfqNoOf(rfqId),
-    items.map((it) => ({
-      id: it.id,
-      label: itemLabel(it),
-      qty: it.qty,
-      uom: it.uom,
-      answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
-    })),
-    1,
-  );
-  // And the confirmation screen, so «done» is always one tap away.
-  const summary = await summariseDrafts(supplierId, rfqId);
-  await sendSupplierBotConfirm(phone, await rfqNoOf(rfqId), {
-    pricedCount: summary.pricedCount,
-    totalCount: summary.totalCount,
-    answeredLabels: summary.answered.map((x) => x.label),
-    unansweredLabels: summary.unanswered.map((x) => x.label),
-  });
-}
-
-/**
- * The supplier asked for a human. Hand the conversation to the responsible
- * employee (or the supervisor ladder) and tell the supplier it is on the way.
- */
-async function requestHumanAgent(
-  phone: string,
-  supplierId: number,
-  rfqId: number | null,
-): Promise<void> {
-  let owner: { employeeId: number | null; employeeName: string | null } = {
-    employeeId: null,
-    employeeName: null,
-  };
-  if (rfqId) {
-    const open = await openPricingRequestsForSupplier(supplierId);
-    const match = open.find((r) => r.rfqId === rfqId);
-    owner = { employeeId: match?.employeeId ?? null, employeeName: match?.employeeName ?? null };
-  }
-  await sendWhatsAppText(
-    phone,
-    owner.employeeName
-      ? `تم تحويل طلبك إلى ${owner.employeeName} وسيتواصل معك في أقرب وقت.`
-      : "تم تحويل طلبك إلى فريق المشتريات وسيتواصل معك أحد الموظفين في أقرب وقت.",
-  );
-  // Stop the automated questions so the human conversation is not interrupted
-  // by a price prompt.
-  await clearSession(phone);
-  // Tell the responsible employee DIRECTLY. The SSE broadcast below only reaches
-  // a portal page that happens to be open, so relying on it alone made the
-  // supplier's "someone will contact you" untrue whenever nobody was watching —
-  // the request sat unseen. The employee must be reachable on their own phone.
-  //
-  // The main-menu tap carries no request id, so there is often no owner to look
-  // up; fall back to a manager/admin rather than notifying nobody. The order is
-  // the same ladder the console assignment uses (owner → supervisor).
-  try {
-    const ownerPhone = await employeePhoneOf(owner.employeeId);
-    const fallback = ownerPhone ? null : await fallbackHumanAgentPhone();
-    const targetPhone = ownerPhone ?? fallback?.phone ?? null;
-    if (targetPhone) {
-      const [supplier] = await db
-        .select({ name: suppliersTable.name })
-        .from(suppliersTable)
-        .where(eq(suppliersTable.id, supplierId))
-        .limit(1);
-      await notifyEmployeeOfSupplierRequest(targetPhone, {
-        employeeName: owner.employeeName ?? fallback?.name ?? null,
-        supplierName: supplier?.name ?? "مورد",
-        rfqNo: rfqId ? await rfqNoOf(rfqId) : null,
-      });
-    } else {
-      logger.info(
-        { supplierId, rfqId, employeeId: owner.employeeId },
-        "Human-agent request: no employee phone to notify",
-      );
-    }
-  } catch (err) {
-    // The supplier was already told a human is coming; a notification failure
-    // must not turn that answer into an error.
-    logger.warn({ err, supplierId, rfqId }, "Human-agent request notification failed");
-  }
-  broadcastWaEvent({ type: "new_message", phone });
-}
-
-/** Notify the employee responsible for the request that a reply arrived. */
-async function notifyResponsibleEmployee(
-  supplierId: number,
-  rfqId: number,
-  pricedCount: number,
-  approvalsCleared = 0,
-): Promise<void> {
-  try {
-    const open = await openPricingRequestsForSupplier(supplierId);
-    const match = open.find((r) => r.rfqId === rfqId);
-    const [supplier] = await db
-      .select({ name: suppliersTable.name, phone: suppliersTable.phone })
-      .from(suppliersTable)
-      .where(eq(suppliersTable.id, supplierId))
-      .limit(1);
-    const rfqNo = await rfqNoOf(rfqId);
-    const items = await listSupplierRequestItems(supplierId, rfqId);
-    const employeePhone = await employeePhoneOf(match?.employeeId ?? null);
-    if (!employeePhone) {
-      logger.info({ rfqId, supplierId }, "Supplier reply: no employee phone to notify");
-      return;
-    }
-    await notifyEmployeeOfSupplierReply(employeePhone, {
-      employeeName: match?.employeeName ?? null,
-      rfqNo,
-      supplierName: supplier?.name ?? "مورد",
-      pricedCount,
-      totalCount: items.length,
-      approvalsCleared,
-    });
-  } catch (err) {
-    logger.warn({ err, rfqId }, "Supplier reply notification failed");
-  }
-}
-
-/** The dialable number of an employee, or null when they have none on file. */
-async function employeePhoneOf(employeeId: number | null): Promise<string | null> {
-  if (!employeeId) return null;
-  const [row] = await db
-    .select({ phone: employeesTable.phone })
-    .from(employeesTable)
-    .where(eq(employeesTable.id, employeeId))
-    .limit(1);
-  return row?.phone ?? null;
-}
-
-/**
- * Who to notify when the supplier asks for a human but the request is unknown.
- *
- * The main-menu «التواصل مع موظف» tap carries NO request id — that is the common
- * case, not the exception — so there is no responsible employee to look up. The
- * notice must still reach SOMEONE, or the supplier's «سيتواصل معك أحد الموظفين»
- * is a promise nobody keeps. Preference: an active manager, then an active
- * admin, then any active employee with a phone on file.
- */
-async function fallbackHumanAgentPhone(): Promise<{ phone: string; name: string | null } | null> {
-  const rows = await db
-    .select({
-      name: employeesTable.name,
-      phone: employeesTable.phone,
-      role: employeesTable.role,
-      isActive: employeesTable.isActive,
-    })
-    .from(employeesTable);
-  const reachable = rows.filter((r) => r.isActive !== false && r.phone);
-  const rank = (role: string) => (role === "manager" ? 0 : role === "admin" ? 1 : 2);
-  reachable.sort((a, b) => rank(a.role) - rank(b.role));
-  const first = reachable[0];
-  return first ? { phone: first.phone as string, name: first.name } : null;
 }
 
 /**
@@ -2445,14 +1736,13 @@ async function handleInboundMessage(
   reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
 ): Promise<void> {
   const waMessageId = msg.id;
-  const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
+  const { mediaId, mimeType } = describeInboundBody(msg);
 
   const allSuppliers = await db.select().from(suppliersTable);
-  const matchedSupplier = allSuppliers.find((s) => {
-    if (!s.phone) return false;
-    const normalized = s.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-    return normalized === phone || normalized.endsWith(phone) || phone.endsWith(normalized);
-  });
+  const target = normalizePhone(phone);
+  const matchedSupplier = allSuppliers.find(
+    (s) => s.phone != null && normalizePhone(s.phone) === target,
+  );
 
   // `recordInboundOnce` runs before dispatch and has usually written the row
   // already. Returning here would skip the MIRROR — so the console would show
@@ -2488,47 +1778,6 @@ async function handleInboundMessage(
     "WhatsApp inbound message saved",
   );
   broadcastWaEvent({ type: "new_message", phone, senderName });
-
-  //
-  // The reply is filed under the REQUEST it answers, not just the phone: an
-  // explicit request number in the text wins, then a supplier with a single open
-  // request. With several open requests and no number given, the message is
-  // filed with no request context (rfqId 0) rather than guessed onto one — a
-  // wrong guess misfiles a price, which is worse than an unlabelled thread.
-  void (async () => {
-    const supplierId = matchedSupplier?.id ?? null;
-    let rfqId = 0;
-    let owner: { employeeId: number | null; employeeName: string | null } = {
-      employeeId: null,
-      employeeName: null,
-    };
-    let needsPick = false;
-    if (supplierId) {
-      const open = await openPricingRequestsForSupplier(supplierId);
-      const picked = pickRequestFromText(body, open);
-      if (!picked.ambiguous) {
-        rfqId = picked.rfqId;
-        const match = open.find((r) => r.rfqId === picked.rfqId);
-        owner = {
-          employeeId: match?.employeeId ?? null,
-          employeeName: match?.employeeName ?? null,
-        };
-      } else {
-        needsPick = open.length > 1;
-      }
-    }
-    // The FILE travels with the message. Without it the console showed a text
-    // stub for every attachment, which is the recorded reason the previous
-    // WhatsApp screen was abandoned: the agent could read "the supplier sent a
-    // file" but never open it.
-    if (mediaId) void downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream");
-    // Several open requests and no number given: ask which one instead of
-    // guessing. The reply lands in an unlabelled thread until they pick.
-    if (needsPick && supplierId) {
-      const open = await openPricingRequestsForSupplier(supplierId);
-      await sendSupplierRequestPicker(phone, open);
-    }
-  })();
 
   void reply;
 }
@@ -2666,11 +1915,16 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
 
 // ─── GET /api/whatsapp/chats ──────────────────────────────────────────────
 router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
+  // Grouped by PHONE ALONE. Grouping by (phone, supplier_id) split one
+  // conversation in two whenever a message arrived with supplier_id = NULL
+  // beside outbound rows carrying the supplier — the supplier's thread showed
+  // up twice with its history halved. The supplier is resolved per phone from
+  // whichever row carries it, not from the grouping key.
   const rows = await db
     .select({
       phone: whatsappChatsTable.phone,
-      supplierId: whatsappChatsTable.supplierId,
-      supplierName: suppliersTable.name,
+      // Any non-null supplier id seen on this phone's rows.
+      supplierId: sql<number | null>`MAX(${whatsappChatsTable.supplierId})`,
       // Most recent non-null WhatsApp profile name for this phone. Outbound
       // rows carry no name, so filter them out before picking the latest.
       contactName: sql<
@@ -2682,10 +1936,30 @@ router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
       unread: sql<number>`COUNT(*) FILTER (WHERE ${whatsappChatsTable.direction} = 'inbound' AND ${whatsappChatsTable.isRead} = false)`,
     })
     .from(whatsappChatsTable)
-    .leftJoin(suppliersTable, eq(whatsappChatsTable.supplierId, suppliersTable.id))
-    .groupBy(whatsappChatsTable.phone, whatsappChatsTable.supplierId, suppliersTable.name)
+    .groupBy(whatsappChatsTable.phone)
     .orderBy(sql`MAX(${whatsappChatsTable.createdAt}) DESC`);
-  res.json(rows);
+
+  // Resolve each phone's supplier name in ONE query rather than a join on a
+  // nullable column, so a phone whose supplier_id appears on only some rows
+  // still gets its name.
+  const supplierIds = [
+    ...new Set(rows.map((r) => r.supplierId).filter((x): x is number => x != null)),
+  ];
+  const nameById = new Map<number, string>();
+  if (supplierIds.length > 0) {
+    const sups = await db
+      .select({ id: suppliersTable.id, name: suppliersTable.name })
+      .from(suppliersTable)
+      .where(inArray(suppliersTable.id, supplierIds));
+    for (const sp of sups) nameById.set(sp.id, sp.name);
+  }
+
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      supplierName: r.supplierId != null ? (nameById.get(r.supplierId) ?? null) : null,
+    })),
+  );
 });
 
 // ─── GET /api/whatsapp/chats/:phone ──────────────────────────────────────
@@ -2983,6 +2257,9 @@ router.post(
     const phone = (req.body as Record<string, string>).phone;
     const supplierIdRaw = (req.body as Record<string, string>).supplierId;
     const supplierId = supplierIdRaw ? parseInt(supplierIdRaw, 10) : undefined;
+    // Optional caption sent WITH the file in the same WhatsApp message. Meta
+    // caps captions at 1024 chars; trim and ignore an empty one.
+    const caption = ((req.body as Record<string, string>).caption ?? "").trim().slice(0, 1024);
     const file = req.file;
     if (!phone || !file) {
       res.status(400).json({ error: "phone and file are required" });
@@ -3010,14 +2287,17 @@ router.post(
         Audio,
         Document: WADocument,
       } = await import("whatsapp-api-js/messages");
+      // WhatsApp shows a caption on image / video / document messages; audio
+      // has no caption field, so it is sent without one.
+      const cap = caption.length > 0 ? caption : undefined;
       const message =
         mediaType === "image"
-          ? new Image(mediaId, true)
+          ? new Image(mediaId, true, cap)
           : mediaType === "video"
-            ? new Video(mediaId, true)
+            ? new Video(mediaId, true, cap)
             : mediaType === "audio"
               ? new Audio(mediaId, true)
-              : new WADocument(mediaId, true, undefined, fileFilename);
+              : new WADocument(mediaId, true, cap, fileFilename);
       const normalized = normalizePhone(phone);
       const sendResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, message);
       if ("error" in sendResult && sendResult.error) {
@@ -3026,7 +2306,9 @@ router.post(
         return;
       }
       const outboundWaId = sendResult.messages?.[0]?.id ?? null;
-      const bodyText =
+      // The placeholder names the file so the console can render it; the
+      // operator's caption is appended so the message text survives too.
+      const placeholder =
         mediaType === "image"
           ? `[صورة: ${fileFilename}]`
           : mediaType === "video"
@@ -3034,6 +2316,7 @@ router.post(
             : mediaType === "audio"
               ? `[صوت: ${fileFilename}]`
               : `[مستند: ${fileFilename}]`;
+      const bodyText = caption.length > 0 ? `${placeholder}\n${caption}` : placeholder;
       await db.insert(whatsappChatsTable).values({
         waMessageId: outboundWaId,
         direction: "outbound",
