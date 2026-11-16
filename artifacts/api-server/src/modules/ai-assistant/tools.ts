@@ -152,6 +152,12 @@ export interface OutboxAttachment {
 export interface ToolContext {
   settings: AiSettings;
   phone: string;
+  /**
+   * Effects the OPERATOR approved for this task. `send` is refused without it,
+   * so a message to a supplier is a step the operator authorised — never
+   * something the model decides mid-loop and justifies afterwards.
+   */
+  approvedEffects?: Array<"read" | "write" | "send">;
   outbox: OutboxAttachment[];
   /**
    * When provided, a data tool records its real row count / totals / cuts here.
@@ -603,6 +609,7 @@ export function toolTimeoutMs(): number {
  * the registry therefore cannot silently lose a budget constant.
  */
 import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS, SCAN_RETURN_MARGIN_MS } from "./budgets";
+import { decideToolUse, isKnownTool, toolEffect } from "./tool-permissions";
 export { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS, SCAN_RETURN_MARGIN_MS } from "./budgets";
 
 /**
@@ -1233,6 +1240,23 @@ async function executeToolInner(
   ctx: ToolContext,
 ): Promise<ToolResult> {
   try {
+    // ONE permission decision for every tool, before any work happens. A `send`
+    // needs the OPERATOR's approval — not a `confirmed` argument the model can
+    // set on its own.
+    //
+    // An unknown name is deliberately NOT judged here: it must reach the
+    // dispatcher's `default` branch, which LOGS it. A hallucinated tool name
+    // that is merely refused is invisible in the logs, and the model retries it
+    // forever — the regression a guard test caught when this check ran first.
+    const decision = isKnownTool(name)
+      ? decideToolUse(name, {
+          settings: ctx.settings as never,
+          approvedEffects: ctx.approvedEffects,
+        })
+      : { allowed: true, requiresApproval: false };
+    if (!decision.allowed) {
+      return { ok: false, error: decision.reason ?? "غير مسموح." };
+    }
     switch (name) {
       case "search_database": {
         if (!ctx.settings.allowDatabase)

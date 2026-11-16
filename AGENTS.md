@@ -5366,3 +5366,72 @@ the top 5). Guards: `ai-search-relevance.test.ts` (4).
 **Rule**: when a search expands one phrase into several terms, ORDER BY the
 number of distinct ideas matched — `orderBy(id desc)` over a union is how a
 correct query answers with unrelated rows.
+
+## A Node planning agent for Cortoba — the OpenManus idea, without the runtime
+
+The operator approved building the agent in Node inside the existing service
+rather than paying for OpenManus + a Daytona sandbox. Measured first: OpenManus
+builds to a **3.27 GB** image and **refuses to start without `daytona_api_key`**
+(its bash/python/browser tools need that paid sandbox), so "install it whole"
+was never a cost-free option. What it DOES have is `PlanningFlow`.
+
+### What was taken, and what was left
+
+- **Taken — the planning discipline.** `task-plan.ts` writes a plan as STEPS and
+  executes them in order, so a multi-step request («اجمع … ثم قارن … ثم اكتب
+  تقرير») stops drifting: the plan block is injected into the prompt and says the
+  task must not be declared finished while any step is unchecked.
+- **Taken — and improved.** OpenManus's `_mark_step_completed` trusts the
+  executor's own claim that a step is done, so a FAILED step advances the plan on
+  a false premise. `reviewStep` here requires **evidence** and treats an empty
+  result as NOT success (the `filter(Boolean)` lesson), retries a **transient**
+  failure (`503`/`429`/timeout/حصة) up to `MAX_STEP_ATTEMPTS`, and blocks on a
+  permanent one with the reason recorded.
+- **Left — the runtime.** `bash`/`python_execute`/`browser` are for running
+  scripts in a VM; an agent that reports supplier numbers needs none of them, and
+  the Python service cannot run inside this Node process.
+
+### One permission layer, and why the guard is the point
+
+`tool-permissions.ts` classifies every tool by EFFECT — `read` / `write` /
+**`send`** — and decides centrally. `send` (WhatsApp, email, a file to a third
+party) is refused unless the **OPERATOR** approved it: `operatorApprovedSend`
+reads their own message, so the model writing «سأرسل العرض» is intent, not
+consent. The previous design put the guard inside each tool body, which is a
+guard a NEW tool does not have.
+
+**The registry guard earned its place immediately.** `every dispatched tool has
+a classification` caught two real facts nobody had written down:
+
+1. **`send_email` does not exist** — it was classified (and referenced in prose)
+   as though it did. The dispatcher has no such branch. A `send` capability that
+   is assumed rather than present is exactly the class of claim this repo keeps
+   removing.
+2. `case "supplier_po"` / `case "customer_po"` in `tools.ts` are **document
+   types** inside `lookupDocument`/`describe_schema`, not tool dispatches. Slice
+   the guard from `executeToolInner` or it reports false alarms.
+
+**A second guard caught a REGRESSION I had just introduced**: routing an unknown
+tool name through the permission layer returned early and skipped the
+dispatcher's `default` branch that LOGS it. A hallucinated tool that is silently
+refused is invisible in the logs and the model retries it forever. Unknown names
+now fall through to `default` (logged); only KNOWN tools are judged.
+
+### The operator's five jobs, as templates
+
+`cortoba-tasks.ts` names the work Cortoba actually does — supplier search, item
+analysis, supplier-data extraction, price research, RFQ follow-up — so a
+recurring job gets the SAME plan every time instead of a per-request shape. Each
+template names the tools it needs, and a guard asserts they are all classified,
+so a template can never name a capability the permission layer refuses.
+`detectJob` returns **null** rather than guessing: a wrong template makes the
+agent follow the wrong steps confidently.
+
+### WhatsApp is untouched — verified, not asserted
+
+No file under `communications/` or any webhook file is in the diff. The agent is
+reached through the EXISTING `handleAiAssistantMessage` call in BOTH webhook
+paths, with `handleRepMessage` and `handleWorkOrderButton` still after it — so
+the representative bot and the whole-PO flow keep working.
+
+2410 api-server tests pass; `tsc --build` (libs) + api-server + prettier clean.

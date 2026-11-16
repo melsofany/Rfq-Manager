@@ -105,3 +105,170 @@ export function renderPlan(plan: TaskPlan): string {
     `ولا تُعلن انتهاء المهمة قبل أن تصير كل الخطوات [x].`
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The full loop: plan → execute → REVIEW → retry (OpenManus's PlanningFlow,
+// developed for Node).
+//
+// OpenManus walks a plan step by step, but its `_mark_step_completed` trusts the
+// executor's own claim that the step is done. A step that produced an error is
+// therefore recorded as complete and the plan advances on a false premise —
+// exactly the «capability that reports something other than what it did» family
+// this repository keeps re-learning. So the loop below REVIEWS each step against
+// its own evidence before advancing, and retries a step that failed for a
+// transient reason.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface StepAttempt {
+  index: number;
+  /** Tool results / text the step produced, as evidence for the review. */
+  evidence: string[];
+  /** Errors seen while running the step. */
+  errors: string[];
+  attempts: number;
+}
+
+export interface TaskRecord {
+  goal: string;
+  plan: TaskPlan;
+  attempts: StepAttempt[];
+  startedAt: string;
+  finishedAt?: string;
+  /** Model calls spent on this task — the cost line the operator asked for. */
+  modelCalls: number;
+  toolCalls: number;
+  outcome: "running" | "completed" | "failed" | "awaiting_approval";
+  /** Set when the loop stopped needing the operator. */
+  approvalPrompt?: string;
+}
+
+export const MAX_STEP_ATTEMPTS = 3;
+
+export function newTaskRecord(goal: string, plan: TaskPlan): TaskRecord {
+  return {
+    goal,
+    plan,
+    attempts: [],
+    startedAt: new Date().toISOString(),
+    modelCalls: 0,
+    toolCalls: 0,
+    outcome: "running",
+  };
+}
+
+/**
+ * A transient failure is worth another attempt; a permanent one is not.
+ *
+ * Retrying a validation error or a missing record just burns the day's model
+ * quota on the same answer, which is this assistant's recorded failure mode.
+ */
+const TRANSIENT_RE =
+  /timeout|timed out|مهلة|503|502|504|429|rate.?limit|حصة|overload|ECONNRESET|ETIMEDOUT|ENOTFOUND|network|شبكة|غير متاح مؤقتًا|circuit breaker/i;
+
+export function isTransientFailure(errors: string[]): boolean {
+  return errors.some((e) => TRANSIENT_RE.test(String(e)));
+}
+
+export interface ReviewResult {
+  done: boolean;
+  retry: boolean;
+  /** Arabic note for the record / the model. */
+  note: string;
+}
+
+/**
+ * Review a step's outcome. A step is done only when it produced evidence and no
+ * unrecovered error; an empty result is NOT success (the `filter(Boolean)`
+ * lesson), and a transient error earns a retry.
+ */
+export function reviewStep(attempt: StepAttempt): ReviewResult {
+  const hasEvidence = attempt.evidence.some((e) => String(e ?? "").trim().length > 0);
+  const errors = attempt.errors.filter((e) => String(e ?? "").trim().length > 0);
+
+  if (!errors.length) {
+    return hasEvidence
+      ? { done: true, retry: false, note: "الخطوة أنتجت نتيجة." }
+      : {
+          done: false,
+          retry: true,
+          note: "الخطوة لم تُنتج أي نتيجة — لا تُعتبر منتهية، أعدها بطريقة أخرى.",
+        };
+  }
+
+  if (isTransientFailure(errors) && attempt.attempts < MAX_STEP_ATTEMPTS) {
+    return {
+      done: false,
+      retry: true,
+      note: `فشل مؤقت (محاولة ${attempt.attempts} من ${MAX_STEP_ATTEMPTS}) — أعد المحاولة.`,
+    };
+  }
+
+  return {
+    done: false,
+    retry: false,
+    note: `فشل غير قابل للإصلاح: ${errors[0]}. اذكر السبب ولا تدّعِ إتمام المهمة.`,
+  };
+}
+
+/** Record a step's attempt, creating its slot on first use. */
+export function recordAttempt(
+  task: TaskRecord,
+  index: number,
+  evidence: string[],
+  errors: string[],
+): StepAttempt {
+  let a = task.attempts.find((x) => x.index === index);
+  if (!a) {
+    a = { index, evidence: [], errors: [], attempts: 0 };
+    task.attempts.push(a);
+  }
+  a.attempts += 1;
+  a.evidence.push(...evidence);
+  a.errors = errors.slice();
+  return a;
+}
+
+/**
+ * Advance the plan: review the step just run, then either mark it done, leave it
+ * for a retry, or block it. Returns what the loop should do next.
+ */
+export function advancePlan(
+  task: TaskRecord,
+  index: number,
+  evidence: string[],
+  errors: string[],
+): ReviewResult & { blocked: boolean } {
+  const attempt = recordAttempt(task, index, evidence, errors);
+  const review = reviewStep(attempt);
+
+  if (review.done) {
+    markStep(task.plan, index, "done");
+    return { ...review, blocked: false };
+  }
+  if (review.retry) {
+    markStep(task.plan, index, "in_progress");
+    return { ...review, blocked: false };
+  }
+  markStep(task.plan, index, "blocked");
+  task.plan.blockedReason = review.note;
+  return { ...review, blocked: true };
+}
+
+/** The task as a compact record for the operator / logs. */
+export function renderTaskRecord(task: TaskRecord): string {
+  const p = planProgress(task.plan);
+  const lines = [
+    `المهمة: ${task.goal}`,
+    `الخطة: ${p.done}/${p.total} (${p.percent}%) — الحالة: ${task.outcome}`,
+    `نداءات النموذج: ${task.modelCalls} · استدعاءات الأدوات: ${task.toolCalls}`,
+  ];
+  for (const s of task.plan.steps) {
+    const a = task.attempts.find((x) => x.index === s.index);
+    const tries = a ? ` (${a.attempts} محاولة)` : "";
+    lines.push(
+      `  ${s.status === "done" ? "✓" : s.status === "blocked" ? "✗" : "…"} ${s.index}. ${s.text}${tries}`,
+    );
+  }
+  if (task.plan.blockedReason) lines.push(`توقفت عند: ${task.plan.blockedReason}`);
+  return lines.join("\n");
+}
