@@ -13,6 +13,8 @@ import {
 } from "./llm";
 import { loadSettings, modelForPath, MAX_HISTORY, type AiSettings } from "./config";
 import { recallMemories, renderMemoryBlock, distillMemories } from "./memory";
+import { planFor, renderPlan, newTaskRecord, advancePlan } from "./task-plan";
+import { toTaskLogRow, persistTaskLog } from "./task-log";
 import {
   toolDefinitions,
   executeTool,
@@ -327,6 +329,12 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
   const stateBlock = renderConversationState(conversationState);
   const orgProfilesBlock = renderOrgProfilesBlock(orgProfiles);
   const learningLead = renderLearningLead({ memories, orgProfiles, vocabulary });
+  // An explicit plan keeps a multi-step request on track: without it each round
+  // re-decides the task from the recent transcript and the later steps are
+  // dropped (the OpenManus `PlanningFlow` discipline).
+  const taskPlan = planFor(userText);
+  const taskRecord = newTaskRecord(userText, taskPlan);
+  const planBlock = renderPlan(taskPlan);
 
   const system: ChatMessage = {
     role: "system",
@@ -336,6 +344,7 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
       stateBlock +
       memoryBlock +
       learningLead +
+      planBlock +
       vocabularyBlock +
       orgProfilesBlock,
   };
@@ -466,6 +475,11 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
     verificationRan,
     numericDisagreed,
     incidents: [] as IncidentKind[],
+    // The plan this turn is executing, and its record. It travels on the run
+    // state so the durable log is written from the SAME object the prompt was
+    // built from, not a second plan reconstructed at the end.
+    taskPlan,
+    taskRecord,
     startedAt,
     toolCache,
     groundedNumbers,
@@ -944,6 +958,29 @@ async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
     },
   });
 
+  // The durable record the operator asked for: plan, steps, tools, errors and
+  // cost. Written AFTER the answer exists and best-effort, so bookkeeping can
+  // never turn a produced answer into a failure. `metrics.ts` keeps its own
+  // history in memory and loses it on restart; this one survives.
+  s.taskRecord.modelCalls = s.rounds;
+  s.taskRecord.toolCalls = s.usedTools.length;
+  s.taskRecord.outcome = "completed";
+  s.taskRecord.finishedAt = new Date().toISOString();
+  const toolErrors = s.usedTools
+    .map((t) => (t as { error?: string }).error)
+    .filter((e): e is string => typeof e === "string" && e.length > 0);
+  for (const step of s.taskPlan.steps) {
+    advancePlan(s.taskRecord, step.index, s.usedTools.length ? ["استُدعيت أدوات"] : [], toolErrors);
+  }
+  void persistTaskLog(
+    toTaskLogRow(
+      s.taskRecord,
+      s.input.phone,
+      s.usedTools.map((t) => t.name),
+      toolErrors,
+    ),
+  );
+
   const sanitized = sanitizeAssistantReply(finalText);
   if (hadToolMarkup(finalText)) {
     logger.warn(
@@ -1007,7 +1044,17 @@ async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
     reply: finalText,
     usedTools: s.usedTools,
   });
-  return { reply: finalText + footer, attachments: s.ctx.outbox };
+  // Read-only mode transmits NOTHING: a queued attachment is a document leaving
+  // the process, which is exactly what the operator's trial switch forbids. The
+  // text answer still reaches them — that is the answer to their own question.
+  const attachments = s.ctx.settings.readOnlyMode ? [] : s.ctx.outbox;
+  if (s.ctx.settings.readOnlyMode && s.ctx.outbox.length) {
+    logger.info(
+      { phone: s.input.phone, suppressed: s.ctx.outbox.length },
+      "AI assistant: read-only mode — queued attachments not sent",
+    );
+  }
+  return { reply: finalText + footer, attachments };
 }
 
 export async function runAgent(input: AgentInput): Promise<AgentOutput> {

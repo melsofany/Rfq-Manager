@@ -5213,7 +5213,6 @@ was «سلك حراري ١٠ملم» and the answer was «لم أعثر على �
   item. Before the fix the same question returned nothing.
 - Tests: `ai-search-terms.test.ts` (15). **2337 api-server tests** pass; tsc +
   repo-wide prettier clean.
-<<<<<<< HEAD
 
 ## Stop fixing one symptom at a time — three DEFECT FAMILIES, not three bugs
 
@@ -5294,8 +5293,6 @@ question named no source — **even when only one source could hold the data**.
   says plainly that no status named «مفتوح» exists, then asks which is meant. That
   is the CORRECT behaviour — the earlier «4,738» was the table total presented
   under the question's own word.
-=======
->>>>>>> origin/main
 
 ### An "open requests" tool that returned the table total — caught by a live probe
 
@@ -5317,6 +5314,156 @@ confident wrong answer, which is worse than no tool, because the answer now look
 like it came from the system of record. **Probe a new tool against production
 before believing it**; the unit test would have passed (it only asserted
 `open <= total`).
+
+## Two root causes behind «كل مهمة بتفشل» — and why OpenManus is not the answer
+
+The operator asked for OpenManus to be installed. I read its source first: it is
+a **Python** agent (`app/agent/base.py`, `app/tool/{bash,python_execute,browser,…}`)
+whose loop is `step()` + `is_stuck()` + `handle_stuck_state()` + `max_steps`.
+Our engine already implements every one of those, so installing it would REPLACE
+a loop carrying every recorded fix (quota memory, cross-provider rescue,
+relevance ordering, dedup, verifier) with a Python service we cannot run inside
+this Node process — and would answer nothing new. **The defects were ours.**
+
+### 1. A part name was routed to the MAIL by our own prompt
+
+The prompt said, literally: «اسم بند أو ماركة **ليس موضوعًا للبريد**: ابحث بـ
+contains داخل المرفقات». The agent obeyed it. «سلك حراري» therefore started a
+background census of **every mailbox** — measured live: job #402 sat at
+`opened 2050 / 5984` for **hours**, while the answer was **8 rows** in
+`customer_po_items`, readable in under a second.
+
+**A prompt rule that routes a question to the expensive source is a performance
+bug, not a style issue** — and the operator experiences it as «كل مهمة بتفشل».
+Now: a bare part name goes to the database FIRST; the mail is searched only when
+the operator names it, or when the internal search genuinely returns nothing.
+
+### 2. The search ORDERED by recency, so the right row fell below the cut
+
+`expandSearchTerms("سلك حراري")` → `WIRE, CABLE, THERMAL, HEAT, HEATER, HEATING`.
+Measured on live data: `HEAT` matches **370** rows (every `WATER HEATER`),
+`CABLE` 186, `THERMAL` 8. The match set is a UNION, ordered `id desc`, so the
+newest `WATER HEATER` outranked `THERMAL WIRE CABLE` — and with `limit 5` the
+actual answer never reached the model, which then reported «لا يوجد».
+
+Rows are now scored by how many **distinct ideas** they satisfy:
+
+- **Terms that contain one another collapse to ONE family** (`HEAT`/`HEATER`/
+  `HEATING` all match the single word "HEATING"). Without this a row was credited
+  three times for one idea while `THERMAL WIRE CABLE` earned three for three — the
+  first cut still ranked «HEATING ELEMENT … CABLE» on top.
+- **`orderBy` must be called ONCE.** Drizzle's `orderBy` REPLACES the previous
+  ordering, so the first cut's second call silently dropped the score and went
+  back to newest-first.
+- Relevance **orders**, it never filters: a single-term match still appears.
+
+Verified on production: `THERMAL WIRE CABLE SIZE 6 MM` → rank 1 (was absent from
+the top 5). Guards: `ai-search-relevance.test.ts` (4).
+
+**Rule**: when a search expands one phrase into several terms, ORDER BY the
+number of distinct ideas matched — `orderBy(id desc)` over a union is how a
+correct query answers with unrelated rows.
+
+## A Node planning agent for Cortoba — the OpenManus idea, without the runtime
+
+The operator approved building the agent in Node inside the existing service
+rather than paying for OpenManus + a Daytona sandbox. Measured first: OpenManus
+builds to a **3.27 GB** image and **refuses to start without `daytona_api_key`**
+(its bash/python/browser tools need that paid sandbox), so "install it whole"
+was never a cost-free option. What it DOES have is `PlanningFlow`.
+
+### What was taken, and what was left
+
+- **Taken — the planning discipline.** `task-plan.ts` writes a plan as STEPS and
+  executes them in order, so a multi-step request («اجمع … ثم قارن … ثم اكتب
+  تقرير») stops drifting: the plan block is injected into the prompt and says the
+  task must not be declared finished while any step is unchecked.
+- **Taken — and improved.** OpenManus's `_mark_step_completed` trusts the
+  executor's own claim that a step is done, so a FAILED step advances the plan on
+  a false premise. `reviewStep` here requires **evidence** and treats an empty
+  result as NOT success (the `filter(Boolean)` lesson), retries a **transient**
+  failure (`503`/`429`/timeout/حصة) up to `MAX_STEP_ATTEMPTS`, and blocks on a
+  permanent one with the reason recorded.
+- **Left — the runtime.** `bash`/`python_execute`/`browser` are for running
+  scripts in a VM; an agent that reports supplier numbers needs none of them, and
+  the Python service cannot run inside this Node process.
+
+### One permission layer, and why the guard is the point
+
+`tool-permissions.ts` classifies every tool by EFFECT — `read` / `write` /
+**`send`** — and decides centrally. `send` (WhatsApp, email, a file to a third
+party) is refused unless the **OPERATOR** approved it: `operatorApprovedSend`
+reads their own message, so the model writing «سأرسل العرض» is intent, not
+consent. The previous design put the guard inside each tool body, which is a
+guard a NEW tool does not have.
+
+**The registry guard earned its place immediately.** `every dispatched tool has
+a classification` caught two real facts nobody had written down:
+
+1. **`send_email` does not exist** — it was classified (and referenced in prose)
+   as though it did. The dispatcher has no such branch. A `send` capability that
+   is assumed rather than present is exactly the class of claim this repo keeps
+   removing.
+2. `case "supplier_po"` / `case "customer_po"` in `tools.ts` are **document
+   types** inside `lookupDocument`/`describe_schema`, not tool dispatches. Slice
+   the guard from `executeToolInner` or it reports false alarms.
+
+**A second guard caught a REGRESSION I had just introduced**: routing an unknown
+tool name through the permission layer returned early and skipped the
+dispatcher's `default` branch that LOGS it. A hallucinated tool that is silently
+refused is invisible in the logs and the model retries it forever. Unknown names
+now fall through to `default` (logged); only KNOWN tools are judged.
+
+### The operator's five jobs, as templates
+
+`cortoba-tasks.ts` names the work Cortoba actually does — supplier search, item
+analysis, supplier-data extraction, price research, RFQ follow-up — so a
+recurring job gets the SAME plan every time instead of a per-request shape. Each
+template names the tools it needs, and a guard asserts they are all classified,
+so a template can never name a capability the permission layer refuses.
+`detectJob` returns **null** rather than guessing: a wrong template makes the
+agent follow the wrong steps confidently.
+
+### WhatsApp is untouched — verified, not asserted
+
+No file under `communications/` or any webhook file is in the diff. The agent is
+reached through the EXISTING `handleAiAssistantMessage` call in BOTH webhook
+paths, with `handleRepMessage` and `handleWorkOrderButton` still after it — so
+the representative bot and the whole-PO flow keep working.
+
+2410 api-server tests pass; `tsc --build` (libs) + api-server + prettier clean.
+
+### The durable task log, and the guard that had to be extended (not weakened)
+
+`metrics.ts` keeps its history in a MEMORY ring buffer, so a restart loses it.
+The operator asked for a record of the plan, steps, tools, results, errors and
+cost — an in-memory buffer answers «what happened just now», not «what did it do
+when it produced this figure», asked the next day. `task-log.ts` writes that row
+to `ai_assistant_task_log` (DDL in `init-db.ts` as its OWN statement — a sibling
+failure would roll the CREATE back silently). The write happens AFTER the answer
+exists and is best-effort: bookkeeping must never turn a produced answer into a
+failure.
+
+`ai-hard-limits.test.ts` then failed with
+`task-log.ts: insert(aiAssistantTaskLogTable)`. **The guard was right and the
+fix was to extend its list, not to weaken the guard**: it protects the rule that
+the agent cannot write a BUSINESS table (a supplier, an RFQ, a price). The task
+log is the assistant's OWN bookkeeping, on the same footing as `messages`,
+`jobs` and `memories`, which the list already allowed. The comment now says so,
+because the next person to add an assistant table will hit the same failure and
+needs to know which side of the line it falls on.
+
+Two more guards fired during this work and both were correct:
+
+- `case "supplier_po"` / `"customer_po"` are DOCUMENT TYPES inside
+  `lookupDocument`, not tool dispatches — slice such a guard from
+  `executeToolInner` or it reports false alarms.
+- **A regression I had just introduced**: routing an unknown tool name through
+  the permission layer returned early and skipped the dispatcher's `default`
+  branch that LOGS it. A hallucinated tool that is refused silently is invisible
+  in the logs and the model retries it forever. Only KNOWN tools are judged now.
+
+2412 api-server tests pass; tsc (libs + api-server) + prettier clean.
 
 ## «مش هنقدر نقدم بيه عرض سعر» — تاريخ إغلاق عدّى يعني الطلب اتقفل (fix/open-requests-close-date)
 
@@ -5342,3 +5489,41 @@ before believing it**; the unit test would have passed (it only asserted
   يُظهر حذفًا لملفات أضافها main (`search-terms.ts`، `date-guard.ts`). `git status` لا
   يشتكي وCI قد يمر. افحص دائمًا `git diff --name-status origin/main | grep "^D"` قبل
   الدفع، وابنِ الفرع من `origin/main` الحقيقي.
+
+## The trial-run switch: read everything, change nothing
+
+The operator's instruction for the first deploy was absolute — «لا يرسل أي شيء
+بالواتساب أو الميل، ولا يكتب أي شيء في قاعدة البيانات» — so it is enforced in
+CODE, not in the prompt. A prompt rule is not a permission boundary; this
+repository has already paid for that lesson (`send_email`'s `confirmed:true` was
+a rule the MODEL could satisfy on its own).
+
+- **`readOnlyMode`** (default **ON**, `ai_assistant_settings.read_only_mode`).
+  When on, only `read`-effect tools run. It is checked FIRST in
+  `decideToolUse`, before every feature gate and before the `send` approval path,
+  so **nothing can lift it** — a later «موافق» from the operator must not unlock
+  a switch they turned on.
+- **`generate_pdf` is refused too, deliberately.** The first cut exempted it as
+  "builds a file in memory, writes no row". That was wrong: the handler then
+  TRANSMITS the file as a WhatsApp attachment, so allowing it would mean a
+  document leaving the process during a trial whose whole point is that nothing
+  leaves. The operator gets TEXT answers; a report is one toggle away.
+- **Attachments are suppressed as well** (`agent.ts`): a tool could still queue
+  one, and the read-only guarantee must hold at the transmission point too, not
+  only at the tool gate.
+- **The switch is WIRED, and the test proves it.** A pure-function test proves
+  the decision, not the wiring — the model calls `executeTool`. The integration
+  test drives the real executor: `remember_fact` and `generate_pdf` are refused
+  with «القراءة فقط», and `count_database` is ALLOWED THROUGH (it then fails
+  only because the test has no database — that failure is the evidence the
+  refusal came from the switch and not from the tool).
+- **The agent still writes its OWN bookkeeping** — `ai_assistant_messages`,
+  `ai_assistant_scan_sessions`, `ai_assistant_incidents`, `ai_assistant_task_log`.
+  These are the assistant's memory, not business data: no supplier, RFQ, price or
+  receipt is touched, which `ai-hard-limits.test.ts` independently guards. Worth
+  stating plainly because «لا يكتب أي شيء» is about the COMPANY's data.
+- **Endable from the UI** (`/ai-assistant` → «وضع القراءة فقط (تجربة)»), so the
+  operator can end the trial themselves without a deploy — never silently, the
+  panel shows the current state.
+
+2422 api-server tests pass; tsc (libs + api-server + portal) + prettier clean.

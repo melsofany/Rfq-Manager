@@ -96,7 +96,13 @@ describe("the prompt states the limits and cannot be displaced", () => {
       for (const m of src.matchAll(/db\s*\.\s*(insert|update|delete)\(\s*([A-Za-z0-9_]+)/g)) {
         const table = m[2];
         if (
-          !/messages|memories|jobs|scansessions|scan_sessions|state|profiles|incidents|users|audit/i.test(
+          // `tasklog` joins this list on the same footing as `messages` and
+          // `jobs`: it is the assistant's OWN bookkeeping table (the plan,
+          // steps, tools, errors and cost of a run), not a business table. The
+          // guarantee this test protects is that the agent cannot WRITE a
+          // supplier, an RFQ or a price — a task log is the record of what it
+          // read, which is the opposite of a business write.
+          !/messages|memories|jobs|scansessions|scan_sessions|state|profiles|incidents|users|audit|tasklog/i.test(
             table,
           )
         ) {

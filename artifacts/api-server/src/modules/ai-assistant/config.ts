@@ -195,6 +195,13 @@ export interface AiSettings {
    */
   allowReadOnlySql: boolean;
   allowPdf: boolean;
+  /**
+   * HARD read-only. ON by default for the trial run the operator asked for: the
+   * agent may read everything and change nothing. Distinct from the individual
+   * gates because it is not a capability switch — it is an assurance, and no
+   * approval can lift it while it is on.
+   */
+  readOnlyMode: boolean;
 }
 
 export const DEFAULT_SETTINGS: AiSettings = {
@@ -206,6 +213,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   allowEmail: true,
   allowDatabase: true,
   allowReadOnlySql: true,
+  readOnlyMode: true,
   allowPdf: true,
 };
 
@@ -302,6 +310,9 @@ export async function loadSettings(): Promise<AiSettings> {
       allowDatabase: row.allowDatabase,
       allowReadOnlySql: row.allowReadOnlySql,
       allowPdf: row.allowPdf,
+      // The DB row predates this column, so an absent value keeps the SAFE
+      // default (read-only ON) rather than silently unlocking writes.
+      readOnlyMode: row.readOnlyMode ?? DEFAULT_SETTINGS.readOnlyMode,
     };
   } catch (err) {
     logger.warn({ err }, "AI assistant: could not load settings, using defaults");

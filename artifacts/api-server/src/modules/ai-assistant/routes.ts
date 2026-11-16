@@ -281,6 +281,7 @@ router.put("/ai-assistant/settings", guard, async (req, res): Promise<void> => {
     allowDatabase,
     allowReadOnlySql,
     allowPdf,
+    readOnlyMode,
   } = req.body ?? {};
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (enabled !== undefined) patch.enabled = Boolean(enabled);
@@ -292,6 +293,9 @@ router.put("/ai-assistant/settings", guard, async (req, res): Promise<void> => {
   if (allowDatabase !== undefined) patch.allowDatabase = Boolean(allowDatabase);
   if (allowReadOnlySql !== undefined) patch.allowReadOnlySql = Boolean(allowReadOnlySql);
   if (allowPdf !== undefined) patch.allowPdf = Boolean(allowPdf);
+  // The trial assurance. Writable so the operator can END the trial themselves
+  // without a deploy — but never silently: the UI shows the current state.
+  if (readOnlyMode !== undefined) patch.readOnlyMode = Boolean(readOnlyMode);
 
   const [row] = await db
     .update(aiAssistantSettingsTable)

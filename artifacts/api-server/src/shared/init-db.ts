@@ -1707,6 +1707,38 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_org_profiles (updated_at DESC);
     `);
 
+    // The agent's durable task log: plan, steps, tools, errors and cost of every
+    // run. Its OWN statement — statements in one client.query share an implicit
+    // transaction, so a sibling failure would roll this CREATE back and the
+    // table would silently not exist.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_task_log (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        plan JSONB,
+        steps JSONB,
+        tools_used JSONB,
+        model_calls INTEGER NOT NULL DEFAULT 0,
+        tool_calls INTEGER NOT NULL DEFAULT 0,
+        errors JSONB,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_task_log_created
+        ON ai_assistant_task_log (created_at DESC);
+    `);
+
+    // The trial-run assurance: the agent reads and changes nothing. Its own
+    // statement (a sibling failure would roll an ALTER back silently), and an
+    // ADD COLUMN IF NOT EXISTS because the table already exists in production —
+    // a CREATE TABLE IF NOT EXISTS there is a no-op that would leave the column
+    // missing.
+    await client.query(
+      `ALTER TABLE ai_assistant_settings ADD COLUMN IF NOT EXISTS read_only_mode BOOLEAN NOT NULL DEFAULT TRUE`,
+    );
+
     // ── Search / document-number indexes (P12) ──────────────────────────────
     // The assistant resolves documents by number and suppliers/customers by name
     // with ILIKE '%term%'. Without indexes those become sequential scans as the
