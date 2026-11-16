@@ -5213,7 +5213,6 @@ was «سلك حراري ١٠ملم» and the answer was «لم أعثر على �
   item. Before the fix the same question returned nothing.
 - Tests: `ai-search-terms.test.ts` (15). **2337 api-server tests** pass; tsc +
   repo-wide prettier clean.
-<<<<<<< HEAD
 
 ## Stop fixing one symptom at a time — three DEFECT FAMILIES, not three bugs
 
@@ -5294,8 +5293,6 @@ question named no source — **even when only one source could hold the data**.
   says plainly that no status named «مفتوح» exists, then asks which is meant. That
   is the CORRECT behaviour — the earlier «4,738» was the table total presented
   under the question's own word.
-=======
->>>>>>> origin/main
 
 ### An "open requests" tool that returned the table total — caught by a live probe
 
@@ -5467,3 +5464,28 @@ Two more guards fired during this work and both were correct:
   in the logs and the model retries it forever. Only KNOWN tools are judged now.
 
 2412 api-server tests pass; tsc (libs + api-server) + prettier clean.
+
+## «مش هنقدر نقدم بيه عرض سعر» — تاريخ إغلاق عدّى يعني الطلب اتقفل (fix/open-requests-close-date)
+
+بلاغ المشغّل عن `26R012682` (أغلق 2026-10-17): «ليه ظاهر مع إنه انتهى؟». كان محقًّا،
+وكان العيب في **قاعدة «الطلب المفتوح» نفسها** لا في العرض فقط.
+
+- **النافذة كانت من `today - days`**، فطلب أغلق قبل 29 يومًا وقع جوّه النافذة وظهر
+  «مفتوح» بعدّاد سالب. القاعدة الآن: **تاريخ إغلاق عدّى = الطلب مقفول** — وهو تعريف
+  المشغّل الحرفي: لا يمكن تقديم عرض سعر. `days` صار **نافذة استشراف فقط** (`today` ←
+  `today + days`)، و`includeOverdue` يعرض المنتهية للمراجعة مع وسم «انتهى موعد الإغلاق».
+- **شرطان لسؤالين مختلفين، لا شرط واحد يخدم الاثنين.** `isOpenRequest` تبقى التعريف
+  الواحد لـ«مفتوح للعرض»؛ و`includeOverdue` يعيد تقييم **نفس الحقائق** مع إسقاط التاريخ
+  وحده. تخفيف القاعدة نفسها لخدمة العرض كان سيجعل «مفتوح» تعني شيئًا مختلفًا في كل مسار.
+- **كل رقم يُعرض يجب أن يطابق ما ينتجه الزرّ.** العدّاد الأول استخدم مرشّحًا أضعف من
+  قاعدة الفتح فأنقص **3,088** صفًا (1,484 مقابل 4,572). الآن العدّاد **استعلام واحد**
+  بنفس حدّ النافذة: الرقم المعروض وما يظهره «إظهار المنتهية» لا يمكن أن يختلفا.
+- **القياس هو الحكم، لا القراءة**: `4579` صفًا انتهى موعدها، منها `4572` كانت تُعدّ
+  «مفتوحة» قبل الإصلاح. النافذة الآن تُظهر `127` طلبًا قابلًا للعرض.
+- الحرّاس يفشلون ضد الكود قبل الإصلاح (تحقّق بإرجاع شرط التاريخ: `closes a request whose
+  close date has passed`)، وحارس النافذة يقيس **الـWHERE المبنيّ** لأن الموك يخدم أي صفوف
+  تُعطى له — تأكيد على الصفوف وحدها يمرّ ضد مسار يعرض كل شيء.
+- **درس الدفع (تكرّر مرتين في هذه الجلسة)**: الفرع المبني على أساس أقدم من `main`
+  يُظهر حذفًا لملفات أضافها main (`search-terms.ts`، `date-guard.ts`). `git status` لا
+  يشتكي وCI قد يمر. افحص دائمًا `git diff --name-status origin/main | grep "^D"` قبل
+  الدفع، وابنِ الفرع من `origin/main` الحقيقي.

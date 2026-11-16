@@ -3078,7 +3078,10 @@ describe("GET /api/customer-rfq/open-requests", () => {
     ]);
   });
 
-  it("reports an overdue request as overdue, not as calm", async () => {
+  it("never lists a request whose close date has passed unless asked", async () => {
+    // The reported defect: 26R012682 closed 2026-10-17 and appeared as «open»
+    // because the window reached back `today - days`. A passed close date means
+    // no quote can be submitted any more, so the lower bound must be TODAY.
     openRequestRows = [openRequest(3, -4)];
     detailItems = [
       {
@@ -3092,12 +3095,50 @@ describe("GET /api/customer-rfq/open-requests", () => {
         isCancelled: false,
       },
     ];
-    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    await request(testApp).get("/api/customer-rfq/open-requests");
+    // The mock serves whatever rows it is given, so only the built WHERE can
+    // prove the bound — a route that lists everything would pass a row assert.
+    const cond = JSON.stringify(openRequestWhereCond);
+    expect(cond).toContain("expiryDate");
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    expect(cond).toContain(todayStr);
+  });
+
+  it("lists overdue requests on request, labelled as past their close date", async () => {
+    openRequestRows = [openRequest(3, -4)];
+    detailItems = [
+      {
+        id: 30,
+        customerRfqId: 3,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "5",
+        isCancelled: false,
+      },
+    ];
+    const res = await request(testApp).get(
+      "/api/customer-rfq/open-requests?includeOverdue=true&days=30",
+    );
     expect(res.status).toBe(200);
-    expect(res.body.rows[0].remainingDays).toBe(-4);
     expect(res.body.rows[0].urgency).toBe("overdue");
     expect(res.body.rows[0].remainingLabel).toBe("متأخر 4 أيام");
-    expect(res.body.totals.overdue).toBe(1);
+    // The label must say plainly that the window is gone, not just «متأخر».
+    expect(res.body.rows[0].closePassed).toBe(true);
+    expect(res.body.rows[0].closePassedLabel).toContain("انتهى");
+    expect(res.body.window.includeOverdue).toBe(true);
+  });
+
+  it("discloses how many overdue requests were left out", async () => {
+    openRequestRows = [openRequest(13, 6)];
+    detailItems = [];
+    openOlderNotShown = 102;
+    const res = await request(testApp).get("/api/customer-rfq/open-requests");
+    expect(res.status).toBe(200);
+    expect(res.body.window.hiddenOverdue).toBe(102);
+    expect(res.body.window.includeOverdue).toBe(false);
   });
 
   it("drops a request the customer is no longer owed anything on", async () => {

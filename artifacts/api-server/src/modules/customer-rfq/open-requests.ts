@@ -25,35 +25,43 @@ const CLOSED_STAGES = new Set(["failed", "expired"]);
 
 export type OpenUrgency = "overdue" | "today" | "soon" | "normal" | "none";
 
+/** The facts the openness rule needs, all derived by the caller. */
+export interface OpenRequestFacts {
+  /** Derived request stage (`buildRequestStatus`). */
+  stage: string | null | undefined;
+  /** Share of the PO'd items delivered to the customer. */
+  deliveredPct: number | null;
+  /** Live items that never reached a customer PO. */
+  unresolvedItems?: number;
+  /** The close date has PASSED. */
+  closePassed?: boolean;
+}
+
 /**
  * Is this request still OPEN?
  *
- * Closed only when the derived status says the request is over:
+ * Closed when the derived status says the request is over:
  *   • `failed`   — items were rejected and none were delivered;
  *   • `expired`  — the close date passed with no progress at all;
- *   • `delivered` with 100% of the PO'd items delivered to the customer AND
- *     nothing left unordered.
+ *   • `delivered` with 100% of the PO'd items delivered AND nothing un-ordered.
  *
- * A PARTIALLY delivered request stays open on purpose: the customer is still
- * owed goods, so the request is not finished. `delivered` with a null share is
- * kept OPEN rather than assumed complete — the opposite default would hide a
- * request on the strength of a missing number, and (see `buildRequestStatus`)
- * that combination cannot arise from a PO'd request anyway.
+ * **A passed close date closes the request.** Reported live: `26R012682` closed
+ * 2026-10-17 and still appeared as «open» with a negative countdown. The
+ * operator's own definition settles it — «مش هنقدر نقدم بيه عرض سعر للعميل»: once
+ * the close date has passed, no quote can be submitted, so the request is no
+ * longer open FOR QUOTING whatever progress it reached. A request already priced
+ * or ordered is not an exception; it is fulfilment, not an open request, and the
+ * tab's «إظهار المنتهية» toggle is where it can be reviewed.
  *
- * `unresolvedItems` is the count of live items that never reached a customer PO.
- * It matters because `deliveredPct` is computed over the PO'd items ONLY, so a
- * request can read «نجح بالكامل» while most of its items were never ordered at
- * all. Measured on live data: `CRFQ-2026-004391` has 37 live items and 4 on a PO
- * — judging it closed would hide 33 items of outstanding work from the operator
- * with no trace. Pass 0 (the default) when the caller has not counted them.
+ * `unresolvedItems` matters because `deliveredPct` is computed over the PO'd
+ * items ONLY, so a request can read «نجح بالكامل» while most of its items were
+ * never ordered at all (live: `CRFQ-2026-004391`, 37 live items and 4 on a PO).
  */
-export function isOpenRequest(
-  stage: string | null | undefined,
-  deliveredPct: number | null,
-  unresolvedItems: number = 0,
-): boolean {
+export function isOpenRequest(facts: OpenRequestFacts): boolean {
+  const { stage, deliveredPct, unresolvedItems = 0, closePassed = false } = facts;
   if (stage == null) return false;
   if (CLOSED_STAGES.has(stage)) return false;
+  if (closePassed) return false;
   if (unresolvedItems > 0) return true;
   if (stage === "delivered") return deliveredPct == null ? true : deliveredPct < 100;
   return true;
