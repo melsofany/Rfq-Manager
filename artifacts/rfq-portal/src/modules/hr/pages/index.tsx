@@ -39,6 +39,8 @@ interface AttendanceRow {
   firstIn: string | null;
   lastOut: string | null;
   punchCount: number;
+  incomplete?: boolean;
+  missingPunch?: "in" | "out" | null;
   lateMinutes: number;
   absent: boolean;
   dayOffKind: "holiday" | "weekly" | null;
@@ -46,6 +48,8 @@ interface AttendanceRow {
   onMission: boolean;
   missionFullDay: boolean;
   missionWindows: string[];
+  onLeave?: boolean;
+  leaveName?: string | null;
   missingPunchWarning: boolean;
   shiftStart: string;
   lateGraceMinutes: number;
@@ -63,6 +67,7 @@ interface AttendanceResponse {
     absent: number;
     late: number;
     onMission?: number;
+    incomplete?: number;
   };
   rows: AttendanceRow[];
 }
@@ -260,6 +265,18 @@ const CARD_PRINT_CSS = `
   #hr-card-print .card-preview { display: none; }
   #hr-card-print .card-print { display: block; width: 85.6mm !important; height: 54mm !important; }
   #hr-card-print, #hr-card-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}`;
+
+/** Print only the attendance range report, hiding the rest of the page. */
+const ATTENDANCE_PRINT_CSS = `
+@media print {
+  body * { visibility: hidden !important; }
+  #hr-attendance-report, #hr-attendance-report * { visibility: visible !important; }
+  #hr-attendance-report { position: absolute; left: 0; top: 0; width: 100%; }
+  #hr-attendance-report .max-h-96 { max-height: none !important; overflow: visible !important; }
+  #hr-attendance-report table { width: 100%; border-collapse: collapse; }
+  #hr-attendance-report th, #hr-attendance-report td { border: 1px solid #999 !important; }
+  #hr-attendance-report, #hr-attendance-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
@@ -947,12 +964,17 @@ function AttendanceTab() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <Stat label={t("hr.att.total")} value={data.totals.employees} />
             <Stat label={t("hr.att.present")} value={data.totals.present} />
             <Stat label={t("hr.att.absent")} value={data.totals.absent} tone="red" />
             <Stat label={t("hr.att.late")} value={data.totals.late} tone="amber" />
             <Stat label={t("hr.att.onMission")} value={data.totals.onMission ?? 0} tone="amber" />
+            <Stat
+              label={t("hr.att.incompleteCount")}
+              value={data.totals.incomplete ?? 0}
+              tone="amber"
+            />
           </div>
 
           <Card>
@@ -1001,6 +1023,20 @@ function AttendanceTab() {
                             {r.dayOffKind === "holiday"
                               ? `${t("hr.att.holiday")}: ${r.dayOffName ?? ""}`
                               : t("hr.att.weeklyOff")}
+                          </span>
+                        )}
+                        {r.incomplete && (
+                          <span
+                            className="me-2 rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-800 dark:bg-orange-950/50 dark:text-orange-300"
+                            title={`${t("hr.att.incompleteHint")}${
+                              r.missingPunch === "in"
+                                ? ` (${t("hr.att.incompleteMissingIn")})`
+                                : r.missingPunch === "out"
+                                  ? ` (${t("hr.att.incompleteMissingOut")})`
+                                  : ""
+                            }`}
+                          >
+                            {t("hr.att.incompleteShort")}
                           </span>
                         )}
                         {r.absent ? (
@@ -3938,6 +3974,8 @@ function PayrollTab() {
                 <th className="p-2 text-end">{t("hr.pay.basic")}</th>
                 <th className="p-2 text-end">{t("hr.pay.gross")}</th>
                 <th className="p-2 text-end">{t("hr.pay.absence")}</th>
+                <th className="p-2 text-end">{t("hr.pay.deductions")}</th>
+                <th className="p-2 text-end">{t("hr.pay.bonuses")}</th>
                 <th className="p-2 text-end">{t("hr.pay.fines")}</th>
                 <th className="p-2 text-end">{t("hr.pay.insurance")}</th>
                 <th className="p-2 text-end">{t("hr.pay.tax")}</th>
@@ -3955,6 +3993,10 @@ function PayrollTab() {
                   <td className="p-2 text-end">{money(s.gross)}</td>
                   <td className="p-2 text-end">
                     {s.absenceDays ? `${s.absenceDays} · ${money(s.absenceAmount)}` : "—"}
+                  </td>
+                  <td className="p-2 text-end">{s.deductions ? money(s.deductions) : "—"}</td>
+                  <td className="p-2 text-end">
+                    {s.bonuses || s.incentives ? money(s.bonuses + s.incentives) : "—"}
                   </td>
                   <td className="p-2 text-end">
                     {s.finesApplied ? money(s.finesApplied) : "—"}
@@ -3998,7 +4040,7 @@ function PayrollTab() {
               {slips.length === 0 && (
                 <tr>
                   <td
-                    colSpan={run?.status === "approved" ? 9 : 8}
+                    colSpan={run?.status === "approved" ? 11 : 10}
                     className="p-6 text-center text-muted-foreground"
                   >
                     {t("hr.pay.empty")}
@@ -4010,7 +4052,7 @@ function PayrollTab() {
                   <td className="p-2">{t("hr.pay.total")}</td>
                   <td colSpan={1} />
                   <td className="p-2 text-end">{money(totals.gross)}</td>
-                  <td colSpan={4} />
+                  <td colSpan={6} />
                   <td className="p-2 text-end">{money(totals.net)}</td>
                   {run?.status === "approved" && <td />}
                 </tr>
@@ -4408,6 +4450,37 @@ function SettlementTab() {
 
 // ---------- التقارير الشهرية ----------
 
+interface AttendanceRangeSummary {
+  employeeId: number;
+  employeeNo: string;
+  fullName: string;
+  department: string | null;
+  presentDays: number;
+  absentDays: number;
+  leaveDays: number;
+  missionDays: number;
+  lateDays: number;
+  lateMinutes: number;
+  incompleteDays: number;
+}
+interface AttendanceRangeResponse {
+  from: string;
+  to: string;
+  days: number;
+  employees: AttendanceRangeSummary[];
+  rows: (AttendanceRow & { date: string })[];
+  totals: {
+    employees: number;
+    presentDays: number;
+    absentDays: number;
+    leaveDays: number;
+    missionDays: number;
+    lateDays: number;
+    lateMinutes: number;
+    incompleteDays: number;
+  };
+}
+
 function ReportsTab() {
   const { t } = useLanguage();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
@@ -4436,6 +4509,15 @@ function ReportsTab() {
     annualDays: number;
     rows: { employeeId: number; name: string; used: number; remaining: number }[];
   } | null>(null);
+  // Attendance range report: month-to-date by default, so the operator sees the
+  // current period without picking dates.
+  const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+  const [attFrom, setAttFrom] = useState(monthStart);
+  const [attTo, setAttTo] = useState(todayStr());
+  const [attEmployees, setAttEmployees] = useState<number[]>([]);
+  const [attEmpList, setAttEmpList] = useState<HrEmployee[]>([]);
+  const [attData, setAttData] = useState<AttendanceRangeResponse | null>(null);
+  const [attMsg, setAttMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -4460,14 +4542,211 @@ function ReportsTab() {
       .catch((e) => setError((e as Error).message));
   }, [year]);
 
+  useEffect(() => {
+    api<HrEmployee[]>("/hr/employees")
+      .then((list) => setAttEmpList(list.filter((e) => e.status === "active")))
+      .catch(() => setAttEmpList([]));
+  }, []);
+
+  const loadAttendance = useCallback(async () => {
+    try {
+      setAttMsg(null);
+      const qs = new URLSearchParams({ from: attFrom, to: attTo });
+      if (attEmployees.length > 0) qs.set("employees", attEmployees.join(","));
+      setAttData(await api<AttendanceRangeResponse>(`/hr/attendance/range?${qs}`));
+    } catch (e) {
+      setAttData(null);
+      setAttMsg((e as Error).message);
+    }
+  }, [attFrom, attTo, attEmployees]);
+
   const money = (n: number) =>
     n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const input = "border rounded px-2 py-1.5 bg-background text-sm";
 
   return (
     <div className="space-y-4">
+      <style>{ATTENDANCE_PRINT_CSS}</style>
       <p className="text-sm text-muted-foreground">{t("hr.rep.help")}</p>
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div>
+            <h2 className="font-semibold">{t("hr.rep.attendance")}</h2>
+            <p className="text-sm text-muted-foreground">{t("hr.rep.attendanceHint")}</p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-sm">
+              <span className="block text-muted-foreground mb-1">{t("hr.rep.attFrom")}</span>
+              <input
+                className={input}
+                type="date"
+                value={attFrom}
+                onChange={(e) => setAttFrom(e.target.value)}
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-muted-foreground mb-1">{t("hr.rep.attTo")}</span>
+              <input
+                className={input}
+                type="date"
+                value={attTo}
+                onChange={(e) => setAttTo(e.target.value)}
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-muted-foreground mb-1">{t("hr.rep.attEmployees")}</span>
+              <select
+                multiple
+                value={attEmployees.map(String)}
+                onChange={(e) =>
+                  setAttEmployees(
+                    Array.from(e.target.selectedOptions, (o) => Number(o.value)).filter(
+                      (n) => Number.isInteger(n) && n > 0,
+                    ),
+                  )
+                }
+                className={`${input} min-w-48 h-24`}
+              >
+                {attEmpList.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.employeeNo} — {e.fullName}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-xs text-muted-foreground mt-1">
+                {attEmployees.length === 0 ? t("hr.rep.attAll") : `${attEmployees.length}`}
+              </span>
+            </label>
+            <Button onClick={loadAttendance}>{t("hr.rep.attLoad")}</Button>
+            {attData && (
+              <>
+                <Button variant="outline" onClick={() => window.print()}>
+                  {t("hr.rep.attPrint")}
+                </Button>
+                <a
+                  className="text-sm underline text-primary"
+                  href={`/api/hr/attendance/range.csv?from=${attFrom}&to=${attTo}${
+                    attEmployees.length ? `&employees=${attEmployees.join(",")}` : ""
+                  }`}
+                >
+                  {t("hr.rep.attCsv")}
+                </a>
+              </>
+            )}
+          </div>
+          {attMsg && <p className="text-sm text-red-600">{attMsg}</p>}
+          {attData && (
+            <div id="hr-attendance-report" className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  {t("hr.rep.attPresentDays")}: <b>{attData.totals.presentDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attAbsentDays")}: <b>{attData.totals.absentDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attLeaveDays")}: <b>{attData.totals.leaveDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attMissionDays")}: <b>{attData.totals.missionDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attLateDays")}: <b>{attData.totals.lateDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attLateMinutes")}: <b>{attData.totals.lateMinutes}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attIncompleteDays")}: <b>{attData.totals.incompleteDays}</b>
+                </div>
+                <div>
+                  {t("hr.rep.attEmployees")}: <b>{attData.totals.employees}</b>
+                </div>
+              </div>
+
+              {attData.employees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("hr.rep.attEmpty")}</p>
+              ) : (
+                <>
+                  <h3 className="font-medium">{t("hr.rep.attSummary")}</h3>
+                  <table className="w-full text-sm">
+                    <thead className="text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-start">{t("hr.col.no")}</th>
+                        <th className="p-2 text-start">{t("hr.col.name")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attPresentDays")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attAbsentDays")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attLeaveDays")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attMissionDays")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attLateDays")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attLateMinutes")}</th>
+                        <th className="p-2 text-end">{t("hr.rep.attIncompleteDays")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attData.employees.map((s) => (
+                        <tr key={s.employeeId} className="border-t">
+                          <td className="p-2">{s.employeeNo}</td>
+                          <td className="p-2">{s.fullName}</td>
+                          <td className="p-2 text-end">{s.presentDays}</td>
+                          <td className="p-2 text-end">{s.absentDays}</td>
+                          <td className="p-2 text-end">{s.leaveDays}</td>
+                          <td className="p-2 text-end">{s.missionDays}</td>
+                          <td className="p-2 text-end">{s.lateDays}</td>
+                          <td className="p-2 text-end">{s.lateMinutes}</td>
+                          <td className="p-2 text-end">{s.incompleteDays}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <h3 className="font-medium">{t("hr.rep.attDetails")}</h3>
+                  <div className="max-h-96 overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-muted-foreground">
+                        <tr>
+                          <th className="p-2 text-start">{t("hr.rep.attDate")}</th>
+                          <th className="p-2 text-start">{t("hr.col.name")}</th>
+                          <th className="p-2 text-start">{t("hr.att.firstIn")}</th>
+                          <th className="p-2 text-start">{t("hr.att.lastOut")}</th>
+                          <th className="p-2 text-start">{t("hr.att.late")}</th>
+                          <th className="p-2 text-start">{t("hr.rep.attState")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attData.rows.map((r, i) => (
+                          <tr key={`${r.date}-${r.employeeId}-${i}`} className="border-t">
+                            <td className="p-2">{r.date}</td>
+                            <td className="p-2">{r.fullName}</td>
+                            <td className="p-2">{clockTime(r.firstIn)}</td>
+                            <td className="p-2">{clockTime(r.lastOut)}</td>
+                            <td className="p-2">
+                              {r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}
+                            </td>
+                            <td className="p-2">
+                              {r.absent
+                                ? t("hr.att.absentLabel")
+                                : r.incomplete
+                                  ? t("hr.att.incomplete")
+                                  : r.onLeave
+                                    ? t("hr.att.onLeave")
+                                    : r.onMission
+                                      ? t("hr.att.onMission")
+                                      : t("hr.att.presentLabel")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-4 space-y-3">

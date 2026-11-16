@@ -28,6 +28,7 @@ import { isValidPeriod } from "./discipline-logic";
 import { computeProductionIncentive, type ProductionIncentiveResult } from "./production-incentive";
 import { buildAttendance } from "./routes";
 import { deliverPayslips } from "./payroll-delivery";
+import { loadPeriodAdjustments, loadPeriodFines, staleAdjustmentFields } from "./payroll-inputs";
 import { logger } from "../../shared/logger";
 import {
   computePayslip,
@@ -390,6 +391,61 @@ router.post("/hr/payroll/runs/:id/approve", async (req, res): Promise<void> => {
   // Recompute production incentive for linked employees right before approval. If the payslip no
   // longer matches, the draft is stale and must be recalculated first.
   const slips = await db.select().from(hrPayslipsTable).where(eq(hrPayslipsTable.runId, id));
+  const slipEmployeeIds = slips.map((s) => s.employeeId);
+
+  // Adjustments (bonus / incentive / deduction) and decided fines may be added
+  // to the Discipline & rewards tab AFTER the draft was calculated. Approval must
+  // see them, or the operator is told a deduction "was not counted" while the
+  // payslip still holds the pre-change numbers.
+  const { settings: storedSettings } = await loadSettings();
+  const runSettings = withMissingPayrollSettingsAsDefaults(storedSettings);
+  const periodAdjustments = await loadPeriodAdjustments(run.period, slipEmployeeIds);
+  const periodFines = await loadPeriodFines(run.period, slipEmployeeIds);
+  const contractsForAll = slipEmployeeIds.length
+    ? await db
+        .select()
+        .from(hrContractsTable)
+        .where(
+          and(
+            inArray(hrContractsTable.employeeId, slipEmployeeIds),
+            eq(hrContractsTable.isCurrent, true),
+          ),
+        )
+    : [];
+  const staleAdjustments: string[] = [];
+  for (const slip of slips) {
+    const contract = contractsForAll.find((c) => c.employeeId === slip.employeeId);
+    const dailyRate = round2(num(contract?.basicSalary) / runSettings.absence!.dailyDivisor);
+    const changed = staleAdjustmentFields(
+      {
+        bonuses: num(slip.bonuses),
+        deductions: num(slip.deductions),
+        finesApplied: num(slip.finesApplied),
+      },
+      periodAdjustments.filter((a) => a.employeeId === slip.employeeId),
+      periodFines.get(slip.employeeId) ?? 0,
+      dailyRate,
+      runSettings.fines?.monthlyCapDays ?? null,
+    );
+    if (changed.length) {
+      const name = (
+        await db
+          .select({ fullName: hrEmployeesTable.fullName })
+          .from(hrEmployeesTable)
+          .where(eq(hrEmployeesTable.id, slip.employeeId))
+          .limit(1)
+      )[0]?.fullName;
+      staleAdjustments.push(name ?? String(slip.employeeId));
+    }
+  }
+  if (staleAdjustments.length) {
+    res.status(409).json({
+      error: "تغيّرت الخصومات أو المكافآت أو الجزاءات بعد حساب المسير — أعد حسابه قبل الاعتماد",
+      employees: staleAdjustments,
+    });
+    return;
+  }
+
   const linked = await db
     .select({
       id: hrEmployeesTable.id,
