@@ -17,6 +17,7 @@ import {
 } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { logger } from "../../shared/logger";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
 import { missingRegistrationFields } from "../../shared/supplier-registration";
 import {
@@ -89,87 +90,43 @@ const AUTO_DEACTIVATE_AFTER = 10;
 // Every component score is null when the underlying data is missing — no
 // fabricated defaults. The total is a weighted average over only the available
 // components, and null when there is no data at all.
-async function computeSupplierScore(supplierId: number) {
-  // ── 1. الالتزام (نسبة الاستجابة) ───────────────────────────────────────────
-  const [sentStats] = await db
-    .select({ total: count() })
-    .from(sentLogTable)
-    .where(eq(sentLogTable.supplierId, supplierId));
-  const [offerStats] = await db
-    .select({ total: count() })
-    .from(offersTable)
-    .where(eq(offersTable.supplierId, supplierId));
-
-  const totalRfqsReceived = Number(sentStats?.total ?? 0);
-  const totalOffersSubmitted = Number(offerStats?.total ?? 0);
+// ─── Pure score derivation ─────────────────────────────────────────────────
+// The ONE place the weighting lives. Both the single-supplier endpoint and the
+// batched list endpoint call this, so they can never report different scores
+// for the same supplier. Every component is null when its data is missing — no
+// fabricated defaults; the total is a weighted average over available parts.
+function deriveScore(m: {
+  totalRfqsReceived: number;
+  totalOffersSubmitted: number;
+  avgResponseHours: number | null;
+  totalItemsOffered: number;
+  avgPriceDelta: number | null;
+  wins: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  avgDeliveryDays: number | null;
+}) {
   const responseRate =
-    totalRfqsReceived > 0
-      ? Math.round((totalOffersSubmitted / totalRfqsReceived) * 1000) / 10
+    m.totalRfqsReceived > 0
+      ? Math.round((m.totalOffersSubmitted / m.totalRfqsReceived) * 1000) / 10
       : null;
   const commitmentScore = responseRate !== null ? Math.min(100, Math.round(responseRate)) : null;
 
-  // ── 2. سرعة الرد ───────────────────────────────────────────────────────────
-  // متوسط الساعات من إرسال الطلب حتى تقديم العرض
-  const responseTimeRows = await db.execute(sql`
-      SELECT EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600 AS hours
-      FROM offers o
-      JOIN sent_log sl ON o.sent_log_id = sl.id
-      WHERE o.supplier_id = ${supplierId}
-        AND sl.created_at IS NOT NULL
-        AND o.sent_log_id IS NOT NULL
-    `);
-  const responseTimes = (responseTimeRows.rows as { hours: string }[])
-    .map((r) => parseFloat(r.hours))
-    .filter((h) => h >= 0 && h < 8760); // استثناء القيم الشاذة (> سنة)
-
-  const avgResponseHours =
-    responseTimes.length > 0
-      ? Math.round((responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) * 10) / 10
-      : null;
-
   let responseSpeedScore: number | null = null;
-  if (avgResponseHours !== null) {
-    if (avgResponseHours < 4) responseSpeedScore = 100;
-    else if (avgResponseHours < 8) responseSpeedScore = 90;
-    else if (avgResponseHours < 24) responseSpeedScore = 75;
-    else if (avgResponseHours < 48) responseSpeedScore = 60;
-    else if (avgResponseHours < 72) responseSpeedScore = 45;
-    else if (avgResponseHours < 168) responseSpeedScore = 30;
+  if (m.avgResponseHours !== null) {
+    if (m.avgResponseHours < 4) responseSpeedScore = 100;
+    else if (m.avgResponseHours < 8) responseSpeedScore = 90;
+    else if (m.avgResponseHours < 24) responseSpeedScore = 75;
+    else if (m.avgResponseHours < 48) responseSpeedScore = 60;
+    else if (m.avgResponseHours < 72) responseSpeedScore = 45;
+    else if (m.avgResponseHours < 168) responseSpeedScore = 30;
     else responseSpeedScore = 15;
   }
 
-  // ── 3. السعر (مقارنة بمتوسط السوق) ─────────────────────────────────────────
-  // لكل بند قدّم عليه المورد عرض، نقارن سعره بمتوسط سعر كل الموردين على نفس البند
-  const [itemsOfferedRow] = await db
-    .select({ cnt: count() })
-    .from(offerItemsTable)
-    .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
-    .where(eq(offersTable.supplierId, supplierId));
-  const totalItemsOffered = Number(itemsOfferedRow?.cnt ?? 0);
-
-  let avgPriceDelta: number | null = null;
   let priceScore: number | null = null;
-  if (totalItemsOffered > 0) {
-    const priceDeviationRows = await db.execute(sql`
-        SELECT AVG((oi.price::numeric - market.avg_price) / market.avg_price * 100) AS avg_delta
-        FROM offer_items oi
-        JOIN offers o ON oi.offer_id = o.id
-        JOIN (
-          SELECT oi2.rfq_item_id, AVG(oi2.price::numeric) AS avg_price
-          FROM offer_items oi2
-          GROUP BY oi2.rfq_item_id
-        ) market ON market.rfq_item_id = oi.rfq_item_id
-        WHERE o.supplier_id = ${supplierId}
-          AND market.avg_price > 0
-      `);
-    const rawDelta = priceDeviationRows.rows[0]
-      ? parseFloat(String((priceDeviationRows.rows[0] as { avg_delta: string }).avg_delta ?? ""))
-      : NaN;
-    avgPriceDelta = Number.isFinite(rawDelta) ? Math.round(rawDelta * 10) / 10 : null;
-  }
-  if (avgPriceDelta !== null) {
+  if (m.avgPriceDelta !== null) {
     // -20% أو أقل = 100، 0% = 70، +20% أو أكثر = 40
-    const d = avgPriceDelta;
+    const d = m.avgPriceDelta;
     if (d <= -20) priceScore = 100;
     else if (d <= 0) priceScore = Math.round(70 + (Math.abs(d) / 20) * 30);
     else if (d <= 20) priceScore = Math.round(70 - (d / 20) * 30);
@@ -177,59 +134,23 @@ async function computeSupplierScore(supplierId: number) {
     priceScore = Math.max(0, Math.min(100, priceScore));
   }
 
-  // ── 4. نسبة الفوز (بنود تحوّلت إلى أمر شراء) ────────────────────────────────
-  const [winsRow] = await db
-    .select({ cnt: count() })
-    .from(purchaseOrderItemsTable)
-    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
-  const wins = Number(winsRow?.cnt ?? 0);
-  const winScore = totalItemsOffered > 0 ? Math.round((wins / totalItemsOffered) * 100) : null;
+  const winScore =
+    m.totalItemsOffered > 0 ? Math.round((m.wins / m.totalItemsOffered) * 100) : null;
 
-  // ── 5. جودة الاستلام (بيانات الوصول الفعلية) ─────────────────────────────────
-  const [receiptRow] = await db
-    .select({
-      accepted: sql<string | null>`sum(${purchaseOrderItemsTable.totalAcceptedQty})`,
-      rejected: sql<string | null>`sum(${purchaseOrderItemsTable.totalRejectedQty})`,
-    })
-    .from(purchaseOrderItemsTable)
-    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
-  const acceptedQty = receiptRow?.accepted ? parseFloat(receiptRow.accepted) : 0;
-  const rejectedQty = receiptRow?.rejected ? parseFloat(receiptRow.rejected) : 0;
   const receiptQualityScore =
-    acceptedQty + rejectedQty > 0
-      ? Math.round((acceptedQty / (acceptedQty + rejectedQty)) * 100)
+    m.acceptedQty + m.rejectedQty > 0
+      ? Math.round((m.acceptedQty / (m.acceptedQty + m.rejectedQty)) * 100)
       : null;
 
-  // ── 6. متوسط مدة التوريد الفعلي (من الاستلامات فقط — لا يُحسب دون استلام) ────
-  // avg(receivedAt - po.createdAt) يومًا من الاستلامات المسجّلة
-  const [deliveryRow] = await db
-    .select({
-      avg: sql<
-        string | null
-      >`avg(extract(epoch from (${poItemReceiptsTable.receivedAt} - ${purchaseOrdersTable.createdAt})) / 86400)`,
-      cnt: count(),
-    })
-    .from(poItemReceiptsTable)
-    .innerJoin(purchaseOrdersTable, eq(poItemReceiptsTable.poId, purchaseOrdersTable.id))
-    .innerJoin(
-      purchaseOrderItemsTable,
-      eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id),
-    )
-    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
-  const receiptCount = Number(deliveryRow?.cnt ?? 0);
-  const avgDeliveryDays =
-    receiptCount > 0 && deliveryRow?.avg ? Math.round(parseFloat(String(deliveryRow.avg))) : null;
-
   let deliveryScore: number | null = null;
-  if (avgDeliveryDays !== null) {
-    if (avgDeliveryDays <= 7) deliveryScore = 100;
-    else if (avgDeliveryDays <= 14) deliveryScore = 85;
-    else if (avgDeliveryDays <= 30) deliveryScore = 70;
-    else if (avgDeliveryDays <= 60) deliveryScore = 55;
+  if (m.avgDeliveryDays !== null) {
+    if (m.avgDeliveryDays <= 7) deliveryScore = 100;
+    else if (m.avgDeliveryDays <= 14) deliveryScore = 85;
+    else if (m.avgDeliveryDays <= 30) deliveryScore = 70;
+    else if (m.avgDeliveryDays <= 60) deliveryScore = 55;
     else deliveryScore = 35;
   }
 
-  // ── 7. الدرجة الإجمالية — متوسط مرجّح على المكونات المتاحة فقط ─────────────
   const components = [
     { score: commitmentScore, weight: 0.25 },
     { score: responseSpeedScore, weight: 0.15 },
@@ -251,25 +172,273 @@ async function computeSupplierScore(supplierId: number) {
   }
 
   return {
-    totalRfqsReceived,
-    totalOffersSubmitted,
+    totalRfqsReceived: m.totalRfqsReceived,
+    totalOffersSubmitted: m.totalOffersSubmitted,
     responseRate,
     commitmentScore,
-    avgResponseHours,
+    avgResponseHours: m.avgResponseHours,
     responseSpeedScore,
-    avgPriceDelta,
+    avgPriceDelta: m.avgPriceDelta,
     priceScore,
-    totalItemsOffered,
-    wins,
+    totalItemsOffered: m.totalItemsOffered,
+    wins: m.wins,
     winScore,
-    acceptedQty,
-    rejectedQty,
+    acceptedQty: m.acceptedQty,
+    rejectedQty: m.rejectedQty,
     receiptQualityScore,
-    avgDeliveryDays,
+    avgDeliveryDays: m.avgDeliveryDays,
     deliveryScore,
     totalScore,
     rating,
   };
+}
+
+type SupplierScore = ReturnType<typeof deriveScore>;
+
+// Batched: all suppliers' score metrics in ~8 queries instead of 7 per supplier
+// (≈390 suppliers × 7 ≈ 2,700 round trips → 29 s against production).
+async function computeAllSupplierScores(
+  supplierIds: number[],
+): Promise<Map<number, SupplierScore>> {
+  const out = new Map<number, SupplierScore>();
+  if (supplierIds.length === 0) return out;
+
+  const [
+    sentRows,
+    offerRows,
+    itemsOfferedRows,
+    winsRows,
+    receiptRows,
+    responseRes,
+    priceRes,
+    deliveryRes,
+  ] = await Promise.all([
+    db
+      .select({ supplierId: sentLogTable.supplierId, cnt: count() })
+      .from(sentLogTable)
+      .where(inArray(sentLogTable.supplierId, supplierIds))
+      .groupBy(sentLogTable.supplierId),
+    db
+      .select({ supplierId: offersTable.supplierId, cnt: count() })
+      .from(offersTable)
+      .where(inArray(offersTable.supplierId, supplierIds))
+      .groupBy(offersTable.supplierId),
+    db
+      .select({ supplierId: offersTable.supplierId, cnt: count() })
+      .from(offerItemsTable)
+      .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+      .where(inArray(offersTable.supplierId, supplierIds))
+      .groupBy(offersTable.supplierId),
+    db
+      .select({ supplierId: purchaseOrderItemsTable.supplierId, cnt: count() })
+      .from(purchaseOrderItemsTable)
+      .where(inArray(purchaseOrderItemsTable.supplierId, supplierIds))
+      .groupBy(purchaseOrderItemsTable.supplierId),
+    db
+      .select({
+        supplierId: purchaseOrderItemsTable.supplierId,
+        accepted: sql<string | null>`sum(${purchaseOrderItemsTable.totalAcceptedQty})`,
+        rejected: sql<string | null>`sum(${purchaseOrderItemsTable.totalRejectedQty})`,
+      })
+      .from(purchaseOrderItemsTable)
+      .where(inArray(purchaseOrderItemsTable.supplierId, supplierIds))
+      .groupBy(purchaseOrderItemsTable.supplierId),
+    db.execute(sql`
+        SELECT o.supplier_id AS supplier_id,
+               AVG(EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600)
+                 FILTER (WHERE EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600 >= 0
+                           AND EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600 < 8760)
+                 AS avg_hours
+        FROM offers o
+        JOIN sent_log sl ON o.sent_log_id = sl.id
+        WHERE o.supplier_id IN ${supplierIds}
+          AND o.sent_log_id IS NOT NULL
+          AND sl.created_at IS NOT NULL
+        GROUP BY o.supplier_id
+      `),
+    db.execute(sql`
+        SELECT o.supplier_id AS supplier_id,
+               AVG((oi.price::numeric - market.avg_price) / market.avg_price * 100) AS avg_delta
+        FROM offer_items oi
+        JOIN offers o ON oi.offer_id = o.id
+        JOIN (
+          SELECT oi2.rfq_item_id, AVG(oi2.price::numeric) AS avg_price
+          FROM offer_items oi2
+          GROUP BY oi2.rfq_item_id
+        ) market ON market.rfq_item_id = oi.rfq_item_id
+        WHERE o.supplier_id IN ${supplierIds}
+          AND market.avg_price > 0
+        GROUP BY o.supplier_id
+      `),
+    db.execute(sql`
+        SELECT poi.supplier_id AS supplier_id,
+               AVG(EXTRACT(EPOCH FROM (r.received_at - po.created_at)) / 86400) AS avg_days,
+               COUNT(*) AS cnt
+        FROM po_item_receipts r
+        JOIN purchase_orders po ON r.po_id = po.id
+        JOIN purchase_order_items poi ON r.po_item_id = poi.id
+        WHERE poi.supplier_id IN ${supplierIds}
+        GROUP BY poi.supplier_id
+      `),
+  ]);
+
+  const sentBy = new Map<number, number>();
+  for (const r of sentRows) if (r.supplierId != null) sentBy.set(r.supplierId, Number(r.cnt));
+  const offersBy = new Map<number, number>();
+  for (const r of offerRows) if (r.supplierId != null) offersBy.set(r.supplierId, Number(r.cnt));
+  const itemsOfferedBy = new Map<number, number>();
+  for (const r of itemsOfferedRows)
+    if (r.supplierId != null) itemsOfferedBy.set(r.supplierId, Number(r.cnt));
+  const winsBy = new Map<number, number>();
+  for (const r of winsRows) if (r.supplierId != null) winsBy.set(r.supplierId, Number(r.cnt));
+  const receiptBy = new Map<number, { accepted: number; rejected: number }>();
+  for (const r of receiptRows)
+    if (r.supplierId != null)
+      receiptBy.set(r.supplierId, {
+        accepted: r.accepted ? parseFloat(r.accepted) : 0,
+        rejected: r.rejected ? parseFloat(r.rejected) : 0,
+      });
+  const responseBy = new Map<number, number>();
+  for (const r of responseRes.rows as { supplier_id: number; avg_hours: string | null }[])
+    if (r.avg_hours != null)
+      responseBy.set(Number(r.supplier_id), Math.round(parseFloat(r.avg_hours) * 10) / 10);
+  const priceBy = new Map<number, number>();
+  for (const r of priceRes.rows as { supplier_id: number; avg_delta: string | null }[]) {
+    const d = r.avg_delta != null ? parseFloat(r.avg_delta) : NaN;
+    if (Number.isFinite(d)) priceBy.set(Number(r.supplier_id), Math.round(d * 10) / 10);
+  }
+  const deliveryBy = new Map<number, number>();
+  for (const r of deliveryRes.rows as {
+    supplier_id: number;
+    avg_days: string | null;
+    cnt: string;
+  }[]) {
+    if (Number(r.cnt) > 0 && r.avg_days != null)
+      deliveryBy.set(Number(r.supplier_id), Math.round(parseFloat(r.avg_days)));
+  }
+
+  for (const id of supplierIds) {
+    const receipt = receiptBy.get(id) ?? { accepted: 0, rejected: 0 };
+    out.set(
+      id,
+      deriveScore({
+        totalRfqsReceived: sentBy.get(id) ?? 0,
+        totalOffersSubmitted: offersBy.get(id) ?? 0,
+        avgResponseHours: responseBy.get(id) ?? null,
+        totalItemsOffered: itemsOfferedBy.get(id) ?? 0,
+        avgPriceDelta: priceBy.get(id) ?? null,
+        wins: winsBy.get(id) ?? 0,
+        acceptedQty: receipt.accepted,
+        rejectedQty: receipt.rejected,
+        avgDeliveryDays: deliveryBy.get(id) ?? null,
+      }),
+    );
+  }
+  return out;
+}
+
+// Single-supplier score (detail endpoint) — fetches the same metrics for one
+// supplier and derives through the SAME pure function as the batched path.
+async function computeSupplierScore(supplierId: number) {
+  const [sentStats] = await db
+    .select({ total: count() })
+    .from(sentLogTable)
+    .where(eq(sentLogTable.supplierId, supplierId));
+  const [offerStats] = await db
+    .select({ total: count() })
+    .from(offersTable)
+    .where(eq(offersTable.supplierId, supplierId));
+  const totalRfqsReceived = Number(sentStats?.total ?? 0);
+  const totalOffersSubmitted = Number(offerStats?.total ?? 0);
+
+  const responseTimeRows = await db.execute(sql`
+      SELECT EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600 AS hours
+      FROM offers o
+      JOIN sent_log sl ON o.sent_log_id = sl.id
+      WHERE o.supplier_id = ${supplierId}
+        AND sl.created_at IS NOT NULL
+        AND o.sent_log_id IS NOT NULL
+    `);
+  const responseTimes = (responseTimeRows.rows as { hours: string }[])
+    .map((r) => parseFloat(r.hours))
+    .filter((h) => h >= 0 && h < 8760); // استثناء القيم الشاذة (> سنة)
+  const avgResponseHours =
+    responseTimes.length > 0
+      ? Math.round((responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) * 10) / 10
+      : null;
+
+  const [itemsOfferedRow] = await db
+    .select({ cnt: count() })
+    .from(offerItemsTable)
+    .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+    .where(eq(offersTable.supplierId, supplierId));
+  const totalItemsOffered = Number(itemsOfferedRow?.cnt ?? 0);
+
+  let avgPriceDelta: number | null = null;
+  if (totalItemsOffered > 0) {
+    const priceDeviationRows = await db.execute(sql`
+        SELECT AVG((oi.price::numeric - market.avg_price) / market.avg_price * 100) AS avg_delta
+        FROM offer_items oi
+        JOIN offers o ON oi.offer_id = o.id
+        JOIN (
+          SELECT oi2.rfq_item_id, AVG(oi2.price::numeric) AS avg_price
+          FROM offer_items oi2
+          GROUP BY oi2.rfq_item_id
+        ) market ON market.rfq_item_id = oi.rfq_item_id
+        WHERE o.supplier_id = ${supplierId}
+          AND market.avg_price > 0
+      `);
+    const rawDelta = priceDeviationRows.rows[0]
+      ? parseFloat(String((priceDeviationRows.rows[0] as { avg_delta: string }).avg_delta ?? ""))
+      : NaN;
+    avgPriceDelta = Number.isFinite(rawDelta) ? Math.round(rawDelta * 10) / 10 : null;
+  }
+
+  const [winsRow] = await db
+    .select({ cnt: count() })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
+  const wins = Number(winsRow?.cnt ?? 0);
+
+  const [receiptRow] = await db
+    .select({
+      accepted: sql<string | null>`sum(${purchaseOrderItemsTable.totalAcceptedQty})`,
+      rejected: sql<string | null>`sum(${purchaseOrderItemsTable.totalRejectedQty})`,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
+  const acceptedQty = receiptRow?.accepted ? parseFloat(receiptRow.accepted) : 0;
+  const rejectedQty = receiptRow?.rejected ? parseFloat(receiptRow.rejected) : 0;
+
+  const [deliveryRow] = await db
+    .select({
+      avg: sql<
+        string | null
+      >`avg(extract(epoch from (${poItemReceiptsTable.receivedAt} - ${purchaseOrdersTable.createdAt})) / 86400)`,
+      cnt: count(),
+    })
+    .from(poItemReceiptsTable)
+    .innerJoin(purchaseOrdersTable, eq(poItemReceiptsTable.poId, purchaseOrdersTable.id))
+    .innerJoin(
+      purchaseOrderItemsTable,
+      eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id),
+    )
+    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
+  const receiptCount = Number(deliveryRow?.cnt ?? 0);
+  const avgDeliveryDays =
+    receiptCount > 0 && deliveryRow?.avg ? Math.round(parseFloat(String(deliveryRow.avg))) : null;
+
+  return deriveScore({
+    totalRfqsReceived,
+    totalOffersSubmitted,
+    avgResponseHours,
+    totalItemsOffered,
+    avgPriceDelta,
+    wins,
+    acceptedQty,
+    rejectedQty,
+    avgDeliveryDays,
+  });
 }
 
 // ─── Routes ────────────────────────────────────────────────────────────────
@@ -400,40 +569,59 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
   res.json({ imported, skipped, errors, details });
 });
 
-router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
-  const { category, search } = req.query as Record<string, string>;
-
-  // إلغاء تفعيل تلقائي: كل مورد لم يرد على آخر N إرسال متتالي. العدّاد
-  // يبدأ من GREATEST(آخر عرض, تاريخ آخر إعادة تفعيل يدوية) — فإعادة التفعيل
-  // يدويًا تُصفّر العدّاد، ولا يُعاد تعطيل المورد إلا بعد N إرسالات جديدة دون رد.
+/**
+ * إلغاء تفعيل تلقائي: كل مورد لم يرد على آخر N إرسال متتالي. العدّاد يبدأ من
+ * GREATEST(آخر عرض, تاريخ آخر إعادة تفعيل يدوية) — فإعادة التفعيل يدويًا تُصفّر
+ * العدّاد، ولا يُعاد تعطيل المورد إلا بعد N إرسالات جديدة دون رد.
+ *
+ * This is a WRITE, and it used to run on every GET /suppliers — measured at
+ * **8.9 s** on production (the correlated `MAX(created_at)` per supplier group
+ * re-reads `offers` for every sent_log row). A page load must not pay for a
+ * background sweep, so it is now called once at startup (see index.ts) and after
+ * a manual re-activation, never from the list route.
+ *
+ * The rewrite hoists both correlated subqueries into CTEs that run ONCE, and was
+ * verified to return the identical affected-row count at thresholds 1/2/3/10.
+ * Best-effort: a failure is logged, never thrown.
+ */
+export async function deactivateInactiveSuppliers(): Promise<number> {
   try {
-    await db.execute(sql`
+    const result = await db.execute(sql`
+      WITH last_offer AS (
+        SELECT supplier_id, max(created_at) AS at
+        FROM offers WHERE supplier_id IS NOT NULL GROUP BY supplier_id
+      ),
+      last_react AS (
+        SELECT id, reactivated_at FROM suppliers WHERE reactivated_at IS NOT NULL
+      ),
+      unanswered AS (
+        SELECT sl.supplier_id, count(*) AS c
+        FROM sent_log sl
+        LEFT JOIN last_offer lo ON lo.supplier_id = sl.supplier_id
+        LEFT JOIN last_react lr ON lr.id = sl.supplier_id
+        WHERE sl.supplier_id IS NOT NULL
+          AND sl.created_at > GREATEST(
+            COALESCE(lo.at, 'epoch'::timestamp),
+            COALESCE(lr.reactivated_at, 'epoch'::timestamp)
+          )
+        GROUP BY sl.supplier_id
+      )
       UPDATE suppliers s
       SET is_active = false
-      FROM (
-        SELECT sl.supplier_id
-        FROM sent_log sl
-        WHERE sl.supplier_id IS NOT NULL
-        GROUP BY sl.supplier_id
-        HAVING COUNT(*) FILTER (
-          WHERE sl.created_at > GREATEST(
-            COALESCE((
-              SELECT MAX(o.created_at) FROM offers o
-              WHERE o.supplier_id = sl.supplier_id
-            ), 'epoch'::timestamp),
-            COALESCE((
-              SELECT s2.reactivated_at FROM suppliers s2
-              WHERE s2.id = sl.supplier_id
-            ), 'epoch'::timestamp)
-          )
-        ) >= ${AUTO_DEACTIVATE_AFTER}
-      ) dead
-      WHERE s.id = dead.supplier_id
+      FROM unanswered u
+      WHERE s.id = u.supplier_id
+        AND u.c >= ${AUTO_DEACTIVATE_AFTER}
         AND s.is_active = true
     `);
-  } catch {
-    // best-effort — لا نُعطّل القائمة إن فشلت
+    return (result as { rowCount?: number }).rowCount ?? 0;
+  } catch (err) {
+    logger.warn({ err }, "suppliers: auto-deactivate sweep failed");
+    return 0;
   }
+}
+
+router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
+  const { category, search } = req.query as Record<string, string>;
 
   const conditions = [];
   if (category) {
@@ -496,12 +684,23 @@ router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => 
     .where(eq(suppliersTable.isActive, true))
     .orderBy(suppliersTable.name);
 
-  const scores = await Promise.all(
-    suppliers.map(async (s) => {
-      const score = await computeSupplierScore(s.id);
-      return { supplierId: s.id, supplierName: s.name, ...score };
-    }),
-  );
+  const scoreMap = await computeAllSupplierScores(suppliers.map((s) => s.id));
+  const scores = suppliers.map((s) => ({
+    supplierId: s.id,
+    supplierName: s.name,
+    ...(scoreMap.get(s.id) ??
+      deriveScore({
+        totalRfqsReceived: 0,
+        totalOffersSubmitted: 0,
+        avgResponseHours: null,
+        totalItemsOffered: 0,
+        avgPriceDelta: null,
+        wins: 0,
+        acceptedQty: 0,
+        rejectedQty: 0,
+        avgDeliveryDays: null,
+      })),
+  }));
 
   // ترتيب حسب التقييم تنازلياً (الموردون بلا بيانات آخر القائمة)
   scores.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));

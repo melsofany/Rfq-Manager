@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { useLocation } from "wouter";
 import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
@@ -47,17 +48,27 @@ export default function PurchaseOrdersListPage() {
   const [financeStatus, setFinanceStatus] = useState<Record<number, PoFinanceStatus>>({});
   const [adding, setAdding] = useState(false);
 
+  const debouncedSearch = useDebounced(search);
+  // The server caps the page so a list open never serializes the whole table.
+  // Keep in step with the route default in modules/po/routes.ts.
+  const LIST_PAGE_SIZE = 200;
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
-    { status: status !== "all" ? status : undefined, search: search || undefined },
+    {
+      status: status !== "all" ? status : undefined,
+      search: debouncedSearch || undefined,
+      limit: LIST_PAGE_SIZE,
+    },
     {
       query: {
         queryKey: getListPurchaseOrdersQueryKey({
           status: status !== "all" ? status : undefined,
-          search: search || undefined,
+          search: debouncedSearch || undefined,
+          limit: LIST_PAGE_SIZE,
         }),
       },
     },
   );
+  const capped = (purchaseOrders?.length ?? 0) >= LIST_PAGE_SIZE;
 
   // Load per-PO receipt progress (received/rejected/total) for the list badge.
   // Live-refreshes via the same SSE stream the receipts tab uses.
@@ -232,6 +243,11 @@ export default function PurchaseOrdersListPage() {
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
+              {capped && (
+                <div className="px-4 py-2 text-xs bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border-b border-border">
+                  يتم عرض أحدث {LIST_PAGE_SIZE} أمر شراء فقط. استخدم البحث للوصول إلى أمر أقدم.
+                </div>
+              )}
               {isLoading ? (
                 <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
               ) : purchaseOrders?.length === 0 ? (

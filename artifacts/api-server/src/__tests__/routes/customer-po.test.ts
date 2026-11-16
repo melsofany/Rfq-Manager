@@ -35,6 +35,7 @@ vi.mock("drizzle-orm", () => ({
   },
   and: (...args: any[]) => ({ __op: "and", args }),
   or: (...args: any[]) => ({ __op: "or", args }),
+  ilike: (col: any, value: any) => ({ __op: "ilike", col, value }),
   inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
   desc: (col: any) => ({ __op: "desc", col }),
   asc: (col: any) => ({ __op: "asc", col }),
@@ -117,6 +118,7 @@ const tables = {
 
 // Per-test state.
 let listRows: any[]; // GET /customer-po list rows: { po: {...} }
+let listWhereCond: any; // the WHERE the list route built (proves SQL-side filtering)
 let countRows: any[]; // item-count aggregate: { customerPoId, cnt }
 let countRow: { maxNo: string | null }; // generateInternalPoNo: { maxNo }
 let insertedPo: any; // base row returned by insert().returning()
@@ -170,13 +172,24 @@ const dbMock: any = {
           ),
         });
       }
-      // PO list: select({po}).from(poTable).orderBy()
+      // PO list: select({po}).from(poTable).where(...).orderBy().limit() — the
+      // list filters + caps in SQL now, so the WHERE→ORDER→LIMIT chain is the
+      // one the route actually builds. Bare `.orderBy()` (detail/other callers)
+      // still resolves to listRows.
       if (table === poTable) {
         const bare = arg === undefined;
         const wrapped = bare ? (detailRow ? [detailRow] : []) : listRows;
         return chainable(wrapped, {
-          orderBy: vi.fn(() => chainable(listRows)),
-          where: vi.fn(() => chainable(wrapped, { limit: vi.fn(() => chainable(wrapped)) })),
+          orderBy: vi.fn(() => chainable(listRows, { limit: vi.fn(() => chainable(listRows)) })),
+          where: vi.fn((cond: any) => {
+            listWhereCond = cond;
+            return chainable(wrapped, {
+              orderBy: vi.fn(() =>
+                chainable(listRows, { limit: vi.fn(() => chainable(listRows)) }),
+              ),
+              limit: vi.fn(() => chainable(wrapped)),
+            });
+          }),
         });
       }
       // item-count aggregate: select({customerPoId, cnt}).from(poItems).where().groupBy()
@@ -357,6 +370,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   listRows = [];
+  listWhereCond = undefined;
   countRows = [];
   countRow = { maxNo: null };
   duplicatePoRows = [];
@@ -566,14 +580,21 @@ describe("GET /api/customer-po (list)", () => {
     expect(res.body[0].fulfillmentStatus.stage).toBe("draft");
   });
 
-  it("filters by search term (client-side) without erroring", async () => {
+  it("filters search + status in SQL, not in JS, and caps the page", async () => {
     listRows = [
       { po: { ...insertedPo, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } },
     ];
     countRows = [];
-    const res = await request(testApp).get("/api/customer-po?search=PO-100");
+    const res = await request(testApp).get("/api/customer-po?search=PO-100&status=sent");
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
+
+    // The WHERE must carry the search term and the status — the whole point is
+    // that the DATABASE filters, not the route's JS. A mock that returns rows
+    // directly cannot see this, so the built condition is asserted instead.
+    const json = JSON.stringify(listWhereCond);
+    expect(json).toContain("PO-100");
+    expect(json).toContain("sent");
   });
 });
 

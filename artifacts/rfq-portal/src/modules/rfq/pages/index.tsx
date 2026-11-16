@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { Link, useLocation } from "wouter";
 import { useListRfqs, getListRfqsQueryKey } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
@@ -367,13 +368,14 @@ export default function RfqListPage() {
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   const [draftKey, setDraftKey] = useState<FilterKey>("employee");
   const [draft, setDraft] = useState({ text: "", from: "", to: "" });
+  const debouncedSearch = useDebounced(search);
   const { t } = useLanguage();
 
   const isArchive = view === "archive";
   const pick = (k: FilterKey) => filters.find((f) => f.key === k);
   const params = {
     status: status !== "all" ? status : undefined,
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     view: isArchive ? ("archive" as const) : undefined,
     employeeName: pick("employee")?.text.trim() || undefined,
     createdFrom: pick("created")?.from || undefined,

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDebounced } from "@/hooks/use-debounced";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -381,13 +382,14 @@ function SuppliersListTab() {
     query: { queryKey: getListCategoriesQueryKey() },
   });
 
+  const debouncedSearch = useDebounced(search);
   const { data: suppliers, isLoading } = useListSuppliers(
-    { category: category !== "all" ? category : undefined, search: search || undefined },
+    { category: category !== "all" ? category : undefined, search: debouncedSearch || undefined },
     {
       query: {
         queryKey: getListSuppliersQueryKey({
           category: category !== "all" ? category : undefined,
-          search: search || undefined,
+          search: debouncedSearch || undefined,
         }),
       },
     },

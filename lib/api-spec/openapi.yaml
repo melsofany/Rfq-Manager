@@ -472,6 +472,15 @@ paths:
           in: query
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum rows to return (default 200, max 1000). The list is
+            capped so a page load never serializes the whole table.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
       responses:
         "200":
           description: List of customer RFQs
@@ -757,6 +766,15 @@ paths:
           in: query
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum rows to return (default 200, max 1000). The list is
+            capped so a page load never serializes the whole table.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
       responses:
         "200":
           description: List of customer POs
@@ -1312,6 +1330,15 @@ paths:
           in: query
           schema:
             type: string
+        - name: limit
+          in: query
+          description: Maximum rows to return (default 200, max 1000). The list is
+            capped so a page load never serializes the whole table.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 200
       responses:
         "200":
           description: List of purchase orders

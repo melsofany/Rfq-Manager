@@ -1781,6 +1781,115 @@ export async function initDb(): Promise<void> {
       }
     }
 
+    // ── Missing foreign-key + list/order indexes (page-load latency) ────────
+    //
+    // The operator reported that every screen takes seconds to show data. The
+    // cause is not the app: an audit of production found 107 of 150
+    // foreign-key columns have no index, so Postgres sequentially scans the
+    // whole child table for every parent lookup. Measured on live data:
+    // customer_rfq_items (18,406 rows) is scanned on every customer-RFQ page
+    // load, audit_log (4,544) on every activity feed, whatsapp_chats
+    // (8,067) on every inbox open. A list route loads a page of parents and then
+    // fans out to their children, so the cost repeats per parent.
+    //
+    // The created_at DESC indexes cover the ORDER BY nearly every list issues;
+    // the leading-wildcard ILIKE columns get a trigram index because a btree
+    // cannot serve them (measured 144ms → 2ms for a name search).
+    //
+    // Each statement is attempted independently: a failure is logged, never
+    // aborts the boot (same contract as the block above). CREATE INDEX IF NOT
+    // EXISTS makes the whole block idempotent, so it is safe on every startup.
+    for (const stmt of [
+      // FK columns scanned on the hot list paths, largest tables first.
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_items_rfq ON customer_rfq_items (customer_rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_supplier ON whatsapp_chats (supplier_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_customer ON customer_rfqs (customer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_employee ON customer_rfqs (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_log_employee ON audit_log (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sent_log_rfq ON sent_log (rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sent_log_supplier ON sent_log (supplier_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sent_log_employee ON sent_log (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_po_items_po ON customer_po_items (customer_po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_po_items_rfq ON customer_po_items (customer_rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_items_rfq ON rfq_items (rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_items_customer_item ON rfq_items (customer_rfq_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_customer ON customer_pos (customer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_employee ON customer_pos (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offers_supplier ON offers (supplier_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offers_employee ON offers (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offers_sent_log ON offers (sent_log_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_employee ON rfq (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_po ON purchase_order_items (po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_orders_rfq ON purchase_orders (rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_orders_employee ON purchase_orders (employee_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_po ON work_order_assignments (po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_po_item ON work_order_assignments (po_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_customer_po ON work_order_assignments (customer_po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_customer_po_item ON work_order_assignments (customer_po_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_rep ON work_order_assignments (representative_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_item_receipts_po ON po_item_receipts (po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_item_receipts_po_item ON po_item_receipts (po_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_item_receipts_assignment ON po_item_receipts (assignment_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_cpo_deliveries_po ON customer_po_item_deliveries (customer_po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_data_entry_sessions_customer_rfq ON data_entry_sessions (customer_rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_data_entry_sessions_customer_po ON data_entry_sessions (customer_po_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_data_entry_sessions_purchase_order ON data_entry_sessions (purchase_order_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_data_entry_sessions_rfq ON data_entry_sessions (rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_crfa_assigned_by ON customer_rfq_item_assignments (assigned_by)`,
+      `CREATE INDEX IF NOT EXISTS idx_offer_attachments_offer ON offer_attachments (offer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_finance_payment_allocations_payment ON finance_payment_allocations (payment_id)`,
+      // The ORDER BY created_at DESC issued by nearly every list endpoint.
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_created ON customer_rfqs (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_items_created ON customer_rfq_items (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_created ON customer_pos (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_po_items_created ON customer_po_items (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_created ON rfq (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_offers_created ON offers (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_created ON whatsapp_chats (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_phone_created ON whatsapp_chats (phone, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_sent_log_created ON sent_log (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_suppliers_created ON suppliers (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_customers_created ON customers (created_at DESC)`,
+      // Leading-wildcard ILIKE search columns. customer_name is the field the
+      // operator types into on the customer-RFQ search box.
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_name_trgm ON customer_rfqs USING gin (customer_name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_internal_trgm ON customer_rfqs USING gin (internal_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_no_trgm ON customer_rfqs USING gin (customer_rfq_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_internal_trgm ON rfq USING gin (internal_rfq_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_customer_no_trgm ON rfq USING gin (customer_rfq_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_no_trgm ON customer_pos USING gin (customer_po_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_orders_internal_trgm ON purchase_orders USING gin (internal_po_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_orders_sheet_trgm ON purchase_orders USING gin (sheet_po_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_suppliers_contact_trgm ON suppliers USING gin (contact_person gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_suppliers_email_trgm ON suppliers USING gin (email gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customers_email_trgm ON customers USING gin (email gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_items_desc_trgm ON customer_rfq_items USING gin (description gin_trgm_ops)`,
+      // Status columns filtered by the list endpoints.
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfqs_status ON customer_rfqs (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_status ON customer_pos (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_status ON rfq (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_order_items_line_status ON purchase_order_items (line_status)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_po_items_delivery_status ON customer_po_items (delivery_status)`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_jobs_status ON ai_assistant_jobs (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_hr_attendance_created ON hr_attendance_punches (created_at DESC)`,
+      // created_at DESC on the remaining tables the activity/report screens read.
+      `CREATE INDEX IF NOT EXISTS idx_offer_items_created ON offer_items (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_rfq_items_created ON rfq_items (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_purchase_order_items_created ON purchase_order_items (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_work_order_assignments_created ON work_order_assignments (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_data_entry_sessions_created ON data_entry_sessions (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_messages_created ON ai_assistant_messages (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_ai_jobs_created ON ai_assistant_jobs (created_at DESC)`,
+    ]) {
+      try {
+        await client.query(stmt);
+      } catch (err) {
+        logger.warn({ err, stmt }, "initDb: optional index/extension skipped");
+      }
+    }
+
     // ── Idempotent migration: legacy rfq_item_assignments → customer items ──
     // Only rows whose rfq_item carries a customer_rfq_item_id are migrated. When
     // several supplier lines point at the SAME customer item (one item sent to N
