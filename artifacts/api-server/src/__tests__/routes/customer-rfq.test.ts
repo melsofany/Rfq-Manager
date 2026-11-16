@@ -147,6 +147,16 @@ let poItemRows: any[];
 // DELETE pre-check: customer_po_items joined to the RFQ's items. Empty ⇒ the
 // RFQ may be deleted; non-empty ⇒ 409 (its items are linked to a customer PO).
 let linkedPoItemRows: any[];
+// DELETE footprint probe (`db.execute` on the single EXISTS query). One row of
+// boolean flags — the downstream work that protects an RFQ from deletion.
+let footprintRow: Record<string, boolean>;
+// DELETE bookkeeping cleanup: customer_rfq_items ids whose responsibility
+// periods were removed alongside the request.
+const deletedAssignmentItemIds: number[] = [];
+// Failure injected into the delete transaction, so the route's error handling
+// (FK ⇒ 409, anything else ⇒ 500) can be asserted. Reset per test — a
+// `mockImplementationOnce` would leak into whichever test calls the mock next.
+let transactionError: unknown = null;
 // Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
 let sheetRows: any[];
 // RFQ headers for the sheet view's "requests with no items" rows. Left null by
@@ -709,12 +719,26 @@ const dbMock: any = {
           ...(Array.isArray(val) ? val : [val]).filter((v: any) => typeof v === "number"),
         );
       }
+      if (table === (tables as any).customerRfqItemAssignmentsTable) {
+        const val = cond?.val;
+        deletedAssignmentItemIds.push(
+          ...(Array.isArray(val) ? val : [val]).filter((v: any) => typeof v === "number"),
+        );
+      }
       return chainable(undefined);
     }),
   })),
+  // The footprint probe is one raw EXISTS query, so it is keyed on `execute`
+  // rather than a table. Defaults to "no footprint" (deletable).
+  execute: vi.fn(async () => ({ rows: [footprintRow] })),
   // The category editor runs its replace inside a transaction; hand the same
-  // mock handle to the callback so its tx.delete/tx.insert are exercised.
-  transaction: vi.fn(async (fn: any) => fn(dbMock)),
+  // mock handle to the callback so its tx.delete/tx.insert are exercised. The
+  // delete route uses it too, and `transactionError` lets a test inject a
+  // failure without the leak a `mockImplementationOnce` would cause.
+  transaction: vi.fn(async (fn: any) => {
+    if (transactionError) throw transactionError;
+    return fn(dbMock);
+  }),
 };
 
 vi.mock("@workspace/db", () => ({
@@ -809,6 +833,15 @@ beforeEach(() => {
   deletedItemIds.length = 0;
   cancelledItemIds.length = 0;
   linkedPoItemRows = [];
+  footprintRow = {
+    customer_po: false,
+    supplier_rfq: false,
+    supplier_rfq_items: false,
+    sales_invoice: false,
+    attribution: false,
+  };
+  deletedAssignmentItemIds.length = 0;
+  transactionError = null;
   auditInserts.length = 0;
   catItemRow = null;
   extraCatRows = [];
@@ -1612,6 +1645,80 @@ describe("DELETE /api/customer-rfq/:id", () => {
     detailRow = null;
     const res = await request(testApp).delete("/api/customer-rfq/999");
     expect(res.status).toBe(404);
+  });
+
+  // The recorded live defect: the automatic responsibility row (created for
+  // every item) was treated as history, so the operator could not delete a
+  // request even after clearing the assignment.
+  it("deletes a request whose only downstream record is the auto responsibility row", async () => {
+    detailRow = insertedRfq;
+    detailItems = [
+      { id: 501, customerRfqId: 42 },
+      { id: 502, customerRfqId: 42 },
+    ];
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(204);
+    // The request's own bookkeeping goes with it — never a partial delete.
+    expect(deletedAssignmentItemIds.sort()).toEqual([501, 502]);
+  });
+
+  it("keeps a request linked to a customer PO (by header) undeletable", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, customer_po: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    expect(res.body.footprint).toEqual(["أمر شراء عميل مرتبط"]);
+  });
+
+  // `rfq.customer_rfq_id` / `customer_po_items.customer_rfq_id` are SET NULL, so
+  // without the check the delete SUCCEEDS and silently severs the link.
+  it("keeps a request sent to suppliers undeletable", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, supplier_rfq: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    expect(res.body.footprint).toContain("طلب تسعير مُرسل لموردين");
+  });
+
+  it("keeps a request with frozen achievement undeletable", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, attribution: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    expect(res.body.footprint).toContain("تاريخ إنجاز مُثبَّت");
+  });
+
+  it("reports every footprint reason, not just the first", async () => {
+    detailRow = insertedRfq;
+    footprintRow = {
+      customer_po: true,
+      supplier_rfq: true,
+      supplier_rfq_items: true,
+      sales_invoice: true,
+      attribution: true,
+    };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    expect(res.body.footprint).toHaveLength(5);
+  });
+
+  // A foreign-key refusal the route did not foresee is still a conflict; any
+  // OTHER failure must not be reported as "linked records" — that masking is
+  // what hid this bug.
+  it("returns 500 (not 409) for an unexpected failure", async () => {
+    detailRow = insertedRfq;
+    transactionError = new Error("connection terminated");
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(500);
+  });
+
+  it("returns 409 when the database refuses on a foreign key", async () => {
+    detailRow = insertedRfq;
+    transactionError = Object.assign(new Error("Failed query"), {
+      cause: { code: "23503", message: "violates foreign key constraint" },
+    });
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
   });
 });
 
