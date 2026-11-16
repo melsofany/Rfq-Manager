@@ -38,6 +38,7 @@ import {
   lt,
 } from "drizzle-orm";
 import { normalizeIsoDate } from "../../shared/date-guard";
+import { isForeignKeyViolation } from "../../shared/pg-errors";
 import { requireAuth } from "../../middlewares/auth";
 import { daysUntil, isOpenRequest, remainingLabel, urgencyOf } from "./open-requests";
 import {
@@ -3438,40 +3439,127 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   });
 });
 
+/**
+ * Downstream work that points at a customer RFQ — its FOOTPRINT. An RFQ may only
+ * be hard-deleted when this is empty; otherwise the operator cancels its items.
+ *
+ * Verified against the live schema. Two distinct reasons a link belongs here:
+ *
+ * 1. The database itself refuses the delete (`RESTRICT` / `NO ACTION`) —
+ *    `customer_po_items.customer_rfq_item_id` (RESTRICT),
+ *    `customer_po_items.customer_rfq_id` (NO ACTION) and
+ *    `customer_rfq_item_assignments.customer_rfq_item_id` (RESTRICT). Checking
+ *    them here turns a raw `23503` into a message naming what is in the way.
+ * 2. The database would SILENTLY SEVER the link (`SET NULL`) —
+ *    `rfq.customer_rfq_id`, `sales_invoices.customer_rfq_id` and
+ *    `rfq_items.customer_rfq_item_id`. Without the check the delete SUCCEEDS and
+ *    quietly orphans a supplier RFQ or an invoice, which is the silent history
+ *    loss this guard exists to prevent.
+ *
+ * `customer_rfq_item_assignments` is deliberately NOT treated as history: the row
+ * is created automatically for every item (classification + responsibility), so
+ * counting it blocked 745 requests — 524 of which had no customer order, no
+ * supplier RFQ and no frozen achievement at all. That is the reported defect: the
+ * operator cleared the assignment and still could not delete. Its own rows are
+ * removed with the request instead (see the route).
+ *
+ * Live counts: 4,748 requests total; this footprint protects 1,067 (829 of them
+ * refused by the database anyway, 238 linked only through the `SET NULL` FKs that
+ * would otherwise have been severed in silence).
+ *
+ * `data_entry_sessions.customer_rfq_id` is `SET NULL` telemetry (how long the
+ * entry took, by whom); the session row survives the delete, so it is not a
+ * blocker.
+ */
+export async function loadRfqFootprint(id: number): Promise<string[]> {
+  const result = await db.execute(sql`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM customer_po_items cpi
+         WHERE cpi.customer_rfq_id = ${id}
+            OR cpi.customer_rfq_item_id IN (
+                 SELECT i.id FROM customer_rfq_items i WHERE i.customer_rfq_id = ${id}
+               )
+      ) AS customer_po,
+      EXISTS (SELECT 1 FROM rfq r WHERE r.customer_rfq_id = ${id}) AS supplier_rfq,
+      EXISTS (
+        SELECT 1 FROM rfq_items ri
+          JOIN customer_rfq_items i ON i.id = ri.customer_rfq_item_id
+         WHERE i.customer_rfq_id = ${id}
+      ) AS supplier_rfq_items,
+      EXISTS (SELECT 1 FROM sales_invoices si WHERE si.customer_rfq_id = ${id}) AS sales_invoice,
+      EXISTS (
+        SELECT 1 FROM customer_rfq_items i
+         WHERE i.customer_rfq_id = ${id} AND i.attribution_first_po_at IS NOT NULL
+      ) AS attribution
+  `);
+  const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0] ?? {};
+  const labels: Array<[string, string]> = [
+    ["customer_po", "أمر شراء عميل مرتبط"],
+    ["supplier_rfq", "طلب تسعير مُرسل لموردين"],
+    ["supplier_rfq_items", "بنود مرتبطة بطلب تسعير مورد"],
+    ["sales_invoice", "فاتورة بيع مرتبطة"],
+    ["attribution", "تاريخ إنجاز مُثبَّت"],
+  ];
+  return labels.filter(([key]) => row[key] === true).map(([, label]) => label);
+}
+
 // DELETE /customer-rfq/:id
 router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  // An RFQ whose items are linked to a customer PO (or carry assignment history)
-  // must not be destroyed — cancel its items instead so the history survives.
-  const linked = await db
-    .select({ id: customerPoItemsTable.id })
-    .from(customerPoItemsTable)
-    .innerJoin(
-      customerRfqItemsTable,
-      eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
-    )
-    .where(eq(customerRfqItemsTable.customerRfqId, id))
-    .limit(1);
-  if (linked.length > 0) {
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  // A request with real downstream work is protected; cancel its items instead.
+  const footprint = await loadRfqFootprint(id);
+  if (footprint.length > 0) {
     res.status(409).json({
-      error: "لا يمكن حذف طلب تسعير مرتبط بأمر شراء عميل — ألغِ بنوده بدلًا من الحذف",
+      error: `لا يمكن حذف الطلب لوجود ${footprint.join("، ")} — ألغِ بنوده بدلًا من الحذف`,
+      footprint,
     });
     return;
   }
   try {
-    const [deleted] = await db
-      .delete(customerRfqsTable)
-      .where(eq(customerRfqsTable.id, id))
-      .returning();
+    // The item ids are read FIRST so the bookkeeping delete is scoped to this
+    // request. An RFQ with no footprint carries no achievement to protect, so
+    // its own responsibility periods go with it — in ONE transaction, or a
+    // partial delete would leave the request without its bookkeeping.
+    const itemIds = (
+      await db
+        .select({ id: customerRfqItemsTable.id })
+        .from(customerRfqItemsTable)
+        .where(eq(customerRfqItemsTable.customerRfqId, id))
+    ).map((r) => r.id);
+    let deleted: unknown;
+    await db.transaction(async (tx) => {
+      if (itemIds.length > 0) {
+        await tx
+          .delete(customerRfqItemAssignmentsTable)
+          .where(inArray(customerRfqItemAssignmentsTable.customerRfqItemId, itemIds));
+      }
+      [deleted] = await tx
+        .delete(customerRfqsTable)
+        .where(eq(customerRfqsTable.id, id))
+        .returning();
+    });
     if (!deleted) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-  } catch {
-    res.status(409).json({
-      error: "لا يمكن حذف الطلب لوجود تاريخ إسناد/إنجاز — ألغِ البنود بدلًا من الحذف",
-    });
+  } catch (err) {
+    // Only a foreign-key refusal is a conflict (a constraint this route did not
+    // foresee); anything else is a server fault and must not be reported as
+    // "assignment history", which is how the original bug hid.
+    if (isForeignKeyViolation(err)) {
+      res.status(409).json({
+        error: "لا يمكن حذف الطلب لوجود سجلات مرتبطة به — ألغِ بنوده بدلًا من الحذف",
+      });
+      return;
+    }
+    req.log?.error({ err, customerRfqId: id }, "customer RFQ delete failed");
+    res.status(500).json({ error: "تعذّر حذف الطلب — حاول مرة أخرى" });
     return;
   }
   res.status(204).end();
