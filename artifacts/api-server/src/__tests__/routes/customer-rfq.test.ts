@@ -137,6 +137,10 @@ let existingIdRows: any[];
 let insertedRfq: any;
 let detailRow: any | null;
 let detailItems: any[];
+// Opt-in: make the items mock behave as a STORE (inserts join detailItems) so a
+// test can observe growth across repeated saves. Off by default so every other
+// test keeps its fixture-only behaviour.
+let statefulItems = false;
 // Approved supplier offer_items returned by resolveApprovedCosts (margin check).
 // Each row: { customerRfqItemId, price, taxIncluded }.
 let approvedRows: any[];
@@ -425,9 +429,20 @@ const dbMock: any = {
           });
         }
         return chainable(detailItems, {
-          where: vi.fn(() =>
-            chainable(detailItems, { orderBy: vi.fn(() => chainable(detailItems)) }),
-          ),
+          where: vi.fn((cond: any) => {
+            // Honour the `is_cancelled = false` predicate the route now applies,
+            // otherwise the mock would serve cancelled rows and the guard could
+            // not be asserted at all (a mock that ignores the WHERE cannot tell
+            // a filtered query from an unfiltered one).
+            const arr = Array.isArray(cond) ? cond : [cond];
+            const activeOnly = arr.some(
+              (c: any) => c && c.col === "isCancelled" && c.val === false,
+            );
+            const rows = activeOnly
+              ? detailItems.filter((it) => it.isCancelled !== true)
+              : detailItems;
+            return chainable(rows, { orderBy: vi.fn(() => chainable(rows)) });
+          }),
           orderBy: vi.fn(() => chainable(detailItems)),
         });
       }
@@ -659,6 +674,20 @@ const dbMock: any = {
         const created = Array.isArray(vals)
           ? vals.map((v: any, i: number) => ({ id: 9000 + i, ...v }))
           : [{ id: 9000, ...vals }];
+        // The mock is a STORE, not a fixture: inserted rows join detailItems so a
+        // later select sees them. Without this a repeated save could not be told
+        // apart from a single one — the duplication defect lives entirely in what
+        // the SECOND save sees.
+        if (statefulItems) {
+          detailItems = [
+            ...detailItems,
+            ...created.map((c: any) => ({
+              isCancelled: false,
+              createdAt: new Date("2025-01-04"),
+              ...c,
+            })),
+          ];
+        }
         return chainable(undefined, { returning: vi.fn(() => chainable(created)) });
       }
       if (table === auditTable) {
@@ -820,6 +849,7 @@ beforeEach(() => {
   };
   detailRow = null;
   detailItems = [];
+  statefulItems = false;
   approvedRows = [];
   poItemRows = [];
   sheetRows = [];
@@ -2649,6 +2679,136 @@ describe("PATCH /api/customer-rfq/:id — saving preserves item ids", () => {
     expect(deletedItemIds).toHaveLength(0);
     expect(insertedItems).toHaveLength(1);
     expect(insertedItems[0].partNo).toBe("P9");
+  });
+
+  it("keeps repeated lines on distinct rows and inserts NOTHING on a re-save", async () => {
+    // The reported defect (RFQ 5551): an item repeated in the submission
+    // re-matched the SAME stored row every time, so the duplicate was pushed to
+    // `toInsert` and a NEW row was added on every save — 14 rows for 3 items.
+    // Three stored rows sharing a partNo must absorb three submitted copies.
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    const repeated = (id: number) => ({
+      ...storedItem,
+      id,
+      partNo: null,
+      lineItem: "1511.002.GENRAL.0201",
+      description: "FREON 22 25 LB",
+      qty: `${id}.0000`,
+    });
+    detailItems = [repeated(1), repeated(2), repeated(3)];
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        items: [
+          { lineItem: "1511.002.GENRAL.0201", description: "FREON 22 25 LB", qty: 1 },
+          { lineItem: "1511.002.GENRAL.0201", description: "FREON 22 25 LB", qty: 2 },
+          { lineItem: "1511.002.GENRAL.0201", description: "FREON 22 25 LB", qty: 3 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    // All three stored rows updated in place — no duplicates created.
+    expect(updatedItemIds.sort()).toEqual([1, 2, 3]);
+    expect(insertedItems).toHaveLength(0);
+    expect(cancelledItemIds).toHaveLength(0);
+  });
+
+  it("does not duplicate items across three consecutive saves of the same form", async () => {
+    // The end-to-end shape of the report: the page renders the lines, the
+    // operator saves, then saves again. The payload repeats one line (which is
+    // what the buggy page produced once cancelled rows came back), and the live
+    // row count must be STABLE — before the fix each save added another copy.
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    statefulItems = true;
+    detailItems = [
+      {
+        ...storedItem,
+        id: 1,
+        partNo: null,
+        lineItem: "1511.002.GENRAL.0201",
+        description: "FREON 22 25 LB",
+      },
+    ];
+    approvedRows = [];
+    const body = {
+      items: [
+        { lineItem: "1511.002.GENRAL.0201", description: "FREON 22 25 LB", qty: 4 },
+        { lineItem: "1511.002.GENRAL.0201", description: "FREON 22 25 LB", qty: 4 },
+      ],
+    };
+    for (let save = 1; save <= 3; save += 1) {
+      const res = await request(testApp).patch("/api/customer-rfq/42").send(body);
+      expect(res.status).toBe(200);
+      // Two submitted copies must occupy exactly two rows, however many times
+      // the same form is saved — the defect grew it 2 → 3 → 4.
+      expect(detailItems.filter((it) => !it.isCancelled)).toHaveLength(2);
+    }
+    // The first save legitimately adds the second copy; the re-saves add none.
+    expect(insertedItems).toHaveLength(1);
+    expect(cancelledItemIds).toHaveLength(0);
+  });
+
+  it("does not resurrect a cancelled item on the next save", async () => {
+    // A cancelled row is history: the detail query must not return it, so the
+    // form cannot submit it and the matcher cannot revive it. Before the fix the
+    // cancelled row came back in the payload, was matched again, and its
+    // is_cancelled was flipped back to false.
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      { ...storedItem, id: 1, isCancelled: false },
+      { ...storedItem, id: 2, partNo: "P2", lineItem: "EFGH", isCancelled: true },
+    ];
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 4 }] });
+    expect(res.status).toBe(200);
+    // Only the live row is touched; the cancelled row stays cancelled.
+    expect(updatedItemIds).toEqual([1]);
+    expect(updatedItemIds).not.toContain(2);
+    expect(cancelledItemIds).not.toContain(2);
+  });
+});
+
+describe("GET /api/customer-rfq/:id — cancelled items are history", () => {
+  it("omits cancelled items from the detail payload", async () => {
+    // The detail page renders `items` and re-submits them on save, so a cancelled
+    // row returned here is exactly what made it reappear (and multiply).
+    sessionState.role = "admin";
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: null,
+        isCancelled: false,
+        createdAt: new Date("2025-01-03"),
+      },
+      {
+        id: 2,
+        customerRfqId: 42,
+        partNo: "P2",
+        lineItem: "EFGH",
+        description: null,
+        uom: "pc",
+        qty: "1.0000",
+        unitPrice: null,
+        isCancelled: true,
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    detailRow = { ...insertedRfq };
+    const res = await request(testApp).get("/api/customer-rfq/42");
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((i: any) => i.id)).toEqual([1]);
+    expect(res.body.itemCount).toBe(1);
   });
 });
 
