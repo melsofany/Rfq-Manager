@@ -34,6 +34,7 @@ import {
   Landmark,
   Copy,
   ShieldCheck,
+  Search,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -341,7 +342,9 @@ export default function SupplierDetailPage() {
   // «المورد ده بيورّد إيه» — item categories the supplier can SUPPLY, distinct
   // from its trade categories. Optional and independent.
   const [selectedItemCats, setSelectedItemCats] = useState<Set<number>>(new Set());
-  const { data: itemCategories = [] } = useQuery<Array<{ id: number; name: string }>>({
+  const { data: itemCategories = [] } = useQuery<
+    Array<{ id: number; name: string; parentId?: number | null }>
+  >({
     queryKey: ["item-categories-for-supplier"],
     queryFn: async () => {
       const res = await fetch("/api/item-categories", { credentials: "include" });
@@ -350,6 +353,10 @@ export default function SupplierDetailPage() {
     },
     staleTime: 60_000,
   });
+  // The picker renders the hierarchy (a parent, then its children indented), so
+  // «كهرباء ← كابلات» reads as one tree rather than a flat wall of chips.
+  const orderedItemCats = useMemo(() => orderCategoryTree(itemCategories), [itemCategories]);
+  const [itemCatSearch, setItemCatSearch] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
 
   const { data: categories = [] } = useListCategories({
@@ -755,29 +762,58 @@ export default function SupplierDetailPage() {
                       (اختياري — لمعرفة مين يورّد بند من تصنيف معيّن)
                     </span>
                   </Label>
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto border border-border rounded p-2">
-                    {itemCategories.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">لا توجد تصنيفات بنود</span>
-                    ) : (
-                      itemCategories.map((c) => {
-                        const active = selectedItemCats.has(c.id);
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => toggleItemCat(c.id)}
-                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                              active
-                                ? "bg-emerald-600 text-white border-emerald-600"
-                                : "bg-muted text-muted-foreground border-border hover:border-emerald-500/50"
-                            }`}
-                          >
-                            {c.name}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
+                  {itemCategories.length === 0 ? (
+                    <div className="rounded border border-border p-3 text-xs text-muted-foreground">
+                      لا توجد تصنيفات بنود بعد
+                    </div>
+                  ) : (
+                    <div className="rounded border border-border">
+                      <div className="relative border-b border-border">
+                        <Search
+                          size={13}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <input
+                          value={itemCatSearch}
+                          onChange={(e) => setItemCatSearch(e.target.value)}
+                          placeholder="ابحث في تصنيفات البنود..."
+                          className="h-8 w-full bg-transparent pr-7 pl-2 text-xs text-foreground outline-none"
+                        />
+                      </div>
+                      <div className="flex max-h-52 flex-wrap gap-1.5 overflow-y-auto p-2">
+                        {orderedItemCats
+                          .filter((c) =>
+                            itemCatSearch.trim()
+                              ? c.name.toLowerCase().includes(itemCatSearch.trim().toLowerCase())
+                              : true,
+                          )
+                          .map((c) => {
+                            const active = selectedItemCats.has(c.id);
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => toggleItemCat(c.id)}
+                                title={c.depth > 0 ? `تصنيف فرعي: ${c.name}` : c.name}
+                                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                                  active
+                                    ? "border-emerald-600 bg-emerald-600 text-white"
+                                    : "border-border bg-muted text-muted-foreground hover:border-emerald-500/50"
+                                }`}
+                              >
+                                {c.depth > 0 ? "↳ " : ""}
+                                {c.name}
+                              </button>
+                            );
+                          })}
+                      </div>
+                      {selectedItemCats.size > 0 && (
+                        <div className="border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
+                          محدد: <b className="text-foreground">{selectedItemCats.size}</b> تصنيف
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2">

@@ -627,9 +627,33 @@ export async function deactivateInactiveSuppliers(): Promise<number> {
 }
 
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
-  const { category, search } = req.query as Record<string, string>;
+  const { category, search, itemCategoryId } = req.query as Record<string, string>;
 
   const conditions = [];
+  if (itemCategoryId) {
+    // «المورد ده بيورّد إيه» filter — a DIFFERENT question from the trade
+    // category above. A supplier matches when it is linked to this ITEM
+    // category or to ANY category in its subtree, so filtering on «كهرباء»
+    // lists suppliers linked to «كابلات» too.
+    const wantedId = parseInt(itemCategoryId, 10);
+    if (!Number.isFinite(wantedId)) {
+      res.status(400).json({ error: "معرّف تصنيف البنود غير صالح" });
+      return;
+    }
+    const allItemCategories = await db
+      .select({
+        id: itemCategoriesTable.id,
+        name: itemCategoriesTable.name,
+        parentId: itemCategoriesTable.parentId,
+      })
+      .from(itemCategoriesTable);
+    const subtree = [...descendantIds(allItemCategories, wantedId)];
+    const byCategory = await suppliersForItemCategories(subtree);
+    const supplierIds = [...new Set([...byCategory.values()].flat())];
+    // No supplier supplies this category → an empty set, never a dropped
+    // filter (which would list EVERY supplier).
+    conditions.push(supplierIds.length > 0 ? inArray(suppliersTable.id, supplierIds) : sql`1 = 0`);
+  }
   if (category) {
     // Filter through the LINK table — the authoritative relationship. A supplier
     // matches when it is linked to a category with this name, OR to ANY category

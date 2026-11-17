@@ -225,7 +225,10 @@ export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> =
     ],
     write: ["items:edit"],
   },
-  "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items:edit"] },
+  "/item-categories": {
+    read: ["items", "rfq", "customer-rfq", "suppliers"],
+    write: ["items:edit"],
+  },
   "/offers": { read: RFQ_READ, write: ["rfq:edit"] },
   "/offer": { read: RFQ_READ, write: ["rfq:edit"] },
   "/rfq": { read: RFQ_READ, write: ["rfq:edit"] },

@@ -66,6 +66,7 @@ let linkRows: any[] = [];
 const linkDeletes: any[] = [];
 const linkInserts: any[] = [];
 const capturedWheres: any[] = [];
+const suppliersWheres: any[] = [];
 
 const dbMock: any = {
   select: vi.fn(() => ({
@@ -91,9 +92,22 @@ const dbMock: any = {
           }),
         });
       }
+      if (table === supplierCategoryLinksTable) {
+        return chainable([], {
+          innerJoin: vi.fn(() => chainable([], { where: vi.fn(() => chainable([])) })),
+          where: vi.fn(() => chainable([])),
+        });
+      }
       if (table === suppliersTable) {
-        return chainable([{ id: 1, name: "مورد أ" }], {
-          where: vi.fn(() => chainable([{ id: 1, name: "مورد أ" }])),
+        const rows = [
+          { id: 1, name: "مورد أ", isActive: true, category: null, createdAt: new Date() },
+        ];
+        const withOrder = chainable(rows, { orderBy: vi.fn(() => chainable(rows)) });
+        return chainable(rows, {
+          where: vi.fn((w: any) => {
+            suppliersWheres.push(w);
+            return withOrder;
+          }),
         });
       }
       return chainable([], { where: vi.fn(() => chainable([])) });
@@ -176,6 +190,7 @@ beforeEach(() => {
   linkDeletes.length = 0;
   linkInserts.length = 0;
   capturedWheres.length = 0;
+  suppliersWheres.length = 0;
 });
 
 describe("supplier ↔ item-category links", () => {
@@ -228,5 +243,37 @@ describe("suppliers that can supply an item category (with the subtree)", () => 
   it("400s a non-numeric category id", async () => {
     const res = await request(testApp).get("/suppliers/for-item-category/abc");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /suppliers filtered by item category", () => {
+  it("filters the list through the link table's subtree", async () => {
+    // كهرباء(1) ← كابلات(10); a supplier linked to كابلات must appear when the
+    // operator filters on كهرباء — the same subtree rule as the trade filter.
+    itemCategoryTree = [
+      { id: 1, name: "كهرباء", parentId: null },
+      { id: 10, name: "كابلات", parentId: 1 },
+    ];
+    linkRows = [{ supplierId: 5, categoryId: 10 }];
+    const res = await request(testApp).get("/suppliers?itemCategoryId=1");
+    expect(res.status).toBe(200);
+    // The link query ran and the subtree included the child id.
+    expect(capturedWheres.length).toBeGreaterThan(0);
+  });
+
+  it("400s a non-numeric item-category id", async () => {
+    const res = await request(testApp).get("/suppliers?itemCategoryId=abc");
+    expect(res.status).toBe(400);
+  });
+
+  it("returns an empty set (not every supplier) when nothing supplies the category", async () => {
+    // An empty link set must narrow to `1 = 0`, never drop the filter (which
+    // would list EVERY supplier — the «filter silently ignored» defect).
+    linkRows = [];
+    const res = await request(testApp).get("/suppliers?itemCategoryId=1");
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    const flat = JSON.stringify(suppliersWheres);
+    expect(flat).toContain("1 = 0");
   });
 });

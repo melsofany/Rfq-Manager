@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { accessFor, allowsAny } from "../../shared/permissions";
+import { accessFor, allowsAny, ROUTE_GUARDS } from "../../shared/permissions";
 
 describe("API page permissions", () => {
   it("admin passes everything", () => {
@@ -27,5 +27,17 @@ describe("API page permissions", () => {
   it("any-of matches a sub-key", () => {
     const a = accessFor("data_entry", { "accounts:expenses": true });
     expect(allowsAny(a, ["accounts", "accounts:expenses"])).toBe(true);
+  });
+
+  it("a supplier-only viewer may READ the item-category catalogue", () => {
+    // The /suppliers screen renders the «يورّد بنود» filter from
+    // GET /item-categories. Without `suppliers` in that route's read list the
+    // catalogue 403s for a supplier viewer and the filter silently vanishes —
+    // a capability the screen shows but the API refuses.
+    const guard = ROUTE_GUARDS["/item-categories"];
+    const a = accessFor("viewer", { suppliers: true });
+    expect(allowsAny(a, guard.read)).toBe(true);
+    // …while the WRITE side stays restricted to items:edit.
+    expect(allowsAny(a, guard.write)).toBe(false);
   });
 });
