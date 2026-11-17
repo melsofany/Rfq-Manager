@@ -281,8 +281,16 @@ describe("item categories CRUD", () => {
   });
 
   it("rejects a duplicate category name with 409", async () => {
-    existingCategoryRows = [{ id: 3 }];
+    existingCategoryRows = [{ id: 3, name: "كهرباء" }];
     const res = await request(testApp).post("/api/item-categories").send({ name: "كهرباء" });
+    expect(res.status).toBe(409);
+  });
+
+  it("rejects a spelling or spacing variant of an existing name with 409", async () => {
+    existingCategoryRows = [{ id: 3, name: "أدوات تنظيف" }];
+    const res = await request(testApp)
+      .post("/api/item-categories")
+      .send({ name: "  ادوات  تنظيف " });
     expect(res.status).toBe(409);
   });
 

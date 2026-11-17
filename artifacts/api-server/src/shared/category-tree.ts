@@ -49,6 +49,20 @@ export function categoryKey(name: string | null | undefined): string {
     .replace(/\s+/g, " ");
 }
 
+/**
+ * The row that already has this name, comparing by `categoryKey` so spelling
+ * variants and stray spaces count as the same name. `exceptId` skips the row
+ * being renamed, so a category can keep its own name.
+ */
+export function findCategoryClash<T extends { id: number; name: string }>(
+  rows: T[],
+  candidate: string,
+  exceptId?: number,
+): T | undefined {
+  const key = categoryKey(candidate);
+  return rows.find((r) => r.id !== exceptId && categoryKey(r.name) === key);
+}
+
 /** Collapse a display name to its canonical single-spaced, trimmed form. */
 export function canonicalCategoryName(name: string): string {
   return String(name ?? "")
