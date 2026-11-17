@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -14,6 +16,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 
@@ -73,6 +76,87 @@ function StatTile({ label, value, warn }: { label: string; value: number; warn?:
   );
 }
 
+interface SupplierLite {
+  id: number;
+  name: string;
+  isActive?: boolean;
+  categories?: string[];
+}
+
+/**
+ * The suppliers that belong to one trade category. Each supplier shows its
+ * OTHER categories too, because a supplier can belong to several.
+ */
+function CategorySuppliers({ categoryName, indent }: { categoryName: string; indent: number }) {
+  const { t } = useLanguage();
+  const [, navigate] = useLocation();
+  const { data = [], isLoading } = useQuery<SupplierLite[]>({
+    queryKey: ["suppliers-by-category", categoryName],
+    queryFn: async () => {
+      const res = await fetch(`/api/suppliers?category=${encodeURIComponent(categoryName)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as SupplierLite[];
+    },
+    staleTime: 60 * 1000,
+  });
+
+  if (isLoading) {
+    return (
+      <p
+        className="border-t border-border bg-muted/20 py-3 text-xs text-muted-foreground"
+        style={{ paddingInlineStart: indent + 32 }}
+      >
+        {t("sup.loading")}
+      </p>
+    );
+  }
+  if (data.length === 0) {
+    return (
+      <p
+        className="border-t border-border bg-muted/20 py-3 text-xs text-muted-foreground"
+        style={{ paddingInlineStart: indent + 32 }}
+      >
+        {t("sup.cm.noSuppliersHere")}
+      </p>
+    );
+  }
+  return (
+    <ul className="border-t border-border bg-muted/20 py-1">
+      {data.map((sup) => {
+        const others = (sup.categories ?? []).filter((n) => n !== categoryName);
+        return (
+          <li key={sup.id}>
+            <button
+              type="button"
+              onClick={() => navigate(`/suppliers/${sup.id}`)}
+              className="flex w-full items-center gap-3 py-2 pe-4 text-start transition-colors hover:bg-muted/50"
+              style={{ paddingInlineStart: indent + 32 }}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {sup.name}
+                </span>
+                {others.length > 0 && (
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {t("sup.cm.alsoIn")} {others.join("، ")}
+                  </span>
+                )}
+              </span>
+              {sup.isActive === false && (
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {t("sup.inactive")}
+                </span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /**
  * Management of the TRADE categories: add, rename, move under a parent, merge,
  * delete (restorable) and restore.
@@ -104,6 +188,7 @@ export function TradeCategoryManager() {
   const [editParentId, setEditParentId] = useState<number | null>(null);
 
   const [mergeSourceId, setMergeSourceId] = useState<number | null>(null);
+  const [openSuppliers, setOpenSuppliers] = useState<Set<number>>(new Set());
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -210,6 +295,14 @@ export function TradeCategoryManager() {
       t("sup.cm.merged", { source: source.name, target: target.name }),
     );
   };
+
+  const toggleSuppliers = (id: number) =>
+    setOpenSuppliers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const toggleCollapsed = (id: number) =>
     setCollapsed((prev) => {
@@ -350,6 +443,20 @@ export function TradeCategoryManager() {
               <div className="flex shrink-0 items-center gap-1">
                 {c.isActive ? (
                   <>
+                    {c.supplierCount > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-xs"
+                        onClick={() => toggleSuppliers(c.id)}
+                        aria-expanded={openSuppliers.has(c.id)}
+                      >
+                        <Users size={13} />{" "}
+                        {openSuppliers.has(c.id)
+                          ? t("sup.cm.hideSuppliers")
+                          : t("sup.cm.showSuppliers")}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -444,6 +551,9 @@ export function TradeCategoryManager() {
           </div>
         )}
 
+        {openSuppliers.has(c.id) && c.isActive && (
+          <CategorySuppliers categoryName={c.name} indent={12 + depth * INDENT_PX} />
+        )}
         {!isCollapsed && subs.map((s) => renderRow(s, depth + 1))}
       </div>
     );
