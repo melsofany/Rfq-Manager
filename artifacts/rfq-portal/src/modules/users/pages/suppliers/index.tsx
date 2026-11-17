@@ -1,22 +1,18 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useDebounced } from "@/hooks/use-debounced";
-import { Link, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  useListSuppliers,
-  getListSuppliersQueryKey,
-  useListCategories,
-  getListCategoriesQueryKey,
-} from "@workspace/api-client-react";
+import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useListCategories, getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Users, Settings, Upload } from "lucide-react";
+import { Plus, Search, Users, Settings, Upload, Boxes, Tag, X, Filter } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { filterTabs } from "@/lib/permissions";
 import ImportSuppliersTab from "./import-tab";
 import { orderCategoryTree } from "@/lib/category-tree";
 import { CategoryManagerDialog } from "./CategoryManagerDialog";
+import { cn } from "@/lib/utils";
 
 function parseCategories(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -26,187 +22,338 @@ function parseCategories(cat: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-// ─── Suppliers List Tab ────────────────────────────────────────────────────────
+interface ItemCategoryRef {
+  id: number;
+  name: string;
+}
+
+/** The API enriches each supplier with the ITEM categories it can supply. */
+interface SupplierRow {
+  id: number;
+  name: string;
+  supplierId?: string | null;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  category?: string | null;
+  categories?: string[];
+  isActive?: boolean;
+  invoiceHasVat?: boolean | null;
+  itemCategories?: ItemCategoryRef[];
+}
+
+interface CategoryNodeLite {
+  id: number;
+  name: string;
+  parentId?: number | null;
+}
+
+function TradeCategoryChips({ names }: { names: string[] }) {
+  if (names.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {names.map((cat) => (
+        <span
+          key={cat}
+          className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <Tag size={10} className="opacity-60" />
+          {cat}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ItemCategoryChips({ cats }: { cats: ItemCategoryRef[] }) {
+  if (cats.length === 0)
+    return <span className="text-xs text-muted-foreground">لم تُحدَّد بعد</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {cats.map((c) => (
+        <span
+          key={c.id}
+          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+        >
+          <Boxes size={10} className="opacity-60" />
+          {c.name}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function SuppliersListTab() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
+  const [tradeCategory, setTradeCategory] = useState("all");
+  const [itemCategoryId, setItemCategoryId] = useState<number | "all">("all");
   const [showManage, setShowManage] = useState(false);
   const { employee } = useAuth();
-  const isAdmin = employee?.role === "admin";
+  // Managing the catalogue is a manager/admin concern (the API enforces the
+  // same roles); a plain viewer must not see a button that always 403s.
+  const canManage = employee?.role === "admin" || employee?.role === "manager";
 
-  const { data: categories = [] } = useListCategories({
+  const { data: tradeCategories = [] } = useListCategories({
     query: { queryKey: getListCategoriesQueryKey() },
   });
 
-  const debouncedSearch = useDebounced(search);
-  const { data: suppliers, isLoading } = useListSuppliers(
-    { category: category !== "all" ? category : undefined, search: debouncedSearch || undefined },
-    {
-      query: {
-        queryKey: getListSuppliersQueryKey({
-          category: category !== "all" ? category : undefined,
-          search: debouncedSearch || undefined,
-        }),
-      },
+  // The ITEM-category catalogue — a different list from the trade one, and the
+  // one the «يورّد بنود» filter reads.
+  const { data: itemCategories = [] } = useQuery<CategoryNodeLite[]>({
+    queryKey: ["item-categories"],
+    queryFn: async () => {
+      const res = await fetch("/api/item-categories", { credentials: "include" });
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as CategoryNodeLite[];
     },
-  );
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const debouncedSearch = useDebounced(search);
+
+  // Direct fetch: the item-category filter is not in the OpenAPI spec, so the
+  // orval hook cannot express it (same pattern as the receipts/accounts tabs).
+  const { data: suppliersRaw, isLoading } = useQuery<SupplierRow[]>({
+    queryKey: ["suppliers", tradeCategory, itemCategoryId, debouncedSearch],
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      if (tradeCategory !== "all") qs.set("category", tradeCategory);
+      if (debouncedSearch) qs.set("search", debouncedSearch);
+      if (itemCategoryId !== "all") qs.set("itemCategoryId", String(itemCategoryId));
+      const res = await fetch(`/api/suppliers${qs.toString() ? `?${qs}` : ""}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as SupplierRow[];
+    },
+  });
+
+  const suppliers = useMemo(() => suppliersRaw ?? [], [suppliersRaw]);
+  const hasFilter = tradeCategory !== "all" || itemCategoryId !== "all" || Boolean(search);
+
+  const clearFilters = () => {
+    setSearch("");
+    setTradeCategory("all");
+    setItemCategoryId("all");
+  };
 
   return (
     <>
       {showManage && <CategoryManagerDialog onClose={() => setShowManage(false)} />}
 
-      <div className="space-y-4">
-        {/* Actions row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-6">
+      <div className="space-y-4" dir="rtl">
+        <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pt-6">
           <div>
-            <h1 className="text-xl font-bold text-foreground">Suppliers</h1>
-            <p className="text-muted-foreground text-sm">Manage supplier directory</p>
+            <h1 className="text-xl font-bold text-foreground">الموردون</h1>
+            <p className="text-sm text-muted-foreground">
+              دليل الموردين — تصنيفاتهم التجارية وتصنيفات البنود التي يورّدونها
+            </p>
           </div>
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {canManage && (
               <Button
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
                 onClick={() => setShowManage(true)}
               >
-                <Settings size={14} /> Manage Categories
+                <Settings size={14} /> إدارة التصنيفات
               </Button>
             )}
             <Button onClick={() => navigate("/suppliers/new")} size="sm" className="gap-1.5">
-              <Plus size={15} /> Add Supplier
+              <Plus size={15} /> إضافة مورد
             </Button>
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 flex-wrap px-4 sm:px-6">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search
-              size={15}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search suppliers..."
-              className="pl-8 h-8 text-sm"
-            />
+        <div className="space-y-3 px-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[220px] max-w-xs flex-1">
+              <Search
+                size={15}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ابحث بالاسم أو جهة الاتصال..."
+                className="h-8 pr-8 text-sm"
+              />
+            </div>
+            {hasFilter && (
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={clearFilters}>
+                <X size={14} /> مسح الفلاتر
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {isLoading ? "جارٍ التحميل..." : `${suppliers.length} مورد`}
+            </span>
           </div>
-          <div className="flex gap-1 flex-wrap">
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Tag size={12} /> التصنيف التجاري
+            </span>
             <button
-              onClick={() => setCategory("all")}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                category === "all"
+              onClick={() => setTradeCategory("all")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                tradeCategory === "all"
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
+                  : "bg-muted text-muted-foreground hover:text-foreground",
+              )}
             >
-              all
+              الكل
             </button>
-            {orderCategoryTree(categories).map((c) => (
+            {orderCategoryTree(tradeCategories).map((c) => (
               <button
                 key={c.id}
-                onClick={() => setCategory(c.name)}
-                className={`px-2.5 py-1 rounded text-xs font-medium capitalize transition-colors ${
-                  category === c.name
+                onClick={() => setTradeCategory(c.name)}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  tradeCategory === c.name
                     ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
               >
                 {c.depth > 0 ? "↳ " : ""}
                 {c.name}
               </button>
             ))}
           </div>
+
+          {itemCategories.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                <Boxes size={12} /> يورّد بنود
+              </span>
+              <button
+                onClick={() => setItemCategoryId("all")}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  itemCategoryId === "all"
+                    ? "bg-emerald-600 text-white"
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                الكل
+              </button>
+              {orderCategoryTree(itemCategories).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setItemCategoryId(c.id)}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    itemCategoryId === c.id
+                      ? "bg-emerald-600 text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {c.depth > 0 ? "↳ " : ""}
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden mx-4 sm:mx-6 mb-4 sm:mb-6">
+        <div className="mx-4 mb-4 overflow-hidden rounded-lg border border-border bg-card sm:mx-6 sm:mb-6">
           {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
-          ) : !suppliers?.length ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">جارٍ التحميل...</div>
+          ) : suppliers.length === 0 ? (
             <div className="p-12 text-center">
-              <Users size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">No suppliers found</p>
-              <Button onClick={() => navigate("/suppliers/new")} size="sm" className="mt-3 gap-1.5">
-                <Plus size={14} /> Add Supplier
-              </Button>
+              <Users size={40} className="mx-auto mb-3 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
+                {hasFilter ? "لا يوجد موردون مطابقون للفلاتر" : "لا يوجد موردون بعد"}
+              </p>
+              {hasFilter ? (
+                <Button variant="outline" size="sm" className="mt-3 gap-1.5" onClick={clearFilters}>
+                  <Filter size={14} /> مسح الفلاتر
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => navigate("/suppliers/new")}
+                  size="sm"
+                  className="mt-3 gap-1.5"
+                >
+                  <Plus size={14} /> إضافة مورد
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-muted/30 border-b border-border text-left">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      Supplier
+                  <tr className="border-b border-border bg-muted/30 text-right">
+                    <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                      المورد
                     </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      Contact
+                    <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                      جهة الاتصال
                     </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      Categories
+                    <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                      التصنيف التجاري
                     </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      Status
+                    <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                      يورّد بنود
+                    </th>
+                    <th className="px-4 py-2.5 text-center text-xs font-medium text-muted-foreground">
+                      الحالة
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {suppliers.map((s) => {
-                    const cats = parseCategories(s.category);
+                    const cats = s.categories ?? parseCategories(s.category);
+                    const itemCats = s.itemCategories ?? [];
                     return (
                       <tr
                         key={s.id}
-                        className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                        className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/20"
                         onClick={() => navigate(`/suppliers/${s.id}`)}
                       >
                         <td className="px-4 py-3">
                           <p className="font-medium text-foreground">{s.name}</p>
                           {s.supplierId && (
-                            <p className="text-muted-foreground text-xs font-mono">
+                            <p className="font-mono text-xs text-muted-foreground">
                               {s.supplierId}
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.contactPerson ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.email ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.phone ?? "-"}
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          <div>{s.contactPerson ?? "—"}</div>
+                          {s.phone && (
+                            <div className="font-mono" dir="ltr">
+                              {s.phone}
+                            </div>
+                          )}
+                          {s.email && (
+                            <div className="truncate" dir="ltr">
+                              {s.email}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {cats.map((cat) => (
-                              <span
-                                key={cat}
-                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize"
-                              >
-                                {cat}
-                              </span>
-                            ))}
-                          </div>
+                          <TradeCategoryChips names={cats} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <ItemCategoryChips cats={itemCats} />
                         </td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex flex-col items-center gap-1">
                             <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              className={cn(
+                                "inline-flex items-center rounded px-2 py-0.5 text-xs font-medium",
                                 s.isActive
-                                  ? "bg-green-50 text-green-700"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
+                                  ? "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                                  : "bg-muted text-muted-foreground",
+                              )}
                             >
-                              {s.isActive ? "Active" : "Inactive"}
+                              {s.isActive ? "نشط" : "موقوف"}
                             </span>
                             {s.invoiceHasVat === false && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                              <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                                 بدون ضريبة
                               </span>
                             )}
@@ -225,8 +372,6 @@ function SuppliersListTab() {
   );
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────────────────
-
 type Tab = "list" | "import";
 
 export default function SuppliersPage() {
@@ -239,17 +384,17 @@ export default function SuppliersPage() {
 
   return (
     <Layout>
-      {/* Tab bar */}
-      <div className="border-b border-border px-4 sm:px-6 pt-4 sm:pt-6">
+      <div className="border-b border-border px-4 pt-4 sm:px-6 sm:pt-6">
         <div className="flex gap-0">
           {allowedTabs.includes("list") && (
             <button
               onClick={() => setActiveTab("list")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              className={cn(
+                "-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors",
                 activeTab === "list"
                   ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
+                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+              )}
             >
               <Users size={14} />
               الموردون
@@ -258,11 +403,12 @@ export default function SuppliersPage() {
           {allowedTabs.includes("import") && (
             <button
               onClick={() => setActiveTab("import")}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              className={cn(
+                "-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors",
                 activeTab === "import"
                   ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
+                  : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+              )}
             >
               <Upload size={14} />
               استيراد موردين
@@ -271,7 +417,6 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      {/* Tab content */}
       {activeTab === "list" ? <SuppliersListTab /> : <ImportSuppliersTab />}
     </Layout>
   );
