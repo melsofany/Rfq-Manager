@@ -5881,6 +5881,8 @@ PR #512 مدموج squash `dc349d3`؛ CI (Type Check · Tests · Format Check ·
   على **نصّ عربي** (`includes`) يتحطّم عند الترجمة — استخدم علمًا منطقيًا.
 - الاختبارات: 2495 اختبار api-server + 104 واجهة تمر؛ tsc (libs/api-server/portal)
   + prettier على كل المستودع + البناءان نظيفة.
-- **الدفع معلّق**: توكن المستخدم `ghp_…` منتهٍ (`401 Bad credentials`) و
-  `$GITHUB_TOKEN` للقراءة فقط (`403` على الدفع) — يلزم توكن `ghp_` جديد بصلاحية
-  `repo`. الالتزامات على فرع `feat/suppliers-item-categories-i18n`.
+- **النشر**: PR #514 (فرع `feat/suppliers-item-categories-i18n`) — الـ4 فحوص CI
+  خضراء و`mergeable: clean`. التوكنات المنتهية تُشخَّص بـ`GET /user` (200) +
+  `GET /repos/…` (`permissions.push`). `$GITHUB_TOKEN` للقراءة فقط هنا (`403` على
+  الدفع) — استخدم توكن `ghp_` بصلاحية `repo` في رابط الـremote، وأعِد الرابط
+  بلا بيانات اعتماد بعده.
