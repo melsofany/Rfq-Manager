@@ -42,7 +42,14 @@ import { useAuth } from "@/contexts/AuthContext";
 // (not part of the generated Supplier type — the endpoints are outside the
 // OpenAPI spec, same pattern as receipts/deliveries/accounts).
 type SupplierWithItemCategories = {
-  itemCategories?: Array<{ id: number; name: string }>;
+  itemCategories?: Array<{
+    id: number;
+    name: string;
+    /** Evidence for WHY the supplier has this item category. */
+    quoted?: boolean;
+    ordered?: boolean;
+    manual?: boolean;
+  }>;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -759,9 +766,13 @@ export default function SupplierDetailPage() {
                   <Label>
                     تصنيفات البنود التي يورّدها{" "}
                     <span className="text-muted-foreground font-normal text-xs">
-                      (اختياري — لمعرفة مين يورّد بند من تصنيف معيّن)
+                      (اختياري — تُستخلص تلقائيًا من العروض وأوامر الشراء)
                     </span>
                   </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    لا حاجة للوسم اليدوي: النظام يتعلّم التصنيف من البنود التي سعّرها المورد ومن
+                    البنود التي صدرت له فيها أوامر شراء. اربط يدويًا فقط لتصحيح أو إضافة.
+                  </p>
                   {itemCategories.length === 0 ? (
                     <div className="rounded border border-border p-3 text-xs text-muted-foreground">
                       لا توجد تصنيفات بنود بعد
@@ -900,15 +911,36 @@ export default function SupplierDetailPage() {
                       تصنيفات البنود التي يورّدها
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => (
-                        <span
-                          key={c.id}
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700"
-                        >
-                          {c.name}
-                        </span>
-                      ))}
+                      {((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => {
+                        // The badge names the evidence, so the column is not a
+                        // mystery: quoted / purchase order / manual.
+                        const badge = c.ordered
+                          ? { label: "أمر شراء", cls: "bg-emerald-600 text-white" }
+                          : c.quoted
+                            ? { label: "مُسعَّر", cls: "bg-sky-100 text-sky-800" }
+                            : c.manual
+                              ? { label: "يدوي", cls: "bg-slate-200 text-slate-700" }
+                              : null;
+                        return (
+                          <span
+                            key={c.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700"
+                          >
+                            {c.name}
+                            {badge && (
+                              <span
+                                className={`rounded-full px-1.5 py-px text-[9px] font-semibold leading-none ${badge.cls}`}
+                              >
+                                {badge.label}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      تُستخلص تلقائيًا من العروض التي سعّرها المورد وأوامر الشراء الصادرة له.
+                    </p>
                   </div>
                 )}
                 <div>
