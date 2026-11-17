@@ -14,8 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BankCombobox } from "@/components/BankCombobox";
 import { ArrowLeft, AlertCircle, Landmark, FileText } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function NewSupplierPage() {
+  const { t } = useLanguage();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
 
@@ -51,7 +53,7 @@ export default function NewSupplierPage() {
       },
       onError: (err: unknown) => {
         const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
+        setServerError(msg ?? t("supNew.saveError"));
       },
     },
   });
@@ -71,7 +73,7 @@ export default function NewSupplierPage() {
     e.preventDefault();
     setServerError(null);
     if (selectedCats.size === 0) {
-      setServerError("يجب اختيار تصنيف واحد على الأقل");
+      setServerError(t("supNew.needCategory"));
       return;
     }
     const category = Array.from(selectedCats).join(",");
@@ -92,8 +94,8 @@ export default function NewSupplierPage() {
             </a>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Add Supplier</h1>
-            <p className="text-muted-foreground text-sm">Register a new supplier in the system</p>
+            <h1 className="text-xl font-bold text-foreground">{t("supNew.title")}</h1>
+            <p className="text-muted-foreground text-sm">{t("supNew.subtitle")}</p>
           </div>
         </div>
 
@@ -102,7 +104,7 @@ export default function NewSupplierPage() {
           className="bg-card border border-border rounded-lg p-6 space-y-5"
         >
           <div className="space-y-1.5 col-span-2">
-            <Label>فاتورة المورد تحمل ضريبة القيمة المضافة؟</Label>
+            <Label>{t("supNew.vatQuestion")}</Label>
             <div className="flex gap-4 pt-1">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -112,7 +114,7 @@ export default function NewSupplierPage() {
                   onChange={() => setInvoiceHasVat(true)}
                   className="accent-primary"
                 />
-                نعم — مورد مسجَّل (نتحمل ض.ق.م. مدخلات قابل للخصم)
+                {t("supNew.vatYes")}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -122,14 +124,14 @@ export default function NewSupplierPage() {
                   onChange={() => setInvoiceHasVat(false)}
                   className="accent-primary"
                 />
-                لا — غير مسجَّل (كامل المبلغ مصروف بدون ضريبة مدخلات)
+                {t("supNew.vatNo")}
               </label>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Supplier ID</Label>
+              <Label>{t("supF.supplierId")}</Label>
               <Input
                 value={form.supplierId}
                 onChange={(e) => update("supplierId", e.target.value)}
@@ -137,7 +139,7 @@ export default function NewSupplierPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Company Name *</Label>
+              <Label>{t("supF.companyName")} *</Label>
               <Input
                 value={form.name}
                 onChange={(e) => update("name", e.target.value)}
@@ -146,7 +148,7 @@ export default function NewSupplierPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Contact Person</Label>
+              <Label>{t("supF.contactPerson")}</Label>
               <Input
                 value={form.contactPerson}
                 onChange={(e) => update("contactPerson", e.target.value)}
@@ -154,7 +156,7 @@ export default function NewSupplierPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Email</Label>
+              <Label>{t("supF.email")}</Label>
               <Input
                 value={form.email}
                 onChange={(e) => update("email", e.target.value)}
@@ -163,7 +165,7 @@ export default function NewSupplierPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Phone</Label>
+              <Label>{t("supF.phone")}</Label>
               <Input
                 value={form.phone}
                 onChange={(e) => update("phone", e.target.value)}
@@ -171,7 +173,7 @@ export default function NewSupplierPage() {
               />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label>Address</Label>
+              <Label>{t("supF.address")}</Label>
               <Input
                 value={form.address}
                 onChange={(e) => update("address", e.target.value)}
@@ -184,24 +186,24 @@ export default function NewSupplierPage() {
           <div className="space-y-3 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <FileText size={15} className="text-muted-foreground" />
-              بيانات السجل التجاري والتسجيل الضريبي
+              {t("supNew.registryHeading")}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>رقم السجل التجاري</Label>
+                <Label>{t("supNew.commercialRegister")}</Label>
                 <Input
                   value={form.commercialRegister}
                   onChange={(e) => update("commercialRegister", e.target.value)}
-                  placeholder="مثال: 123456"
+                  placeholder={t("supNew.regPlaceholder")}
                   dir="rtl"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>رقم التسجيل الضريبي</Label>
+                <Label>{t("supNew.taxRegistration")}</Label>
                 <Input
                   value={form.taxRegistration}
                   onChange={(e) => update("taxRegistration", e.target.value)}
-                  placeholder="مثال: 123-456-789"
+                  placeholder={t("supNew.taxPlaceholder")}
                   dir="rtl"
                 />
               </div>
@@ -212,24 +214,24 @@ export default function NewSupplierPage() {
           <div className="space-y-3 border-t border-border pt-4">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Landmark size={15} className="text-muted-foreground" />
-              بيانات الدفع / الحساب البنكي
+              {t("supNew.bankHeading")}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>اسم البنك</Label>
+                <Label>{t("supNew.bankName")}</Label>
                 <BankCombobox value={form.bankName} onChange={(v) => update("bankName", v)} />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>اسم صاحب الحساب</Label>
+                <Label>{t("supNew.bankAccountHolder")}</Label>
                 <Input
                   value={form.bankAccountHolder}
                   onChange={(e) => update("bankAccountHolder", e.target.value)}
-                  placeholder="كما هو مسجَّل لدى البنك"
+                  placeholder={t("supNew.holderHint")}
                   dir="rtl"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>رقم الحساب البنكي</Label>
+                <Label>{t("supNew.bankAccountNumber")}</Label>
                 <Input
                   value={form.bankAccountNumber}
                   onChange={(e) => update("bankAccountNumber", e.target.value)}
@@ -238,7 +240,7 @@ export default function NewSupplierPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>رقم IBAN</Label>
+                <Label>{t("supNew.iban")}</Label>
                 <Input
                   value={form.iban}
                   onChange={(e) => update("iban", e.target.value)}
@@ -247,7 +249,7 @@ export default function NewSupplierPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>السويف كود (SWIFT/BIC)</Label>
+                <Label>{t("supNew.swift")}</Label>
                 <Input
                   value={form.swiftCode}
                   onChange={(e) => update("swiftCode", e.target.value.toUpperCase())}
@@ -256,11 +258,11 @@ export default function NewSupplierPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>اسم الفرع</Label>
+                <Label>{t("supNew.bankBranch")}</Label>
                 <Input
                   value={form.bankBranch}
                   onChange={(e) => update("bankBranch", e.target.value)}
-                  placeholder="الفرع الرئيسي"
+                  placeholder={t("supNew.branchPlaceholder")}
                   dir="rtl"
                 />
               </div>
@@ -270,15 +272,13 @@ export default function NewSupplierPage() {
           {/* Multi-category checkboxes */}
           <div className="space-y-2">
             <Label>
-              Categories *{" "}
+              {t("supF.categories")} *{" "}
               <span className="text-muted-foreground font-normal text-xs">
-                (يمكن اختيار أكثر من تصنيف)
+                {t("supNew.multiHint")}
               </span>
             </Label>
             {categories.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No categories available. Add categories first.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("supF.noCategories")}</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {orderCategoryTree(categories).map((c) => {
@@ -303,7 +303,7 @@ export default function NewSupplierPage() {
             )}
             {selectedCats.size > 0 && (
               <p className="text-xs text-muted-foreground">
-                Selected: {Array.from(selectedCats).join(", ")}
+                {t("supF.selected")} {Array.from(selectedCats).join(", ")}
               </p>
             )}
           </div>
@@ -318,11 +318,11 @@ export default function NewSupplierPage() {
           <div className="flex gap-3 justify-end pt-2">
             <Link href="/suppliers">
               <a className="inline-flex items-center px-4 py-2 text-sm rounded border border-border text-muted-foreground hover:text-foreground">
-                Cancel
+                {t("supF.cancel")}
               </a>
             </Link>
             <Button type="submit" disabled={createMutation.isPending || !form.name}>
-              {createMutation.isPending ? "Saving..." : "Add Supplier"}
+              {createMutation.isPending ? t("supNew.saving") : t("supNew.title")}
             </Button>
           </div>
         </form>
