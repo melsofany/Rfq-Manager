@@ -151,3 +151,25 @@ describe("suppliers list — derived item categories with evidence", () => {
     expect(res.body[0].id).toBe(42);
   });
 });
+
+describe("suppliers list — trade categories stay distinct from item categories", () => {
+  it("carries the TRADE categories in `category` and the ITEM categories in `itemCategories`", async () => {
+    // The operator asked for these to be visibly different things: a supplier's
+    // TRADE categories say what it deals in; its ITEM categories say what it can
+    // supply at item level. Conflating them (one list) is the defect this guards.
+    evidence.map = new Map([
+      [42, [{ categoryId: 405, name: "كابلات", quoted: true, ordered: false, manual: false }]],
+    ]);
+    const res = await request(testApp).get("/suppliers");
+    expect(res.status).toBe(200);
+    const row = res.body[0];
+
+    // Trade categories come from the stored supplier row (`category`).
+    expect(row.category).toBe("كهرباء");
+    // Item categories come from the derived evidence, with their own names.
+    expect(row.itemCategories.map((c: any) => c.name)).toEqual(["كابلات"]);
+    // They are two fields, and the trade name is NOT silently injected into the
+    // item list.
+    expect(row.itemCategories.map((c: any) => c.name)).not.toContain("كهرباء");
+  });
+});
