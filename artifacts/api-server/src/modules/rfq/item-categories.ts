@@ -28,6 +28,7 @@ import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import { mergeItemCategories } from "../../shared/category-merge";
+import { findCategoryClash } from "../../shared/category-tree";
 
 const router = Router();
 router.use("/item-categories", guardFor("/item-categories"));
@@ -285,12 +286,12 @@ router.post("/item-categories", async (req, res): Promise<void> => {
       return;
     }
   }
-  const [existing] = await db
-    .select({ id: itemCategoriesTable.id })
-    .from(itemCategoriesTable)
-    .where(eq(itemCategoriesTable.name, trimmed))
-    .limit(1);
-  if (existing) {
+  // Compare by the normalised key, not the exact text: «كهرباء» and «كهرباء »
+  // or an alef/yaa spelling variant are the same category.
+  const sameKey = await db
+    .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+    .from(itemCategoriesTable);
+  if (findCategoryClash(sameKey, trimmed)) {
     res.status(409).json({ error: "التصنيف موجود بالفعل" });
     return;
   }
@@ -347,6 +348,13 @@ router.patch("/item-categories/:id", async (req, res): Promise<void> => {
   if (name !== undefined) {
     if (!name.trim()) {
       res.status(400).json({ error: "اسم التصنيف مطلوب" });
+      return;
+    }
+    const renamedKey = await db
+      .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+      .from(itemCategoriesTable);
+    if (findCategoryClash(renamedKey, name.trim(), id)) {
+      res.status(409).json({ error: "التصنيف موجود بالفعل" });
       return;
     }
     updates.name = name.trim();

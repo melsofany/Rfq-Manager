@@ -7,6 +7,7 @@ import {
   flattenTree,
   categoryPath,
   type CategoryNode,
+  findCategoryClash,
 } from "../../shared/category-tree";
 
 /**
@@ -138,5 +139,26 @@ describe("categoryPath — the full display path", () => {
   it("returns just the name for a root", () => {
     const nodes: CategoryNode[] = [{ id: 1, name: "كهرباء", parentId: null }];
     expect(categoryPath(nodes, 1)).toEqual(["كهرباء"]);
+  });
+});
+
+describe("findCategoryClash", () => {
+  const rows = [
+    { id: 1, name: "كهرباء" },
+    { id: 2, name: "أدوات تنظيف" },
+  ];
+
+  it("matches a name that differs only in spacing or spelling variants", () => {
+    expect(findCategoryClash(rows, " كهرباء ")?.id).toBe(1);
+    expect(findCategoryClash(rows, "ادوات  تنظيف")?.id).toBe(2);
+  });
+
+  it("finds no clash for a genuinely new name", () => {
+    expect(findCategoryClash(rows, "مواد بناء")).toBeUndefined();
+  });
+
+  it("ignores the row being renamed, so a category keeps its own name", () => {
+    expect(findCategoryClash(rows, "كهرباء", 1)).toBeUndefined();
+    expect(findCategoryClash(rows, "كهرباء", 2)?.id).toBe(1);
   });
 });
