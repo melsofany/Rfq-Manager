@@ -13,6 +13,7 @@ import ImportSuppliersTab from "./import-tab";
 import { CategoryFilterSelect } from "./CategoryFilterSelect";
 import { CategoriesTab } from "./CategoriesTab";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 function parseCategories(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -25,6 +26,12 @@ function parseCategories(cat: string | null | undefined): string[] {
 interface ItemCategoryRef {
   id: number;
   name: string;
+  /** The supplier quoted a price for an item in this category. */
+  quoted?: boolean;
+  /** A purchase order was issued to the supplier for an item in this category. */
+  ordered?: boolean;
+  /** A human linked the pair explicitly. */
+  manual?: boolean;
 }
 
 /** The API enriches each supplier with the ITEM categories it can supply. */
@@ -65,25 +72,71 @@ function TradeCategoryChips({ names }: { names: string[] }) {
   );
 }
 
-function ItemCategoryChips({ cats }: { cats: ItemCategoryRef[] }) {
+/**
+ * The chip carries WHY the supplier has the category. Without this the column
+ * is a mystery — the operator asked how the system knows, and the answer is
+ * always one of three facts: he quoted it, he was issued a PO for it, or a
+ * human linked it. The badge makes that visible at a glance.
+ */
+function evidenceBadge(
+  c: ItemCategoryRef,
+  t: (k: string) => string,
+): { label: string; title: string; className: string } | null {
+  if (c.ordered)
+    return {
+      label: t("sup.evidence.ordered"),
+      title: t("sup.evidence.orderedTitle"),
+      className: "bg-emerald-600 text-white",
+    };
+  if (c.quoted)
+    return {
+      label: t("sup.evidence.quoted"),
+      title: t("sup.evidence.quotedTitle"),
+      className: "bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300",
+    };
+  if (c.manual)
+    return {
+      label: t("sup.evidence.manual"),
+      title: t("sup.evidence.manualTitle"),
+      className: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+    };
+  return null;
+}
+
+function ItemCategoryChips({ cats, t }: { cats: ItemCategoryRef[]; t: (k: string) => string }) {
   if (cats.length === 0)
-    return <span className="text-xs text-muted-foreground">لم تُحدَّد بعد</span>;
+    return <span className="text-xs text-muted-foreground">{t("sup.notSet")}</span>;
   return (
     <div className="flex flex-wrap gap-1">
-      {cats.map((c) => (
-        <span
-          key={c.id}
-          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-        >
-          <Boxes size={10} className="opacity-60" />
-          {c.name}
-        </span>
-      ))}
+      {cats.map((c) => {
+        const badge = evidenceBadge(c, t);
+        return (
+          <span
+            key={c.id}
+            title={badge?.title}
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+          >
+            <Boxes size={10} className="opacity-60" />
+            {c.name}
+            {badge && (
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-px text-[9px] font-semibold leading-none",
+                  badge.className,
+                )}
+              >
+                {badge.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
 function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }) {
+  const { t } = useLanguage();
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [tradeCategory, setTradeCategory] = useState("all");
@@ -134,20 +187,18 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
   };
 
   return (
-    <div className="space-y-4" dir="rtl">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pt-6">
         <div>
-          <h1 className="text-xl font-bold text-foreground">الموردون</h1>
-          <p className="text-sm text-muted-foreground">
-            دليل الموردين — تصنيفاتهم التجارية وتصنيفات البنود التي يورّدونها
-          </p>
+          <h1 className="text-xl font-bold text-foreground">{t("sup.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("sup.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={onOpenCategories}>
-            <Settings size={14} /> التصنيفات
+            <Settings size={14} /> {t("sup.tab.categories")}
           </Button>
           <Button onClick={() => navigate("/suppliers/new")} size="sm" className="gap-1.5">
-            <Plus size={15} /> إضافة مورد
+            <Plus size={15} /> {t("sup.add")}
           </Button>
         </div>
       </div>
@@ -162,32 +213,32 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث بالاسم أو جهة الاتصال..."
+              placeholder={t("sup.searchPlaceholder")}
               className="h-8 pr-8 text-sm"
             />
           </div>
           {hasFilter && (
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={clearFilters}>
-              <X size={14} /> مسح الفلاتر
+              <X size={14} /> {t("sup.clearFilters")}
             </Button>
           )}
           <span className="text-xs text-muted-foreground">
-            {isLoading ? "جارٍ التحميل..." : `${suppliers.length} مورد`}
+            {isLoading ? t("sup.loading") : t("sup.count", { n: suppliers.length })}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <CategoryFilterSelect
-            label="التصنيف التجاري"
+            label={t("sup.filter.trade")}
             icon={<Tag size={12} className="text-muted-foreground" />}
             options={tradeCategories}
             selectedLabel={tradeCategory === "all" ? null : tradeCategory}
             onPick={(c) => setTradeCategory(c.name)}
             onClear={() => setTradeCategory("all")}
-            emptyText="لا توجد تصنيفات تجارية"
+            emptyText={t("sup.filter.noTrade")}
           />
           <CategoryFilterSelect
-            label="يورّد بنود"
+            label={t("sup.filter.item")}
             icon={<Boxes size={12} className="text-emerald-600" />}
             options={itemCategories}
             selectedLabel={
@@ -197,7 +248,7 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
             }
             onPick={(c) => setItemCategoryId(c.id)}
             onClear={() => setItemCategoryId("all")}
-            emptyText="لا توجد تصنيفات بنود"
+            emptyText={t("sup.filter.noItem")}
             tone="emerald"
           />
         </div>
@@ -205,20 +256,20 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
 
       <div className="mx-4 mb-4 overflow-hidden rounded-lg border border-border bg-card sm:mx-6 sm:mb-6">
         {isLoading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">جارٍ التحميل...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">{t("sup.loading")}</div>
         ) : suppliers.length === 0 ? (
           <div className="p-12 text-center">
             <Users size={40} className="mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-sm text-muted-foreground">
-              {hasFilter ? "لا يوجد موردون مطابقون للفلاتر" : "لا يوجد موردون بعد"}
+              {hasFilter ? t("sup.emptyFiltered") : t("sup.empty")}
             </p>
             {hasFilter ? (
               <Button variant="outline" size="sm" className="mt-3 gap-1.5" onClick={clearFilters}>
-                <Filter size={14} /> مسح الفلاتر
+                <Filter size={14} /> {t("sup.clearFilters")}
               </Button>
             ) : (
               <Button onClick={() => navigate("/suppliers/new")} size="sm" className="mt-3 gap-1.5">
-                <Plus size={14} /> إضافة مورد
+                <Plus size={14} /> {t("sup.add")}
               </Button>
             )}
           </div>
@@ -227,18 +278,20 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-right">
-                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">المورد</th>
                   <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                    جهة الاتصال
+                    {t("sup.col.supplier")}
                   </th>
                   <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                    التصنيف التجاري
+                    {t("sup.col.contact")}
                   </th>
                   <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                    يورّد بنود
+                    {t("sup.col.tradeCategory")}
+                  </th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                    {t("sup.col.itemCategories")}
                   </th>
                   <th className="px-4 py-2.5 text-center text-xs font-medium text-muted-foreground">
-                    الحالة
+                    {t("sup.col.status")}
                   </th>
                 </tr>
               </thead>
@@ -275,7 +328,7 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
                         <TradeCategoryChips names={cats} />
                       </td>
                       <td className="px-4 py-3">
-                        <ItemCategoryChips cats={itemCats} />
+                        <ItemCategoryChips cats={itemCats} t={t} />
                       </td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex flex-col items-center gap-1">
@@ -287,11 +340,11 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
                                 : "bg-muted text-muted-foreground",
                             )}
                           >
-                            {s.isActive ? "نشط" : "موقوف"}
+                            {s.isActive ? t("sup.active") : t("sup.inactive")}
                           </span>
                           {s.invoiceHasVat === false && (
                             <span className="inline-flex items-center rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                              بدون ضريبة
+                              {t("sup.noVat")}
                             </span>
                           )}
                         </div>
@@ -311,6 +364,7 @@ function SuppliersListTab({ onOpenCategories }: { onOpenCategories: () => void }
 type Tab = "list" | "import" | "categories";
 
 export default function SuppliersPage() {
+  const { t } = useLanguage();
   const { employee } = useAuth();
   const allowedTabs = filterTabs(employee?.role, employee?.permissions, "suppliers", [
     "list",
@@ -337,7 +391,7 @@ export default function SuppliersPage() {
               )}
             >
               <Users size={14} />
-              الموردون
+              {t("sup.tab.list")}
             </button>
           )}
           {allowedTabs.includes("import") && (
@@ -351,7 +405,7 @@ export default function SuppliersPage() {
               )}
             >
               <Upload size={14} />
-              استيراد موردين
+              {t("sup.tab.import")}
             </button>
           )}
           <button
@@ -364,7 +418,7 @@ export default function SuppliersPage() {
             )}
           >
             <Tag size={14} />
-            التصنيفات
+            {t("sup.tab.categories")}
           </button>
         </div>
       </div>

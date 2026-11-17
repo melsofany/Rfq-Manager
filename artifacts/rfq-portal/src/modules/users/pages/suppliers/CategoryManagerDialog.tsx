@@ -15,6 +15,7 @@ import {
   ChevronDown,
   BarChart3,
 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 /**
  * Professional category manager — إدارة تصنيفات الموردين
@@ -76,6 +77,7 @@ export function CategoryManagerDialog({
   onClose?: () => void;
   variant?: "dialog" | "panel";
 }) {
+  const { t } = useLanguage();
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [report, setReport] = useState<ReportData | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -146,7 +148,7 @@ export function CategoryManagerDialog({
       });
       setNewName("");
       setNewParentId(null);
-    }, "تمت إضافة التصنيف");
+    }, t("sup.cm.added"));
   };
 
   const startEdit = (c: CategoryRow) => {
@@ -163,20 +165,20 @@ export function CategoryManagerDialog({
         body: JSON.stringify({ name: editName.trim(), parentId: editParentId }),
       });
       setEditingId(null);
-    }, "تم حفظ التعديل");
+    }, t("sup.cm.saved"));
   };
 
   const softDelete = (c: CategoryRow) => {
     void run(
       () => api(`/categories/${c.id}`, { method: "DELETE" }),
-      `تم حذف «${c.name}» (يمكن استعادته)`,
+      t("sup.cm.deleted", { name: c.name }),
     );
   };
 
   const restore = (c: CategoryRow) => {
     void run(
       () => api(`/categories/${c.id}/restore`, { method: "POST" }),
-      `تمت استعادة «${c.name}»`,
+      t("sup.cm.restored", { name: c.name }),
     );
   };
 
@@ -187,7 +189,7 @@ export function CategoryManagerDialog({
           method: "POST",
           body: JSON.stringify({ sourceId: source.id, targetId: target.id }),
         }),
-      `تم دمج «${source.name}» في «${target.name}»`,
+      t("sup.cm.merged", { source: source.name, target: target.name }),
     );
     setMergeSource(null);
   };
@@ -259,7 +261,7 @@ export function CategoryManagerDialog({
                 onChange={(e) => setEditParentId(e.target.value ? Number(e.target.value) : null)}
                 className="h-7 text-xs bg-background border border-input rounded px-1 text-foreground"
               >
-                <option value="">تصنيف رئيسي</option>
+                <option value="">{t("sup.cm.primary")}</option>
                 {rows
                   .filter((r) => r.id !== c.id)
                   .map((r) => (
@@ -288,11 +290,15 @@ export function CategoryManagerDialog({
                 className={`flex-1 text-sm text-foreground ${depth === 0 ? "font-medium" : "text-muted-foreground"}`}
               >
                 {c.name}
-                {!c.isActive && <span className="text-[11px] text-destructive mr-2">(محذوف)</span>}
+                {!c.isActive && (
+                  <span className="text-[11px] text-destructive mr-2">
+                    {t("sup.cm.deletedTag")}
+                  </span>
+                )}
               </span>
               <span
                 className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground tabular-nums"
-                title="عدد الموردين في هذا التصنيف"
+                title={t("sup.cm.supplierCount")}
               >
                 {c.supplierCount}
               </span>
@@ -301,21 +307,21 @@ export function CategoryManagerDialog({
                   <button
                     onClick={() => startEdit(c)}
                     className="text-muted-foreground hover:text-foreground p-0.5"
-                    title="تعديل"
+                    title={t("sup.cm.edit")}
                   >
                     <Pencil size={13} />
                   </button>
                   <button
                     onClick={() => setMergeSource(c)}
                     className="text-muted-foreground hover:text-primary p-0.5"
-                    title="دمج في تصنيف آخر"
+                    title={t("sup.cm.merge")}
                   >
                     <GitMerge size={13} />
                   </button>
                   <button
                     onClick={() => softDelete(c)}
                     className="text-muted-foreground hover:text-destructive p-0.5"
-                    title="حذف (قابل للاستعادة)"
+                    title={t("sup.cm.delete")}
                     disabled={busy}
                   >
                     <Trash2 size={13} />
@@ -325,7 +331,7 @@ export function CategoryManagerDialog({
                 <button
                   onClick={() => restore(c)}
                   className="text-muted-foreground hover:text-green-600 p-0.5"
-                  title="استعادة"
+                  title={t("sup.cm.restore")}
                   disabled={busy}
                 >
                   <RotateCcw size={13} />
@@ -344,7 +350,7 @@ export function CategoryManagerDialog({
     <>
       {!isPanel && (
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-semibold text-foreground">إدارة تصنيفات الموردين</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("sup.cm.title")}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X size={18} />
           </button>
@@ -357,7 +363,7 @@ export function CategoryManagerDialog({
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="اسم التصنيف الجديد..."
+            placeholder={t("sup.cm.newName")}
             className="h-9 text-sm flex-1"
           />
           <select
@@ -365,7 +371,7 @@ export function CategoryManagerDialog({
             onChange={(e) => setNewParentId(e.target.value ? Number(e.target.value) : null)}
             className="h-9 text-xs bg-background border border-input rounded px-2 text-foreground"
           >
-            <option value="">تصنيف رئيسي (بدون أب)</option>
+            <option value="">{t("sup.cm.primaryNoParent")}</option>
             {rows
               .filter((r) => r.isActive && r.parentId == null)
               .map((r) => (
@@ -380,7 +386,7 @@ export function CategoryManagerDialog({
             disabled={busy || !newName.trim()}
             className="gap-1.5 h-9"
           >
-            <Plus size={14} /> إضافة
+            <Plus size={14} /> {t("sup.cm.add")}
           </Button>
         </div>
       </form>
@@ -395,7 +401,7 @@ export function CategoryManagerDialog({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث في التصنيفات..."
+            placeholder={t("sup.cm.search")}
             className="h-8 text-sm pr-7"
           />
         </div>
@@ -405,7 +411,7 @@ export function CategoryManagerDialog({
             checked={showDeleted}
             onChange={(e) => setShowDeleted(e.target.checked)}
           />
-          إظهار المحذوف
+          {t("sup.cm.showDeleted")}
         </label>
       </div>
 
@@ -413,18 +419,18 @@ export function CategoryManagerDialog({
       {report && (
         <div className="px-5 py-2 border-b border-border flex items-center gap-4 text-[11px] text-muted-foreground bg-muted/20">
           <span className="flex items-center gap-1">
-            <BarChart3 size={12} /> الإجمالي:{" "}
+            <BarChart3 size={12} /> {t("sup.cm.total")}{" "}
             <b className="text-foreground">{report.totals.active}</b>
           </span>
           <span>
-            بلا موردين: <b className="text-foreground">{report.totals.unused}</b>
+            {t("sup.cm.unused")} <b className="text-foreground">{report.totals.unused}</b>
           </span>
           <span className={report.totals.duplicateGroups > 0 ? "text-amber-600" : ""}>
-            مجموعات متشابهة: <b>{report.totals.duplicateGroups}</b>
+            {t("sup.cm.duplicateGroups")} <b>{report.totals.duplicateGroups}</b>
           </span>
           {report.totals.deleted > 0 && (
             <span>
-              محذوفة: <b>{report.totals.deleted}</b>
+              {t("sup.cm.deletedCount")} <b>{report.totals.deleted}</b>
             </span>
           )}
         </div>
@@ -443,7 +449,7 @@ export function CategoryManagerDialog({
           </div>
         )}
         {roots.length === 0 && !busy ? (
-          <p className="text-muted-foreground text-sm text-center py-8">لا توجد تصنيفات</p>
+          <p className="text-muted-foreground text-sm text-center py-8">{t("sup.cat.empty")}</p>
         ) : (
           roots.map((r) => renderRow(r, 0))
         )}
@@ -453,8 +459,7 @@ export function CategoryManagerDialog({
       {mergeSource && (
         <div className="px-5 py-3 border-t border-border bg-amber-50 dark:bg-amber-950/20">
           <p className="text-xs text-foreground mb-2">
-            دمج «<b>{mergeSource.name}</b>» في تصنيف آخر — سيتم نقل كل الموردين والعلاقات، وإخفاء
-            التصنيف المصدر (قابل للاستعادة). اختر التصنيف الهدف:
+            {t("sup.cm.mergePrompt", { name: mergeSource.name })}
           </p>
           <div className="flex gap-2">
             <select
@@ -463,7 +468,7 @@ export function CategoryManagerDialog({
               defaultValue=""
             >
               <option value="" disabled>
-                اختر التصنيف الهدف...
+                {t("sup.cm.pickTarget")}
               </option>
               {rows
                 .filter((r) => r.isActive && r.id !== mergeSource.id)
@@ -485,7 +490,7 @@ export function CategoryManagerDialog({
                 if (target) doMerge(mergeSource, target);
               }}
             >
-              تأكيد الدمج
+              {t("sup.cm.confirmMerge")}
             </Button>
             <Button
               size="sm"
@@ -493,7 +498,7 @@ export function CategoryManagerDialog({
               className="h-8"
               onClick={() => setMergeSource(null)}
             >
-              إلغاء
+              {t("sup.cm.cancel")}
             </Button>
           </div>
         </div>
@@ -502,7 +507,7 @@ export function CategoryManagerDialog({
       {!isPanel && (
         <div className="px-5 py-3 border-t border-border flex justify-end">
           <Button variant="outline" size="sm" onClick={onClose}>
-            إغلاق
+            {t("sup.cm.close")}
           </Button>
         </div>
       )}

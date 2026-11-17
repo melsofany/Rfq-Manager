@@ -21,6 +21,7 @@ import {
   PhoneOff,
   Phone,
 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,9 @@ interface ParsedSupplier {
   swiftCode?: string;
   bankBranch?: string;
   category: string;
-  phoneWarning?: string; // تحذير: أرضي مرفوض أو تنسيق غير معروف
+  phoneWarning?: string;
+  /** True when nothing usable survives the phone parse (landline-only / unknown). */
+  willSkip?: boolean;
 }
 
 // ─── Phone normalization helpers ─────────────────────────────────────────────
@@ -57,7 +60,7 @@ const EGYPT_MOBILE_PREFIXES = ["10", "11", "12", "15"];
  * يحوّل رقم هاتف مصري (بأي تنسيق) إلى تنسيق واتساب الدولي (+20XXXXXXXXXX).
  * يُرجع null إذا كان الرقم أرضياً أو غير صالح.
  */
-function normalizeEgyptianMobile(raw: string): string | null {
+export function normalizeEgyptianMobile(raw: string): string | null {
   // إزالة المسافات والرموز والحروف غير الرقمية ماعدا + في البداية
   let digits = raw.replace(/[^\d+]/g, "").replace(/\s/g, "");
   // إزالة + للمعالجة ثم إعادتها لاحقاً
@@ -99,7 +102,7 @@ function normalizeEgyptianMobile(raw: string): string | null {
 /**
  * يكتشف ما إذا كان الرقم يبدو كرقم أرضي مصري
  */
-function looksLikeLandline(raw: string): boolean {
+export function looksLikeLandline(raw: string): boolean {
   let digits = raw.replace(/[^\d]/g, "");
   if (digits.startsWith("0020")) digits = digits.slice(2);
   if (digits.startsWith("00")) digits = digits.slice(2);
@@ -128,17 +131,21 @@ function looksLikeLandline(raw: string): boolean {
 }
 
 interface PhoneParseResult {
-  primary: string | null; // الرقم الأساسي بتنسيق واتساب
-  secondary: string | null; // الرقم الثاني (إن وُجد)
-  warning: string | null; // رسالة تحذير
+  primary: string | null;
+  secondary: string | null;
+  warning: string | null;
+  willSkip: boolean;
 }
 
 /**
  * يحلل حقل الهاتف الذي قد يحتوي على رقم واحد أو رقمين.
  * يدعم الفاصل: / أو , أو ; أو | أو مسافة أو سطر جديد
  */
-function parsePhoneField(raw: string): PhoneParseResult {
-  if (!raw || !raw.trim()) return { primary: null, secondary: null, warning: null };
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+export function parsePhoneField(raw: string, t: Translate): PhoneParseResult {
+  if (!raw || !raw.trim())
+    return { primary: null, secondary: null, warning: null, willSkip: false };
 
   // تقسيم على الفواصل الشائعة
   const parts = raw
@@ -173,17 +180,20 @@ function parsePhoneField(raw: string): PhoneParseResult {
   const secondary = mobiles[1] ?? null;
 
   let warning: string | null = null;
+  let willSkip = false;
   if (landlineCount > 0 && mobiles.length === 0) {
-    warning = "رقم أرضي — لن يُستورد (واتساب لا يدعم الأرضي)";
+    warning = t("supImp.warnLandlineOnly");
+    willSkip = true;
   } else if (landlineCount > 0 && mobiles.length > 0) {
-    warning = `تم رفض ${landlineCount} رقم أرضي والاحتفاظ بالمحمول فقط`;
+    warning = t("supImp.warnLandlineDropped", { n: landlineCount });
   } else if (unknownCount > 0 && mobiles.length === 0) {
-    warning = "تنسيق الرقم غير معروف — لن يُستورد";
+    warning = t("supImp.warnUnknown");
+    willSkip = true;
   } else if (mobiles.length > 2) {
-    warning = `تم الاحتفاظ بأول رقمين فقط من ${mobiles.length} أرقام`;
+    warning = t("supImp.warnKeptTwo", { n: mobiles.length });
   }
 
-  return { primary, secondary, warning };
+  return { primary, secondary, warning, willSkip };
 }
 
 // ─── Column mapping helpers ──────────────────────────────────────────────────
@@ -282,7 +292,7 @@ function normalizeKey(raw: string): string {
     .replace(/\s/g, "");
 }
 
-function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
+function mapRow(row: Record<string, unknown>, t: Translate): ParsedSupplier | null {
   const mapped: Partial<ParsedSupplier> = {};
   for (const [rawKey, val] of Object.entries(row)) {
     const norm = normalizeKey(rawKey);
@@ -304,17 +314,19 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
   let finalPhone: string | undefined;
   let finalPhone2: string | undefined;
   let phoneWarning: string | undefined;
+  let willSkip = false;
 
   if (rawPhone) {
-    const parsed = parsePhoneField(rawPhone);
+    const parsed = parsePhoneField(rawPhone, t);
     finalPhone = parsed.primary ?? undefined;
     finalPhone2 = parsed.secondary ?? undefined;
     if (parsed.warning) phoneWarning = parsed.warning;
+    willSkip = parsed.willSkip;
   }
 
   // إذا كان هناك عمود phone2 مستقل وما وُجد رقم ثاني من phone
   if (rawPhone2 && !finalPhone2) {
-    const parsed2 = parsePhoneField(rawPhone2);
+    const parsed2 = parsePhoneField(rawPhone2, t);
     if (parsed2.primary) {
       finalPhone2 = parsed2.primary;
     } else if (parsed2.warning) {
@@ -341,12 +353,13 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
     bankBranch: mapped.bankBranch as string | undefined,
     category: (mapped.category as string) ?? "general",
     phoneWarning,
+    willSkip,
   };
 }
 
 // ─── File Parsing ────────────────────────────────────────────────────────────
 
-async function parseFile(file: File): Promise<ParsedSupplier[]> {
+async function parseFile(file: File, t: Translate): Promise<ParsedSupplier[]> {
   const ext = file.name.split(".").pop()?.toLowerCase();
 
   if (ext === "json") {
@@ -355,7 +368,7 @@ async function parseFile(file: File): Promise<ParsedSupplier[]> {
     const arr = Array.isArray(json) ? json : (json.suppliers ?? json.data ?? [json]);
     return arr
       .map((row: Record<string, unknown>, i: number) => {
-        const s = mapRow(row);
+        const s = mapRow(row, t);
         return s ? { ...s, _rowIndex: i + 1 } : null;
       })
       .filter(Boolean) as ParsedSupplier[];
@@ -368,13 +381,13 @@ async function parseFile(file: File): Promise<ParsedSupplier[]> {
     const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
     return rows
       .map((row, i) => {
-        const s = mapRow(row);
+        const s = mapRow(row, t);
         return s ? { ...s, _rowIndex: i + 1 } : null;
       })
       .filter(Boolean) as ParsedSupplier[];
   }
 
-  throw new Error("صيغة الملف غير مدعومة. يُرجى استخدام xlsx أو csv أو json");
+  throw new Error(t("supImp.badFormat"));
 }
 
 // ─── Download Template ───────────────────────────────────────────────────────
@@ -439,6 +452,7 @@ interface ImportResult {
 }
 
 export default function ImportSuppliersTab() {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -491,7 +505,7 @@ export default function ImportSuppliersTab() {
     setParseError(null);
     setFileName(file.name);
     try {
-      const parsed = await parseFile(file);
+      const parsed = await parseFile(file, t);
       if (parsed.length === 0) {
         setParseError(
           "لم يتم العثور على بيانات صالحة في الملف. تأكد من وجود عمود 'name' أو 'الاسم'.",
@@ -503,13 +517,13 @@ export default function ImportSuppliersTab() {
       const preSelected = new Set(
         parsed
           .map((r, i) => ({ r, i }))
-          .filter(({ r }) => !r.phoneWarning?.includes("لن يُستورد") || r.phone)
+          .filter(({ r }) => !r.willSkip || r.phone)
           .map(({ i }) => i),
       );
       setSelected(preSelected);
       setStep("preview");
     } catch (err) {
-      setParseError((err as Error).message || "خطأ في قراءة الملف");
+      setParseError((err as Error).message || t("supImp.readError"));
     }
   }
 
@@ -584,9 +598,7 @@ export default function ImportSuppliersTab() {
 
   // ─── إحصائيات التحذيرات للمعاينة ─────────────────────────────────────────
   const warningCount = rows.filter((r) => r.phoneWarning).length;
-  const landlineOnlyCount = rows.filter(
-    (r) => r.phoneWarning?.includes("لن يُستورد") && !r.phone,
-  ).length;
+  const landlineOnlyCount = rows.filter((r) => r.willSkip && !r.phone).length;
   const dualMobileCount = rows.filter((r) => r.phone2).length;
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
@@ -604,18 +616,24 @@ export default function ImportSuppliersTab() {
               <AlertCircle size={48} className="text-yellow-500" />
             )}
           </div>
-          <h2 className="text-lg font-semibold text-foreground">نتيجة الاستيراد</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t("supImp.resultTitle")}</h2>
           <div className="flex justify-center gap-6 text-sm">
-            <span className="text-green-600 font-medium">{result.imported} تم استيرادهم</span>
-            <span className="text-yellow-600 font-medium">{result.skipped} تخطيناهم</span>
-            <span className="text-red-600 font-medium">{result.errors} فشل</span>
+            <span className="text-green-600 font-medium">
+              {t("supImp.imported", { n: result.imported })}
+            </span>
+            <span className="text-yellow-600 font-medium">
+              {t("supImp.skipped", { n: result.skipped })}
+            </span>
+            <span className="text-red-600 font-medium">
+              {t("supImp.failed", { n: result.errors })}
+            </span>
           </div>
         </div>
 
         {result.details.length > 0 && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="bg-muted/30 px-4 py-2 border-b border-border">
-              <p className="text-xs font-medium text-muted-foreground">تفاصيل الاستيراد</p>
+              <p className="text-xs font-medium text-muted-foreground">{t("supImp.details")}</p>
             </div>
             <div className="max-h-80 overflow-y-auto divide-y divide-border">
               {result.details.map((d, i) => (
@@ -641,7 +659,7 @@ export default function ImportSuppliersTab() {
 
         <div className="flex justify-center">
           <Button onClick={reset} variant="outline" className="gap-2">
-            <RotateCcw size={14} /> استيراد ملف آخر
+            <RotateCcw size={14} /> {t("supImp.importAnother")}
           </Button>
         </div>
       </div>
@@ -656,14 +674,14 @@ export default function ImportSuppliersTab() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-foreground">مراجعة الموردين المستوردين</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("supImp.reviewHeading")}</h2>
             <p className="text-muted-foreground text-xs mt-0.5">
-              {fileName} — {rows.length} مورد
+              {fileName} — {t("supImp.supplierCount", { n: rows.length })}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={reset} className="gap-1.5">
-              <RotateCcw size={13} /> رفع ملف آخر
+              <RotateCcw size={13} /> {t("supImp.uploadAnother")}
             </Button>
             <Button
               size="sm"
@@ -676,7 +694,7 @@ export default function ImportSuppliersTab() {
               ) : (
                 <Upload size={13} />
               )}
-              استيراد {selectedCount > 0 ? `(${selectedCount})` : ""}
+              {t("supImp.importBtn")} {selectedCount > 0 ? `(${selectedCount})` : ""}
             </Button>
           </div>
         </div>
@@ -687,19 +705,13 @@ export default function ImportSuppliersTab() {
             {landlineOnlyCount > 0 && (
               <div className="flex items-center gap-1.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-1.5">
                 <PhoneOff size={12} />
-                <span>
-                  {landlineOnlyCount} مورد {landlineOnlyCount === 1 ? "يحتوي" : "يحتوون"} على أرقام
-                  أرضية فقط — تم إلغاء تحديدهم تلقائياً
-                </span>
+                <span>{t("supImp.landlineSummary", { n: landlineOnlyCount })}</span>
               </div>
             )}
             {dualMobileCount > 0 && (
               <div className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5">
                 <Phone size={12} />
-                <span>
-                  {dualMobileCount} مورد {dualMobileCount === 1 ? "لديه" : "لديهم"} رقمان محمول —
-                  سيُحفظان معاً
-                </span>
+                <span>{t("supImp.dualSummary", { n: dualMobileCount })}</span>
               </div>
             )}
           </div>
@@ -708,7 +720,7 @@ export default function ImportSuppliersTab() {
         {/* Bulk Category Assignment */}
         <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2.5 flex-wrap">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            تعيين تصنيف جماعي ({selectedCount} مورد محدد):
+            {t("supImp.bulkAssign", { n: selectedCount })}
           </span>
           <div className="relative flex-1 min-w-[160px] max-w-xs">
             <select
@@ -716,7 +728,7 @@ export default function ImportSuppliersTab() {
               onChange={(e) => setBulkCategory(e.target.value)}
               className="w-full h-7 text-xs bg-background border border-border rounded px-2 pr-7 appearance-none focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              <option value="">اختر التصنيف...</option>
+              <option value="">{t("supImp.pickCategory")}</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.name}>
                   {c.name}
@@ -735,7 +747,7 @@ export default function ImportSuppliersTab() {
             onClick={applyBulkCategory}
             className="h-7 text-xs px-3"
           >
-            تطبيق
+            {t("supImp.apply")}
           </Button>
         </div>
 
@@ -743,7 +755,7 @@ export default function ImportSuppliersTab() {
         {importMutation.isError && (
           <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
             <AlertCircle size={14} />
-            <span>حدث خطأ أثناء الاستيراد. يرجى المحاولة مرة أخرى.</span>
+            <span>{t("supImp.importError")}</span>
           </div>
         )}
 
@@ -765,27 +777,26 @@ export default function ImportSuppliersTab() {
                     #
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
-                    الاسم
+                    {t("supImp.col.name")}
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
-                    المسؤول
+                    {t("supImp.col.contact")}
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
-                    الإيميل
+                    {t("supImp.col.email")}
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
-                    الهاتف (واتساب)
+                    {t("supImp.col.phone")}
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right min-w-[140px]">
-                    التصنيف
+                    {t("supImp.col.category")}
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, i) => {
                   const hasWarning = !!row.phoneWarning;
-                  const isLandlineOnly =
-                    hasWarning && row.phoneWarning?.includes("لن يُستورد") && !row.phone;
+                  const isLandlineOnly = hasWarning && row.willSkip && !row.phone;
                   return (
                     <tr
                       key={i}
@@ -826,7 +837,9 @@ export default function ImportSuppliersTab() {
                                 <span className="text-blue-600 font-mono text-xs">
                                   {row.phone2}
                                 </span>
-                                <span className="text-muted-foreground text-[10px]">(ثاني)</span>
+                                <span className="text-muted-foreground text-[10px]">
+                                  {t("supImp.second")}
+                                </span>
                               </div>
                             )}
                             {hasWarning && !isLandlineOnly && (
@@ -881,36 +894,28 @@ export default function ImportSuppliersTab() {
   return (
     <div className="p-6 space-y-5 max-w-xl mx-auto">
       <div>
-        <h2 className="text-base font-semibold text-foreground">استيراد موردين من ملف</h2>
-        <p className="text-muted-foreground text-xs mt-1">
-          يدعم صيغ <span className="font-medium">.xlsx</span> ،
-          <span className="font-medium"> .xls</span> ،<span className="font-medium"> .csv</span> ،
-          <span className="font-medium"> .json</span>
-        </p>
+        <h2 className="text-base font-semibold text-foreground">{t("supImp.uploadHeading")}</h2>
+        <p className="text-muted-foreground text-xs mt-1">{t("supImp.supported")}</p>
       </div>
 
       {/* Phone format notice */}
       <div className="flex items-start gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2.5">
         <Phone size={13} className="mt-0.5 shrink-0" />
         <div className="space-y-0.5">
-          <p className="font-medium">أرقام المحمول فقط — تنسيق واتساب تلقائي</p>
-          <p className="text-blue-600">
-            يقبل النظام أرقام المحمول المصرية (010 / 011 / 012 / 015) ويحوّلها تلقائياً لتنسيق
-            واتساب الدولي (+20...). الأرقام الأرضية مرفوضة. يمكنك إدخال رقمين محمول في نفس الخلية
-            مفصولين بـ /.
-          </p>
+          <p className="font-medium">{t("supImp.mobileOnly")}</p>
+          <p className="text-blue-600">{t("supImp.mobileHint")}</p>
         </div>
       </div>
 
       {/* Download template */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Download size={13} />
-        <span>لا تعرف الصيغة؟</span>
+        <span>{t("supImp.noFormat")}</span>
         <button
           onClick={downloadTemplate}
           className="text-primary underline underline-offset-2 hover:text-primary/80"
         >
-          حمّل قالب CSV
+          {t("supImp.downloadTemplate")}
         </button>
       </div>
 
@@ -930,7 +935,7 @@ export default function ImportSuppliersTab() {
         }`}
       >
         <FileSpreadsheet size={40} className="mx-auto text-muted-foreground/40 mb-3" />
-        <p className="text-sm font-medium text-foreground">اسحب الملف هنا أو انقر للاختيار</p>
+        <p className="text-sm font-medium text-foreground">{t("supImp.dropHere")}</p>
         <p className="text-xs text-muted-foreground mt-1">xlsx · xls · csv · json</p>
         <input
           ref={fileInputRef}
@@ -950,31 +955,31 @@ export default function ImportSuppliersTab() {
 
       {/* Expected columns */}
       <div className="bg-muted/30 border border-border rounded-lg p-4 space-y-2">
-        <p className="text-xs font-medium text-foreground">الأعمدة المتوقعة في الملف</p>
+        <p className="text-xs font-medium text-foreground">{t("supImp.expectedCols")}</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
           {[
-            ["name / الاسم", "مطلوب"],
-            ["supplier_id / رقم المورد", "اختياري"],
-            ["contact_person / المسؤول", "اختياري"],
-            ["email / الإيميل", "اختياري"],
-            ["phone / الهاتف", "اختياري"],
-            ["address / العنوان", "اختياري"],
-            ["category / التصنيف", "اختياري"],
-          ].map(([col, req]) => (
-            <div key={col} className="flex items-center gap-1.5">
+            ["name / الاسم", true],
+            ["supplier_id / رقم المورد", false],
+            ["contact_person / المسؤول", false],
+            ["email / الإيميل", false],
+            ["phone / الهاتف", false],
+            ["address / العنوان", false],
+            ["category / التصنيف", false],
+          ].map(([col, required]) => (
+            <div key={String(col)} className="flex items-center gap-1.5">
               <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${req === "مطلوب" ? "bg-primary" : "bg-muted-foreground/40"}`}
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${required ? "bg-primary" : "bg-muted-foreground/40"}`}
               />
               <span className="font-mono">{col}</span>
-              <span className={req === "مطلوب" ? "text-primary font-medium" : ""}>
-                {req === "مطلوب" ? "*" : ""}
+              <span className={required ? "text-primary font-medium" : ""}>
+                {required ? "*" : ""}
               </span>
             </div>
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground mt-1 border-t border-border pt-2">
-          💡 يمكن وضع رقمي محمول في عمود phone واحد مفصولين بـ{" "}
-          <code className="bg-muted px-1 rounded">/</code>— مثال:{" "}
+          💡 {t("supImp.phoneTip")} <code className="bg-muted px-1 rounded">/</code>
+          {t("supImp.phoneTipExample")}{" "}
           <code className="bg-muted px-1 rounded">01012345678/01112345678</code>
         </p>
       </div>

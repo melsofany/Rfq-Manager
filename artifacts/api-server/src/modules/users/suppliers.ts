@@ -28,10 +28,14 @@ import {
 } from "../../shared/supplier-category-links";
 import { descendantIds } from "../../shared/category-tree";
 import {
-  loadSupplierItemCategoryMap,
   saveSupplierItemCategoryLinks,
   suppliersForItemCategories,
 } from "../../shared/supplier-item-category-links";
+import {
+  loadSupplierItemCategoryEvidenceMap,
+  suppliersWithHistoryForCategories,
+  supplierItemCategoryEvidence,
+} from "../../shared/supplier-item-category-history";
 
 const router = Router();
 router.use("/suppliers", guardFor("/suppliers"));
@@ -648,11 +652,23 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
       })
       .from(itemCategoriesTable);
     const subtree = [...descendantIds(allItemCategories, wantedId)];
+    // A supplier matches the item-category filter when EITHER a human linked him
+    // (manual) OR his own HISTORY covers the category — he quoted a line in it
+    // or a purchase order was issued to him for one. Union of the two, so the
+    // filter finds the suppliers the operator never had to tag by hand.
     const byCategory = await suppliersForItemCategories(subtree);
-    const supplierIds = [...new Set([...byCategory.values()].flat())];
+    const byHistory = await suppliersWithHistoryForCategories(subtree).catch(
+      () => new Map<number, number[]>(),
+    );
+    const supplierIds = new Set<number>();
+    for (const ids of byCategory.values()) for (const s of ids) supplierIds.add(s);
+    for (const ids of byHistory.values()) for (const s of ids) supplierIds.add(s);
+    const supplierIdList = [...supplierIds];
     // No supplier supplies this category → an empty set, never a dropped
     // filter (which would list EVERY supplier).
-    conditions.push(supplierIds.length > 0 ? inArray(suppliersTable.id, supplierIds) : sql`1 = 0`);
+    conditions.push(
+      supplierIdList.length > 0 ? inArray(suppliersTable.id, supplierIdList) : sql`1 = 0`,
+    );
   }
   if (category) {
     // Filter through the LINK table — the authoritative relationship. A supplier
@@ -703,19 +719,43 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   // Prefer the LINK table for the category list; fall back to the legacy text
   // for any supplier that has no links (pre-migration rows).
   const linkMap = await loadSupplierCategoryMap(suppliers.map((s) => s.id));
-  // Item-category links are ENRICHMENT — a failure (or an unconfigured table)
-  // must never fail the supplier list itself.
-  const itemMap = await loadSupplierItemCategoryMap(suppliers.map((s) => s.id)).catch(
-    () => new Map<number, Array<{ id: number; name: string }>>(),
+  // Item categories are DERIVED from the supplier's own history (what he quoted
+  // and what he was issued a PO for) merged with the manual links. A failure is
+  // ENRICHMENT-only — it must never fail the supplier list itself.
+  const evidenceMap = await loadSupplierItemCategoryEvidenceMap(suppliers.map((s) => s.id)).catch(
+    () =>
+      new Map<
+        number,
+        Array<{
+          categoryId: number;
+          name: string;
+          quoted: boolean;
+          ordered: boolean;
+          manual: boolean;
+        }>
+      >(),
   );
   res.json(
     suppliers.map((s) => {
       const base = serializeSupplier(s);
-      const itemCategories = (itemMap.get(s.id) ?? []).map((c) => ({ id: c.id, name: c.name }));
+      const itemCategoryEvidence = evidenceMap.get(s.id) ?? [];
+      const itemCategories = itemCategoryEvidence.map((c) => ({
+        id: c.categoryId,
+        name: c.name,
+        quoted: c.quoted,
+        ordered: c.ordered,
+        manual: c.manual,
+      }));
       const links = linkMap.get(s.id);
-      if (!links || links.length === 0) return { ...base, itemCategories };
+      if (!links || links.length === 0) return { ...base, itemCategories, itemCategoryEvidence };
       const names = links.map((l) => l.name);
-      return { ...base, category: categoriesToStored(names), categories: names, itemCategories };
+      return {
+        ...base,
+        category: categoriesToStored(names),
+        categories: names,
+        itemCategories,
+        itemCategoryEvidence,
+      };
     }),
   );
 });
@@ -742,8 +782,17 @@ router.get(
       })
       .from(itemCategoriesTable);
     const subtree = [...descendantIds(all, categoryId)];
+    // Manual links UNION the supplier's own history (quoted / ordered), so
+    // «مين يقدر يورّد بند من تصنيف كابلات؟» finds the suppliers who have
+    // actually priced or supplied it, not only the hand-tagged ones.
     const byCategory = await suppliersForItemCategories(subtree);
-    const supplierIds = [...new Set([...byCategory.values()].flat())];
+    const byHistory = await suppliersWithHistoryForCategories(subtree).catch(
+      () => new Map<number, number[]>(),
+    );
+    const supplierIdSet = new Set<number>();
+    for (const ids of byCategory.values()) for (const s of ids) supplierIdSet.add(s);
+    for (const ids of byHistory.values()) for (const s of ids) supplierIdSet.add(s);
+    const supplierIds = [...supplierIdSet];
     const rows = supplierIds.length
       ? await db.select().from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
       : [];
@@ -871,9 +920,15 @@ router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const itemMap = await loadSupplierItemCategoryMap([id]);
-  const itemCategories = (itemMap.get(id) ?? []).map((c) => ({ id: c.id, name: c.name }));
-  res.json({ ...serializeSupplier(supplier), itemCategories });
+  const itemCategoryEvidence = await supplierItemCategoryEvidence(id).catch(() => []);
+  const itemCategories = itemCategoryEvidence.map((c) => ({
+    id: c.categoryId,
+    name: c.name,
+    quoted: c.quoted,
+    ordered: c.ordered,
+    manual: c.manual,
+  }));
+  res.json({ ...serializeSupplier(supplier), itemCategories, itemCategoryEvidence });
 });
 
 router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
@@ -970,9 +1025,15 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
       console.warn("supplier item-category link save failed (patch)", id, linkErr);
     }
   }
-  const itemMap = await loadSupplierItemCategoryMap([id]);
-  const itemCategories = (itemMap.get(id) ?? []).map((c) => ({ id: c.id, name: c.name }));
-  res.json({ ...serializeSupplier(supplier), itemCategories });
+  const itemCategoryEvidence = await supplierItemCategoryEvidence(id).catch(() => []);
+  const itemCategories = itemCategoryEvidence.map((c) => ({
+    id: c.categoryId,
+    name: c.name,
+    quoted: c.quoted,
+    ordered: c.ordered,
+    manual: c.manual,
+  }));
+  res.json({ ...serializeSupplier(supplier), itemCategories, itemCategoryEvidence });
 });
 
 // Only admin or manager can delete a supplier

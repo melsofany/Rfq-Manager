@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { orderCategoryTree } from "@/lib/category-tree";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface CategoryOption {
   id: number;
@@ -27,7 +28,7 @@ export function CategoryFilterSelect({
   selectedLabel,
   onPick,
   onClear,
-  emptyText = "لا توجد تصنيفات",
+  emptyText,
   tone = "primary",
 }: {
   label: string;
@@ -39,9 +40,11 @@ export function CategoryFilterSelect({
   emptyText?: string;
   tone?: "primary" | "emerald";
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
+  const emptyLabel = emptyText ?? t("sup.filter.noTrade");
 
   useEffect(() => {
     if (!open) return;
@@ -94,7 +97,7 @@ export function CategoryFilterSelect({
             </span>
           </>
         ) : (
-          <span className="text-foreground">الكل</span>
+          <span className="text-foreground">{t("sup.filter.all")}</span>
         )}
         <ChevronDown size={13} className="text-muted-foreground" />
       </button>
@@ -110,15 +113,15 @@ export function CategoryFilterSelect({
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="بحث..."
+              placeholder={t("sup.filter.search")}
               className="h-8 w-full bg-transparent pr-7 pl-2 text-xs text-foreground outline-none"
             />
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
             {ordered.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">{emptyText}</p>
+              <p className="px-3 py-2 text-xs text-muted-foreground">{emptyLabel}</p>
             ) : filtered.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">لا نتائج مطابقة</p>
+              <p className="px-3 py-2 text-xs text-muted-foreground">{t("sup.filter.noResults")}</p>
             ) : (
               filtered.map((c) => {
                 const active = selectedLabel === c.name;

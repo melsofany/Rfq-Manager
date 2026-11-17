@@ -5,6 +5,7 @@ import { Boxes, Search, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { orderCategoryTree } from "@/lib/category-tree";
 import { CategoryManagerDialog } from "./CategoryManagerDialog";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface ItemCategoryRow {
   id: number;
@@ -13,9 +14,15 @@ interface ItemCategoryRow {
   code?: string | null;
 }
 
-function CatalogueList({ rows }: { rows: { id: number; name: string; depth: number }[] }) {
+function CatalogueList({
+  rows,
+  emptyText,
+}: {
+  rows: { id: number; name: string; depth: number }[];
+  emptyText: string;
+}) {
   if (rows.length === 0)
-    return <p className="px-4 py-6 text-center text-xs text-muted-foreground">لا توجد تصنيفات</p>;
+    return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{emptyText}</p>;
   return (
     <ul className="divide-y divide-border">
       {rows.map((c) => (
@@ -48,6 +55,7 @@ function CatalogueList({ rows }: { rows: { id: number; name: string; depth: numb
  *   • تصنيفات البنود — what a supplier can SUPPLY (item level).
  */
 export function CategoriesTab({ canManage }: { canManage: boolean }) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
 
   const { data: tradeCategories = [] } = useListCategories({
@@ -74,31 +82,25 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
   const orderedTrade = useMemo(() => orderCategoryTree(tradeCategories), [tradeCategories]);
 
   return (
-    <div className="space-y-6 px-4 py-4 sm:px-6" dir="rtl">
+    <div className="space-y-6 px-4 py-4 sm:px-6">
       <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
         <Tag size={16} className="mt-0.5 shrink-0 text-primary" />
         <div className="text-xs leading-relaxed text-muted-foreground">
-          <p className="font-medium text-foreground">نوعان من التصنيفات</p>
-          <p>
-            <b>التصنيفات التجارية</b> تُستخدم لتجميع الموردين بحسب ما يتاجرون فيه. و
-            <b> تصنيفات البنود</b> تحدّد ما يستطيع المورد توريده على مستوى البند — وهي التي تظهر في
-            عمود «يورّد بنود» بصفحة الموردين وفي الفلتر.
-          </p>
+          <p className="font-medium text-foreground">{t("sup.cat.kind.title")}</p>
+          <p>{t("sup.cat.kind.body")}</p>
         </div>
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-foreground">التصنيفات التجارية</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("sup.cat.trade.heading")}</h2>
         <p className="text-xs text-muted-foreground">
-          {canManage
-            ? "أضف، عدّل، ادمج، أو احذف (قابل للاستعادة) — ولا يُدمج شيء تلقائيًا."
-            : "استعراض فقط — التعديل متاح للمدير."}
+          {canManage ? t("sup.cat.trade.manage") : t("sup.cat.trade.viewOnly")}
         </p>
         {canManage ? (
           <CategoryManagerDialog variant="panel" />
         ) : (
           <div className="rounded-lg border border-border bg-card">
-            <CatalogueList rows={orderedTrade} />
+            <CatalogueList rows={orderedTrade} emptyText={t("sup.cat.empty")} />
           </div>
         )}
       </section>
@@ -107,7 +109,7 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
         <div className="flex items-center justify-between gap-3">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <Boxes size={15} className="text-emerald-600" />
-            تصنيفات البنود
+            {t("sup.cat.item.heading")}
           </h2>
           <div className="relative w-56">
             <Search
@@ -117,17 +119,21 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث في تصنيفات البنود..."
+              placeholder={t("sup.cat.item.search")}
               className="h-8 pr-7 text-sm"
             />
           </div>
         </div>
 
+        <p className="text-xs text-muted-foreground">{t("sup.cat.learnHint")}</p>
+
         <div className="rounded-lg border border-border bg-card">
           {isLoading ? (
-            <p className="px-4 py-6 text-center text-xs text-muted-foreground">جارٍ التحميل...</p>
+            <p className="px-4 py-6 text-center text-xs text-muted-foreground">
+              {t("sup.loading")}
+            </p>
           ) : (
-            <CatalogueList rows={orderedItem} />
+            <CatalogueList rows={orderedItem} emptyText={t("sup.cat.empty")} />
           )}
         </div>
       </section>

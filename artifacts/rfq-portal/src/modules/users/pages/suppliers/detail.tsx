@@ -1,4 +1,5 @@
 import { orderCategoryTree } from "@/lib/category-tree";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -42,7 +43,14 @@ import { useAuth } from "@/contexts/AuthContext";
 // (not part of the generated Supplier type — the endpoints are outside the
 // OpenAPI spec, same pattern as receipts/deliveries/accounts).
 type SupplierWithItemCategories = {
-  itemCategories?: Array<{ id: number; name: string }>;
+  itemCategories?: Array<{
+    id: number;
+    name: string;
+    /** Evidence for WHY the supplier has this item category. */
+    quoted?: boolean;
+    ordered?: boolean;
+    manual?: boolean;
+  }>;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -105,6 +113,7 @@ function fmtDate(iso: string | null | undefined) {
 
 // حقل للقراءة فقط مع زر نسخ — الأرقام البنكية والضريبية تُنسخ عادةً للاستخدام
 function CopyField({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -127,7 +136,7 @@ function CopyField({ label, value, ltr }: { label: string; value: string; ltr?: 
         type="button"
         onClick={copy}
         className="text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
-        title="نسخ"
+        title={t("supReg.copy")}
       >
         {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
       </button>
@@ -181,11 +190,11 @@ const REG_STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-red-50 text-red-600",
 };
 
-const REG_STATUS_LABELS: Record<string, string> = {
-  pending: "بانتظار المورد",
-  completed: "مكتمل",
-  expired: "منتهي",
-  cancelled: "ملغي",
+const REG_STATUS_LABEL_KEYS: Record<string, string> = {
+  pending: "supReg.st.pending",
+  completed: "supReg.st.completed",
+  expired: "supReg.st.expired",
+  cancelled: "supReg.st.cancelled",
 };
 
 function RegistrationCard({
@@ -199,6 +208,7 @@ function RegistrationCard({
   };
   supplierId: number;
 }) {
+  const { t } = useLanguage();
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -226,20 +236,22 @@ function RegistrationCard({
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body?.error ?? "تعذّر إرسال الرابط");
+        setError(body?.error ?? t("supReg.sendFail"));
         return;
       }
       const channels: string[] = [];
-      if (body.whatsappSent) channels.push("واتساب");
-      if (body.emailSent) channels.push("البريد الإلكتروني");
+      if (body.whatsappSent) channels.push(t("supReg.ch.whatsapp"));
+      if (body.emailSent) channels.push(t("supReg.ch.email"));
       setResult(
         channels.length > 0
-          ? `تم إرسال رابط استكمال البيانات عبر ${channels.join(" و ")}`
-          : `لم يتم الإرسال — ${body.whatsappError ?? body.emailError ?? "لا توجد وسيلة تواصل مسجَّلة"}`,
+          ? t("supReg.sentVia", { channels: channels.join(t("supReg.ch.join")) })
+          : t("supReg.notSent", {
+              reason: body.whatsappError ?? body.emailError ?? t("supReg.noContact"),
+            }),
       );
       queryClient.invalidateQueries({ queryKey: ["registration-requests", supplierId] });
     } catch {
-      setError("تعذّر الاتصال بالخادم");
+      setError(t("supReg.connError"));
     } finally {
       setSending(false);
     }
@@ -253,38 +265,33 @@ function RegistrationCard({
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
           <ShieldCheck size={15} className="text-muted-foreground" />
-          استكمال بيانات المورد
+          {t("supReg.title")}
         </h2>
         <span
           className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
             complete ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
           }`}
         >
-          {complete
-            ? "البيانات مكتملة — يمكن إرسال أوامر الشراء"
-            : "البيانات ناقصة — لن يُرسل أمر شراء"}
+          {complete ? t("supReg.complete") : t("supReg.incomplete")}
         </span>
       </div>
 
       {!complete && (
         <>
           <p className="text-xs text-muted-foreground">
-            الحقول الناقصة: <span className="text-red-600">{missing.join("، ") || "—"}</span>
+            {t("supReg.missingFields")}{" "}
+            <span className="text-red-600">{missing.join("، ") || "—"}</span>
           </p>
-          <p className="text-xs text-muted-foreground">
-            لن يتم إرسال أمر الشراء لهذا المورد حتى يستكمل بياناته بنفسه. عند الضغط على الإرسال يصل
-            للمورد رابط يفتحه مرة واحدة فقط، يُدخل البيانات مرتين للتأكيد، وفي حال عدم التطابق تُرفض
-            البيانات ويُبلَّغ المورد فورًا.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("supReg.explain")}</p>
           <Button size="sm" onClick={() => void send()} disabled={sending}>
-            {sending ? "جارٍ الإرسال..." : "إرسال رابط استكمال البيانات"}
+            {sending ? t("supReg.sending") : t("supReg.send")}
           </Button>
         </>
       )}
 
       {supplier.registrationVerifiedAt && (
         <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
-          أكّد المورد بياناته بنفسه بتاريخ {fmtDate(supplier.registrationVerifiedAt)}
+          {t("supReg.verified", { date: fmtDate(supplier.registrationVerifiedAt) })}
         </p>
       )}
 
@@ -299,20 +306,22 @@ function RegistrationCard({
 
       {history && history.length > 0 && (
         <div className="pt-3 border-t border-border space-y-2">
-          <p className="text-xs text-muted-foreground font-semibold">سجل الروابط</p>
+          <p className="text-xs text-muted-foreground font-semibold">{t("supReg.linksLog")}</p>
           {history.slice(0, 5).map((r) => (
             <div key={r.id} className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">{fmtDate(r.createdAt)}</span>
               <span className="flex items-center gap-2">
                 {r.attempts > 0 && (
-                  <span className="text-red-600">{r.attempts} محاولة غير مطابقة</span>
+                  <span className="text-red-600">
+                    {t("supReg.mismatchAttempts", { n: r.attempts })}
+                  </span>
                 )}
                 <span
                   className={`inline-flex items-center px-2 py-0.5 rounded font-medium ${
                     REG_STATUS_STYLES[r.status] ?? "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {REG_STATUS_LABELS[r.status] ?? r.status}
+                  {REG_STATUS_LABEL_KEYS[r.status] ? t(REG_STATUS_LABEL_KEYS[r.status]) : r.status}
                 </span>
               </span>
             </div>
@@ -326,6 +335,7 @@ function RegistrationCard({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function SupplierDetailPage() {
+  const { t } = useLanguage();
   const { id } = useParams<{ id: string }>();
   const supplierId = parseInt(id, 10);
   const [, navigate] = useLocation();
@@ -417,7 +427,7 @@ export default function SupplierDetailPage() {
       },
       onError: (err: unknown) => {
         const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
+        setServerError(msg ?? t("supD.saveError"));
       },
     },
   });
@@ -451,7 +461,7 @@ export default function SupplierDetailPage() {
 
   const saveEdit = () => {
     if (selectedCats.size === 0) {
-      setServerError("يجب اختيار تصنيف واحد على الأقل");
+      setServerError(t("supD.needCategory"));
       return;
     }
     setServerError(null);
@@ -503,7 +513,7 @@ export default function SupplierDetailPage() {
       queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
       navigate("/suppliers");
     } catch {
-      setServerError("حدث خطأ في الاتصال بالخادم");
+      setServerError(t("supD.connError"));
       setConfirmDelete(false);
     } finally {
       setDeleting(false);
@@ -595,14 +605,15 @@ export default function SupplierDetailPage() {
         {confirmDelete && canDelete && (
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex items-center justify-between gap-4">
             <p className="text-sm text-destructive font-medium">
-              Delete <strong>{supplier.name}</strong>? This action cannot be undone.
+              {t("supD.deleteConfirm")} <strong>{supplier.name}</strong>
+              {t("supD.deleteWarn")}
             </p>
             <div className="flex gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>
                 Cancel
               </Button>
               <Button size="sm" variant="destructive" disabled={deleting} onClick={handleDelete}>
-                {deleting ? "Deleting..." : "Yes, Delete"}
+                {deleting ? t("supD.deleting") : t("supD.yesDelete")}
               </Button>
             </div>
           </div>
@@ -620,12 +631,12 @@ export default function SupplierDetailPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Info / Edit Form */}
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
-            <h2 className="font-semibold text-sm text-foreground">Contact Information</h2>
+            <h2 className="font-semibold text-sm text-foreground">{t("supD.contactInfo")}</h2>
 
             {editing ? (
               <div className="space-y-3">
                 <div className="space-y-1">
-                  <Label>Company Name *</Label>
+                  <Label>{t("supF.companyName")} *</Label>
                   <Input
                     value={String(form.name ?? "")}
                     onChange={(e) => upd("name", e.target.value)}
@@ -633,14 +644,14 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Contact Person</Label>
+                  <Label>{t("supF.contactPerson")}</Label>
                   <Input
                     value={String(form.contactPerson ?? "")}
                     onChange={(e) => upd("contactPerson", e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Email</Label>
+                  <Label>{t("supF.email")}</Label>
                   <Input
                     type="email"
                     value={String(form.email ?? "")}
@@ -648,21 +659,21 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Phone</Label>
+                  <Label>{t("supF.phone")}</Label>
                   <Input
                     value={String(form.phone ?? "")}
                     onChange={(e) => upd("phone", e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>Address</Label>
+                  <Label>{t("supF.address")}</Label>
                   <Input
                     value={String(form.address ?? "")}
                     onChange={(e) => upd("address", e.target.value)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>رقم السجل التجاري</Label>
+                  <Label>{t("supNew.commercialRegister")}</Label>
                   <Input
                     value={String(form.commercialRegister ?? "")}
                     onChange={(e) => upd("commercialRegister", e.target.value)}
@@ -670,7 +681,7 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>رقم التسجيل الضريبي</Label>
+                  <Label>{t("supNew.taxRegistration")}</Label>
                   <Input
                     value={String(form.taxRegistration ?? "")}
                     onChange={(e) => upd("taxRegistration", e.target.value)}
@@ -678,23 +689,23 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>اسم البنك</Label>
+                  <Label>{t("supNew.bankName")}</Label>
                   <BankCombobox
                     value={String(form.bankName ?? "")}
                     onChange={(v) => upd("bankName", v)}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>اسم صاحب الحساب</Label>
+                  <Label>{t("supNew.bankAccountHolder")}</Label>
                   <Input
                     value={String(form.bankAccountHolder ?? "")}
                     onChange={(e) => upd("bankAccountHolder", e.target.value)}
-                    placeholder="كما هو مسجَّل لدى البنك"
+                    placeholder={t("supNew.holderHint")}
                     dir="rtl"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>رقم الحساب البنكي</Label>
+                  <Label>{t("supNew.bankAccountNumber")}</Label>
                   <Input
                     value={String(form.bankAccountNumber ?? "")}
                     onChange={(e) => upd("bankAccountNumber", e.target.value)}
@@ -702,7 +713,7 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>رقم IBAN</Label>
+                  <Label>{t("supNew.iban")}</Label>
                   <Input
                     value={String(form.iban ?? "")}
                     onChange={(e) => upd("iban", e.target.value)}
@@ -710,7 +721,7 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>السويف كود (SWIFT/BIC)</Label>
+                  <Label>{t("supNew.swift")}</Label>
                   <Input
                     value={String(form.swiftCode ?? "")}
                     onChange={(e) => upd("swiftCode", e.target.value.toUpperCase())}
@@ -718,7 +729,7 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>اسم الفرع</Label>
+                  <Label>{t("supNew.bankBranch")}</Label>
                   <Input
                     value={String(form.bankBranch ?? "")}
                     onChange={(e) => upd("bankBranch", e.target.value)}
@@ -727,9 +738,9 @@ export default function SupplierDetailPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>
-                    Categories *{" "}
+                    {t("supF.categories")} *{" "}
                     <span className="text-muted-foreground font-normal text-xs">
-                      (يمكن اختيار أكثر من تصنيف)
+                      {t("supNew.multiHint")}
                     </span>
                   </Label>
                   <div className="flex flex-wrap gap-2">
@@ -757,14 +768,15 @@ export default function SupplierDetailPage() {
                     Distinct from the trade categories above; optional. */}
                 <div className="space-y-1.5">
                   <Label>
-                    تصنيفات البنود التي يورّدها{" "}
+                    {t("supD.itemCatsHeading")}{" "}
                     <span className="text-muted-foreground font-normal text-xs">
-                      (اختياري — لمعرفة مين يورّد بند من تصنيف معيّن)
+                      {t("supD.itemCatsHint")}
                     </span>
                   </Label>
+                  <p className="text-[11px] text-muted-foreground">{t("supD.itemCatsBody")}</p>
                   {itemCategories.length === 0 ? (
                     <div className="rounded border border-border p-3 text-xs text-muted-foreground">
-                      لا توجد تصنيفات بنود بعد
+                      {t("supD.noItemCats")}
                     </div>
                   ) : (
                     <div className="rounded border border-border">
@@ -776,7 +788,7 @@ export default function SupplierDetailPage() {
                         <input
                           value={itemCatSearch}
                           onChange={(e) => setItemCatSearch(e.target.value)}
-                          placeholder="ابحث في تصنيفات البنود..."
+                          placeholder={t("supReg.searchItemCats")}
                           className="h-8 w-full bg-transparent pr-7 pl-2 text-xs text-foreground outline-none"
                         />
                       </div>
@@ -794,7 +806,9 @@ export default function SupplierDetailPage() {
                                 key={c.id}
                                 type="button"
                                 onClick={() => toggleItemCat(c.id)}
-                                title={c.depth > 0 ? `تصنيف فرعي: ${c.name}` : c.name}
+                                title={
+                                  c.depth > 0 ? t("supD.subcatTitle", { name: c.name }) : c.name
+                                }
                                 className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                                   active
                                     ? "border-emerald-600 bg-emerald-600 text-white"
@@ -809,7 +823,7 @@ export default function SupplierDetailPage() {
                       </div>
                       {selectedItemCats.size > 0 && (
                         <div className="border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
-                          محدد: <b className="text-foreground">{selectedItemCats.size}</b> تصنيف
+                          {t("supD.selectedCount", { n: selectedItemCats.size })}
                         </div>
                       )}
                     </div>
@@ -835,9 +849,9 @@ export default function SupplierDetailPage() {
                       className="w-4 h-4 accent-primary"
                     />
                     <Label htmlFor="invoiceHasVat">
-                      فاتورته تحمل ض.ق.م — مورد مسجَّل
+                      {t("supD.vatReg")}
                       <span className="block text-xs text-muted-foreground font-normal">
-                        عند الإلغاء: كامل المبلغ مصروف بدون ضريبة مدخلات (غير مسجَّل)
+                        {t("supD.vatRegHint")}
                       </span>
                     </Label>
                   </div>
@@ -897,18 +911,40 @@ export default function SupplierDetailPage() {
                 {((supplier as SupplierWithItemCategories).itemCategories?.length ?? 0) > 0 && (
                   <div>
                     <p className="text-muted-foreground text-xs mb-1">
-                      تصنيفات البنود التي يورّدها
+                      {t("supD.itemCatsHeading")}
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => (
-                        <span
-                          key={c.id}
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700"
-                        >
-                          {c.name}
-                        </span>
-                      ))}
+                      {((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => {
+                        // The badge names the evidence, so the column is not a
+                        // mystery: quoted / purchase order / manual.
+                        const badge = c.ordered
+                          ? { label: t("sup.evidence.ordered"), cls: "bg-emerald-600 text-white" }
+                          : c.quoted
+                            ? { label: t("sup.evidence.quoted"), cls: "bg-sky-100 text-sky-800" }
+                            : c.manual
+                              ? {
+                                  label: t("sup.evidence.manual"),
+                                  cls: "bg-slate-200 text-slate-700",
+                                }
+                              : null;
+                        return (
+                          <span
+                            key={c.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700"
+                          >
+                            {c.name}
+                            {badge && (
+                              <span
+                                className={`rounded-full px-1.5 py-px text-[9px] font-semibold leading-none ${badge.cls}`}
+                              >
+                                {badge.label}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{t("supD.learnNote")}</p>
                   </div>
                 )}
                 <div>
@@ -924,7 +960,7 @@ export default function SupplierDetailPage() {
                   </span>
                   {supplier.invoiceHasVat === false && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 mt-0.5">
-                      مورد غير مسجَّل — بدون ضريبة (كامل المبلغ مصروف)
+                      {t("supD.unregistered")}
                     </span>
                   )}
                 </div>
@@ -933,13 +969,19 @@ export default function SupplierDetailPage() {
                 {(supplier.commercialRegister || supplier.taxRegistration) && (
                   <div className="pt-3 border-t border-border space-y-2">
                     <p className="text-muted-foreground text-xs font-semibold flex items-center gap-1.5">
-                      <FileText size={12} /> السجل التجاري والتسجيل الضريبي
+                      <FileText size={12} /> {t("supD.registryHeading")}
                     </p>
                     {supplier.commercialRegister && (
-                      <CopyField label="رقم السجل التجاري" value={supplier.commercialRegister} />
+                      <CopyField
+                        label={t("supNew.commercialRegister")}
+                        value={supplier.commercialRegister}
+                      />
                     )}
                     {supplier.taxRegistration && (
-                      <CopyField label="رقم التسجيل الضريبي" value={supplier.taxRegistration} />
+                      <CopyField
+                        label={t("supNew.taxRegistration")}
+                        value={supplier.taxRegistration}
+                      />
                     )}
                   </div>
                 )}
@@ -951,7 +993,7 @@ export default function SupplierDetailPage() {
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
             <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
               <Landmark size={15} className="text-muted-foreground" />
-              بيانات الدفع / الحساب البنكي
+              {t("supD.bankHeading")}
             </h2>
             {supplier.bankName ||
             supplier.bankAccountHolder ||
@@ -962,7 +1004,7 @@ export default function SupplierDetailPage() {
               <div className="space-y-3">
                 {supplier.bankName && (
                   <div>
-                    <p className="text-muted-foreground text-xs">اسم البنك</p>
+                    <p className="text-muted-foreground text-xs">{t("supD.bankName")}</p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <BankLogoByName name={supplier.bankName} />
                       <span className="text-foreground text-sm font-medium">
@@ -973,30 +1015,32 @@ export default function SupplierDetailPage() {
                 )}
                 {supplier.bankAccountHolder && (
                   <div>
-                    <p className="text-muted-foreground text-xs">اسم صاحب الحساب</p>
+                    <p className="text-muted-foreground text-xs">{t("supD.bankHolder")}</p>
                     <p className="text-foreground text-sm font-medium">
                       {supplier.bankAccountHolder}
                     </p>
                   </div>
                 )}
                 {supplier.bankAccountNumber && (
-                  <CopyField label="رقم الحساب البنكي" value={supplier.bankAccountNumber} ltr />
+                  <CopyField
+                    label={t("supNew.bankAccountNumber")}
+                    value={supplier.bankAccountNumber}
+                    ltr
+                  />
                 )}
-                {supplier.iban && <CopyField label="رقم IBAN" value={supplier.iban} ltr />}
+                {supplier.iban && <CopyField label={t("supNew.iban")} value={supplier.iban} ltr />}
                 {supplier.swiftCode && (
-                  <CopyField label="السويف كود (SWIFT/BIC)" value={supplier.swiftCode} ltr />
+                  <CopyField label={t("supNew.swift")} value={supplier.swiftCode} ltr />
                 )}
                 {supplier.bankBranch && (
                   <div>
-                    <p className="text-muted-foreground text-xs">اسم الفرع</p>
+                    <p className="text-muted-foreground text-xs">{t("supD.bankBranch")}</p>
                     <p className="text-foreground text-sm font-medium">{supplier.bankBranch}</p>
                   </div>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                لم تُسجَّل بيانات بنكية لهذا المورد بعد.
-              </p>
+              <p className="text-xs text-muted-foreground">{t("supD.noBank")}</p>
             )}
           </div>
 
@@ -1078,7 +1122,7 @@ export default function SupplierDetailPage() {
                 </div>
               </div>
             ) : (
-              <div className="text-muted-foreground text-xs">No score data yet</div>
+              <div className="text-muted-foreground text-xs">{t("supD.noScore")}</div>
             )}
           </div>
         </div>
@@ -1088,7 +1132,7 @@ export default function SupplierDetailPage() {
           <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/20">
             <div className="flex items-center gap-2">
               <FileText size={15} className="text-muted-foreground" />
-              <h2 className="font-semibold text-sm text-foreground">طلبات التسعير المرسلة</h2>
+              <h2 className="font-semibold text-sm text-foreground">{t("supD.rfqHeading")}</h2>
               {supplierRfqs.length > 0 && (
                 <span className="bg-primary/10 text-primary text-xs font-medium px-1.5 py-0.5 rounded">
                   {supplierRfqs.length}
@@ -1097,39 +1141,37 @@ export default function SupplierDetailPage() {
             </div>
             <Link href="/rfq">
               <a className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
-                كل الطلبات <ChevronRight size={13} />
+                {t("supD.allRequests")} <ChevronRight size={13} />
               </a>
             </Link>
           </div>
 
           {rfqsLoading ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">Loading...</div>
+            <div className="p-6 text-center text-muted-foreground text-sm">{t("supD.loading")}</div>
           ) : supplierRfqs.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              لم يُرسل لهذا المورد أي طلب تسعير بعد
-            </div>
+            <div className="p-8 text-center text-muted-foreground text-sm">{t("supD.noRfqs")}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-right">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      رقم الطلب
+                      {t("supD.col.requestNo")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      رقم العميل
+                      {t("supD.col.customerNo")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      الحالة
+                      {t("supD.col.status")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      الاستلام
+                      {t("supD.col.receipt")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      عرض سعر؟
+                      {t("supD.col.quoted")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      تاريخ الإرسال
+                      {t("supD.col.sentAt")}
                     </th>
                   </tr>
                 </thead>
@@ -1158,7 +1200,7 @@ export default function SupplierDetailPage() {
                       <td className="px-4 py-3 text-center">
                         {rfq.hasOffer ? (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                            ✓ نعم
+                            ✓ {t("supD.yes")}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
@@ -1180,7 +1222,7 @@ export default function SupplierDetailPage() {
           <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/20">
             <div className="flex items-center gap-2">
               <ShoppingCart size={15} className="text-muted-foreground" />
-              <h2 className="font-semibold text-sm text-foreground">أوامر الشراء</h2>
+              <h2 className="font-semibold text-sm text-foreground">{t("supD.poHeading")}</h2>
               {supplierPos.length > 0 && (
                 <span className="bg-primary/10 text-primary text-xs font-medium px-1.5 py-0.5 rounded">
                   {supplierPos.length}
@@ -1189,39 +1231,37 @@ export default function SupplierDetailPage() {
             </div>
             <Link href="/purchase-orders">
               <a className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
-                كل الأوامر <ChevronRight size={13} />
+                {t("supD.allOrders")} <ChevronRight size={13} />
               </a>
             </Link>
           </div>
 
           {posLoading ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">Loading...</div>
+            <div className="p-6 text-center text-muted-foreground text-sm">{t("supD.loading")}</div>
           ) : supplierPos.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              لا توجد أوامر شراء مرتبطة بهذا المورد
-            </div>
+            <div className="p-8 text-center text-muted-foreground text-sm">{t("supD.noPos")}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      رقم أمر الشراء
+                      {t("supD.col.poNo")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      رقم PO (العميل)
+                      {t("supD.col.customerPo")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      الحالة
+                      {t("supD.col.status")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      الاستلام
+                      {t("supD.col.receipt")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      عدد البنود
+                      {t("supD.col.itemCount")}
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                      تاريخ الإنشاء
+                      {t("supD.col.createdAt")}
                     </th>
                   </tr>
                 </thead>
@@ -1251,7 +1291,7 @@ export default function SupplierDetailPage() {
                         ) : (
                           <span
                             className={`inline-flex items-center gap-1 ${po.receipt.rejected > 0 ? "text-amber-700" : po.receipt.total > 0 && po.receipt.received === po.receipt.total ? "text-emerald-700" : "text-foreground"}`}
-                            title={`المستلم ${po.receipt.received} من ${po.receipt.total}${po.receipt.rejected > 0 ? ` (+ ${po.receipt.rejected} مرفوض)` : ""}`}
+                            title={`${t("supD.receivedTitle", { r: po.receipt.received, t: po.receipt.total })}${po.receipt.rejected > 0 ? t("supD.rejectedSuffix", { n: po.receipt.rejected }) : ""}`}
                           >
                             {po.receipt.total > 0 && po.receipt.received === po.receipt.total ? (
                               <CheckCircle className="h-3.5 w-3.5" />

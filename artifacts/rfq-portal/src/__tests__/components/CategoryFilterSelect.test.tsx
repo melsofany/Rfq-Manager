@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { CategoryFilterSelect } from "@/modules/users/pages/suppliers/CategoryFilterSelect";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const OPTIONS = [
   { id: 1, name: "كهرباء", parentId: null },
@@ -8,33 +9,37 @@ const OPTIONS = [
   { id: 3, name: "سباكة", parentId: null },
 ];
 
-describe("CategoryFilterSelect", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("shows «الكل» when nothing is selected, and the label always", () => {
-    render(
+// The component reads its own strings from the i18n dictionary now, so it needs
+// the provider. The default language is English — the operator asked for BOTH.
+function renderSelect(props: Partial<Parameters<typeof CategoryFilterSelect>[0]> = {}) {
+  return render(
+    <LanguageProvider>
       <CategoryFilterSelect
         label="التصنيف التجاري"
         options={OPTIONS}
         selectedLabel={null}
         onPick={vi.fn()}
         onClear={vi.fn()}
-      />,
-    );
+        {...props}
+      />
+    </LanguageProvider>,
+  );
+}
+
+describe("CategoryFilterSelect", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("shows the «all» label from the dictionary when nothing is selected", () => {
+    renderSelect();
     expect(screen.getByText("التصنيف التجاري")).toBeInTheDocument();
-    expect(screen.getByText("الكل")).toBeInTheDocument();
+    expect(screen.getByText("All")).toBeInTheDocument();
   });
 
   it("renders the whole catalogue as a compact dropdown, not a wall of chips", () => {
-    render(
-      <CategoryFilterSelect
-        label="التصنيف التجاري"
-        options={OPTIONS}
-        selectedLabel={null}
-        onPick={vi.fn()}
-        onClear={vi.fn()}
-      />,
-    );
+    renderSelect();
     // Closed: no option is in the DOM — that is the point of the change.
     expect(screen.queryByText("سباكة")).not.toBeInTheDocument();
 
@@ -46,15 +51,7 @@ describe("CategoryFilterSelect", () => {
 
   it("picks an option and closes", () => {
     const onPick = vi.fn();
-    render(
-      <CategoryFilterSelect
-        label="يورّد بنود"
-        options={OPTIONS}
-        selectedLabel={null}
-        onPick={onPick}
-        onClear={vi.fn()}
-      />,
-    );
+    renderSelect({ label: "يورّد بنود", onPick });
     fireEvent.click(screen.getByText("يورّد بنود"));
     fireEvent.click(screen.getByText("سباكة"));
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ id: 3, name: "سباكة" }));
@@ -62,32 +59,16 @@ describe("CategoryFilterSelect", () => {
   });
 
   it("filters the catalogue by the search box", () => {
-    render(
-      <CategoryFilterSelect
-        label="التصنيف التجاري"
-        options={OPTIONS}
-        selectedLabel={null}
-        onPick={vi.fn()}
-        onClear={vi.fn()}
-      />,
-    );
+    renderSelect();
     fireEvent.click(screen.getByText("التصنيف التجاري"));
-    fireEvent.change(screen.getByPlaceholderText("بحث..."), { target: { value: "سبا" } });
+    fireEvent.change(screen.getByPlaceholderText("Search…"), { target: { value: "سبا" } });
     expect(screen.getByText("سباكة")).toBeInTheDocument();
     expect(screen.queryByText("كهرباء")).not.toBeInTheDocument();
   });
 
   it("clears the selection through the inline X", () => {
     const onClear = vi.fn();
-    render(
-      <CategoryFilterSelect
-        label="التصنيف التجاري"
-        options={OPTIONS}
-        selectedLabel="كهرباء"
-        onPick={vi.fn()}
-        onClear={onClear}
-      />,
-    );
+    renderSelect({ selectedLabel: "كهرباء", onClear });
     // The selected value is shown on the trigger.
     expect(screen.getByText("كهرباء")).toBeInTheDocument();
     const trigger = screen.getByText("التصنيف التجاري").closest("button")!;
@@ -95,5 +76,13 @@ describe("CategoryFilterSelect", () => {
     const x = trigger.querySelector('[role="button"]') as HTMLElement;
     fireEvent.click(x);
     expect(onClear).toHaveBeenCalled();
+  });
+
+  it("renders the same control in Arabic when the language is Arabic", () => {
+    localStorage.setItem("rfq-lang", "ar");
+    renderSelect();
+    // «الكل» is the Arabic for the same key — proving the screen is bilingual.
+    expect(screen.getByText("الكل")).toBeInTheDocument();
+    expect(screen.queryByText("All")).not.toBeInTheDocument();
   });
 });
