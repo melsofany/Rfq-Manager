@@ -69,7 +69,13 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export function CategoryManagerDialog({ onClose }: { onClose: () => void }) {
+export function CategoryManagerDialog({
+  onClose,
+  variant = "dialog",
+}: {
+  onClose?: () => void;
+  variant?: "dialog" | "panel";
+}) {
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [report, setReport] = useState<ReportData | null>(null);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -333,33 +339,134 @@ export function CategoryManagerDialog({ onClose }: { onClose: () => void }) {
     );
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+  const isPanel = variant === "panel";
+  const body = (
+    <>
+      {!isPanel && (
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-foreground">إدارة تصنيفات الموردين</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X size={18} />
           </button>
         </div>
+      )}
 
-        {/* Add form */}
-        <form onSubmit={handleAdd} className="px-5 pt-4 pb-3 border-b border-border space-y-2">
+      {/* Add form */}
+      <form onSubmit={handleAdd} className="px-5 pt-4 pb-3 border-b border-border space-y-2">
+        <div className="flex gap-2">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="اسم التصنيف الجديد..."
+            className="h-9 text-sm flex-1"
+          />
+          <select
+            value={newParentId ?? ""}
+            onChange={(e) => setNewParentId(e.target.value ? Number(e.target.value) : null)}
+            className="h-9 text-xs bg-background border border-input rounded px-2 text-foreground"
+          >
+            <option value="">تصنيف رئيسي (بدون أب)</option>
+            {rows
+              .filter((r) => r.isActive && r.parentId == null)
+              .map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+          </select>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={busy || !newName.trim()}
+            className="gap-1.5 h-9"
+          >
+            <Plus size={14} /> إضافة
+          </Button>
+        </div>
+      </form>
+
+      {/* Toolbar */}
+      <div className="px-5 py-3 border-b border-border flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search
+            size={14}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث في التصنيفات..."
+            className="h-8 text-sm pr-7"
+          />
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showDeleted}
+            onChange={(e) => setShowDeleted(e.target.checked)}
+          />
+          إظهار المحذوف
+        </label>
+      </div>
+
+      {/* Report strip */}
+      {report && (
+        <div className="px-5 py-2 border-b border-border flex items-center gap-4 text-[11px] text-muted-foreground bg-muted/20">
+          <span className="flex items-center gap-1">
+            <BarChart3 size={12} /> الإجمالي:{" "}
+            <b className="text-foreground">{report.totals.active}</b>
+          </span>
+          <span>
+            بلا موردين: <b className="text-foreground">{report.totals.unused}</b>
+          </span>
+          <span className={report.totals.duplicateGroups > 0 ? "text-amber-600" : ""}>
+            مجموعات متشابهة: <b>{report.totals.duplicateGroups}</b>
+          </span>
+          {report.totals.deleted > 0 && (
+            <span>
+              محذوفة: <b>{report.totals.deleted}</b>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Tree */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 min-h-[200px]">
+        {error && (
+          <div className="flex items-center gap-1.5 text-xs text-destructive px-2 py-2">
+            <AlertCircle size={13} /> <span>{error}</span>
+          </div>
+        )}
+        {okMsg && (
+          <div className="flex items-center gap-1.5 text-xs text-green-600 px-2 py-2">
+            <Check size={13} /> <span>{okMsg}</span>
+          </div>
+        )}
+        {roots.length === 0 && !busy ? (
+          <p className="text-muted-foreground text-sm text-center py-8">لا توجد تصنيفات</p>
+        ) : (
+          roots.map((r) => renderRow(r, 0))
+        )}
+      </div>
+
+      {/* Merge confirmation */}
+      {mergeSource && (
+        <div className="px-5 py-3 border-t border-border bg-amber-50 dark:bg-amber-950/20">
+          <p className="text-xs text-foreground mb-2">
+            دمج «<b>{mergeSource.name}</b>» في تصنيف آخر — سيتم نقل كل الموردين والعلاقات، وإخفاء
+            التصنيف المصدر (قابل للاستعادة). اختر التصنيف الهدف:
+          </p>
           <div className="flex gap-2">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="اسم التصنيف الجديد..."
-              className="h-9 text-sm flex-1"
-            />
             <select
-              value={newParentId ?? ""}
-              onChange={(e) => setNewParentId(e.target.value ? Number(e.target.value) : null)}
-              className="h-9 text-xs bg-background border border-input rounded px-2 text-foreground"
+              id="merge-target"
+              className="h-8 text-xs bg-background border border-input rounded px-2 text-foreground flex-1"
+              defaultValue=""
             >
-              <option value="">تصنيف رئيسي (بدون أب)</option>
+              <option value="" disabled>
+                اختر التصنيف الهدف...
+              </option>
               {rows
-                .filter((r) => r.isActive && r.parentId == null)
+                .filter((r) => r.isActive && r.id !== mergeSource.id)
                 .map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
@@ -367,135 +474,53 @@ export function CategoryManagerDialog({ onClose }: { onClose: () => void }) {
                 ))}
             </select>
             <Button
-              type="submit"
               size="sm"
-              disabled={busy || !newName.trim()}
-              className="gap-1.5 h-9"
+              variant="destructive"
+              className="h-8"
+              disabled={busy}
+              onClick={() => {
+                const sel = document.getElementById("merge-target") as HTMLSelectElement | null;
+                const targetId = sel?.value ? Number(sel.value) : null;
+                const target = rows.find((r) => r.id === targetId);
+                if (target) doMerge(mergeSource, target);
+              }}
             >
-              <Plus size={14} /> إضافة
+              تأكيد الدمج
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8"
+              onClick={() => setMergeSource(null)}
+            >
+              إلغاء
             </Button>
           </div>
-        </form>
-
-        {/* Toolbar */}
-        <div className="px-5 py-3 border-b border-border flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search
-              size={14}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث في التصنيفات..."
-              className="h-8 text-sm pr-7"
-            />
-          </div>
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showDeleted}
-              onChange={(e) => setShowDeleted(e.target.checked)}
-            />
-            إظهار المحذوف
-          </label>
         </div>
+      )}
 
-        {/* Report strip */}
-        {report && (
-          <div className="px-5 py-2 border-b border-border flex items-center gap-4 text-[11px] text-muted-foreground bg-muted/20">
-            <span className="flex items-center gap-1">
-              <BarChart3 size={12} /> الإجمالي:{" "}
-              <b className="text-foreground">{report.totals.active}</b>
-            </span>
-            <span>
-              بلا موردين: <b className="text-foreground">{report.totals.unused}</b>
-            </span>
-            <span className={report.totals.duplicateGroups > 0 ? "text-amber-600" : ""}>
-              مجموعات متشابهة: <b>{report.totals.duplicateGroups}</b>
-            </span>
-            {report.totals.deleted > 0 && (
-              <span>
-                محذوفة: <b>{report.totals.deleted}</b>
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Tree */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 min-h-[200px]">
-          {error && (
-            <div className="flex items-center gap-1.5 text-xs text-destructive px-2 py-2">
-              <AlertCircle size={13} /> <span>{error}</span>
-            </div>
-          )}
-          {okMsg && (
-            <div className="flex items-center gap-1.5 text-xs text-green-600 px-2 py-2">
-              <Check size={13} /> <span>{okMsg}</span>
-            </div>
-          )}
-          {roots.length === 0 && !busy ? (
-            <p className="text-muted-foreground text-sm text-center py-8">لا توجد تصنيفات</p>
-          ) : (
-            roots.map((r) => renderRow(r, 0))
-          )}
-        </div>
-
-        {/* Merge confirmation */}
-        {mergeSource && (
-          <div className="px-5 py-3 border-t border-border bg-amber-50 dark:bg-amber-950/20">
-            <p className="text-xs text-foreground mb-2">
-              دمج «<b>{mergeSource.name}</b>» في تصنيف آخر — سيتم نقل كل الموردين والعلاقات، وإخفاء
-              التصنيف المصدر (قابل للاستعادة). اختر التصنيف الهدف:
-            </p>
-            <div className="flex gap-2">
-              <select
-                id="merge-target"
-                className="h-8 text-xs bg-background border border-input rounded px-2 text-foreground flex-1"
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  اختر التصنيف الهدف...
-                </option>
-                {rows
-                  .filter((r) => r.isActive && r.id !== mergeSource.id)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-              </select>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-8"
-                disabled={busy}
-                onClick={() => {
-                  const sel = document.getElementById("merge-target") as HTMLSelectElement | null;
-                  const targetId = sel?.value ? Number(sel.value) : null;
-                  const target = rows.find((r) => r.id === targetId);
-                  if (target) doMerge(mergeSource, target);
-                }}
-              >
-                تأكيد الدمج
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8"
-                onClick={() => setMergeSource(null)}
-              >
-                إلغاء
-              </Button>
-            </div>
-          </div>
-        )}
-
+      {!isPanel && (
         <div className="px-5 py-3 border-t border-border flex justify-end">
           <Button variant="outline" size="sm" onClick={onClose}>
             إغلاق
           </Button>
         </div>
+      )}
+    </>
+  );
+
+  if (isPanel) {
+    return (
+      <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        {body}
       </div>
     </div>
   );
