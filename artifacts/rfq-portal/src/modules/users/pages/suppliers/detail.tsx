@@ -37,6 +37,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
+// The supplier API returns the item-category links the supplier can SUPPLY
+// (not part of the generated Supplier type — the endpoints are outside the
+// OpenAPI spec, same pattern as receipts/deliveries/accounts).
+type SupplierWithItemCategories = {
+  itemCategories?: Array<{ id: number; name: string }>;
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
@@ -331,6 +338,18 @@ export default function SupplierDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<Record<string, string | boolean>>({});
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  // «المورد ده بيورّد إيه» — item categories the supplier can SUPPLY, distinct
+  // from its trade categories. Optional and independent.
+  const [selectedItemCats, setSelectedItemCats] = useState<Set<number>>(new Set());
+  const { data: itemCategories = [] } = useQuery<Array<{ id: number; name: string }>>({
+    queryKey: ["item-categories-for-supplier"],
+    queryFn: async () => {
+      const res = await fetch("/api/item-categories", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch item categories");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
   const [serverError, setServerError] = useState<string | null>(null);
 
   const { data: categories = [] } = useListCategories({
@@ -416,6 +435,9 @@ export default function SupplierDetailPage() {
       bankBranch: supplier.bankBranch ?? "",
     });
     setSelectedCats(new Set(parseCategories(supplier.category)));
+    setSelectedItemCats(
+      new Set(((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => c.id)),
+    );
     setServerError(null);
     setEditing(true);
   };
@@ -429,7 +451,20 @@ export default function SupplierDetailPage() {
     const category = Array.from(selectedCats).join(",");
     updateMutation.mutate({
       id: supplierId,
-      data: { ...form, category } as Parameters<typeof updateMutation.mutate>[0]["data"],
+      data: {
+        ...form,
+        category,
+        itemCategoryIds: Array.from(selectedItemCats),
+      } as Parameters<typeof updateMutation.mutate>[0]["data"],
+    });
+  };
+
+  const toggleItemCat = (id: number) => {
+    setSelectedItemCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
@@ -711,6 +746,39 @@ export default function SupplierDetailPage() {
                     })}
                   </div>
                 </div>
+                {/* «المورد ده بيورّد إيه» — item categories the supplier can SUPPLY.
+                    Distinct from the trade categories above; optional. */}
+                <div className="space-y-1.5">
+                  <Label>
+                    تصنيفات البنود التي يورّدها{" "}
+                    <span className="text-muted-foreground font-normal text-xs">
+                      (اختياري — لمعرفة مين يورّد بند من تصنيف معيّن)
+                    </span>
+                  </Label>
+                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto border border-border rounded p-2">
+                    {itemCategories.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">لا توجد تصنيفات بنود</span>
+                    ) : (
+                      itemCategories.map((c) => {
+                        const active = selectedItemCats.has(c.id);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleItemCat(c.id)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                              active
+                                ? "bg-emerald-600 text-white border-emerald-600"
+                                : "bg-muted text-muted-foreground border-border hover:border-emerald-500/50"
+                            }`}
+                          >
+                            {c.name}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2">
                     <input
@@ -790,6 +858,23 @@ export default function SupplierDetailPage() {
                     )}
                   </div>
                 </div>
+                {((supplier as SupplierWithItemCategories).itemCategories?.length ?? 0) > 0 && (
+                  <div>
+                    <p className="text-muted-foreground text-xs mb-1">
+                      تصنيفات البنود التي يورّدها
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {((supplier as SupplierWithItemCategories).itemCategories ?? []).map((c) => (
+                        <span
+                          key={c.id}
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700"
+                        >
+                          {c.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-muted-foreground text-xs">Status</p>
                   <span

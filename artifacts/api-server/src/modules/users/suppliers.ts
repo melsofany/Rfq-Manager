@@ -14,6 +14,7 @@ import {
   rfqTable,
   supplierCategoryLinksTable,
   supplierCategoriesTable,
+  itemCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -25,9 +26,14 @@ import {
   loadSupplierCategoryMap,
   saveSupplierCategoryLinks,
 } from "../../shared/supplier-category-links";
+import { descendantIds } from "../../shared/category-tree";
+import {
+  loadSupplierItemCategoryMap,
+  saveSupplierItemCategoryLinks,
+  suppliersForItemCategories,
+} from "../../shared/supplier-item-category-links";
 
 const router = Router();
-router.use("/suppliers", guardFor("/suppliers"));
 router.use("/suppliers", guardFor("/suppliers"));
 
 function toArray(cat: string | null | undefined): string[] {
@@ -626,25 +632,33 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const conditions = [];
   if (category) {
     // Filter through the LINK table — the authoritative relationship. A supplier
-    // matches when it is linked to a category with this exact name, OR to one of
-    // its direct subcategories: filtering on «كهرباء» must also list the suppliers
-    // filed under «كابلات» / «سلك» / …, so a parent is a superset of its children.
-    const parentIdsByName = db
-      .select({ id: supplierCategoriesTable.id })
-      .from(supplierCategoriesTable)
-      .where(eq(supplierCategoriesTable.name, category));
+    // matches when it is linked to a category with this name, OR to ANY category
+    // in that category's SUBTREE: filtering on «كهرباء» must list the suppliers
+    // filed under «كابلات» / «سلك» / … at ANY depth, so a parent is a superset of
+    // its whole subtree. The subtree is resolved in one read of the tree
+    // (`descendantIds`) rather than a fixed two-level join, which used to miss a
+    // grandchild (كهرباء ← Automation ← Encoders).
+    const allCategories = await db
+      .select({
+        id: supplierCategoriesTable.id,
+        name: supplierCategoriesTable.name,
+        parentId: supplierCategoriesTable.parentId,
+      })
+      .from(supplierCategoriesTable);
+    const rootIds = allCategories.filter((c) => c.name === category).map((c) => c.id);
+    const subtreeIds = new Set<number>();
+    for (const rootId of rootIds) {
+      for (const id of descendantIds(allCategories, rootId)) subtreeIds.add(id);
+    }
+    // No matching category at all → no supplier can match; return an empty set
+    // rather than dropping the filter (which would list EVERY supplier).
     const linkedSupplierIds = db
       .select({ supplierId: supplierCategoryLinksTable.supplierId })
       .from(supplierCategoryLinksTable)
-      .innerJoin(
-        supplierCategoriesTable,
-        eq(supplierCategoryLinksTable.categoryId, supplierCategoriesTable.id),
-      )
       .where(
-        or(
-          eq(supplierCategoriesTable.name, category),
-          inArray(supplierCategoriesTable.parentId, parentIdsByName),
-        ),
+        subtreeIds.size > 0
+          ? inArray(supplierCategoryLinksTable.categoryId, [...subtreeIds])
+          : sql`1 = 0`,
       );
     conditions.push(inArray(suppliersTable.id, linkedSupplierIds));
   }
@@ -665,16 +679,57 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   // Prefer the LINK table for the category list; fall back to the legacy text
   // for any supplier that has no links (pre-migration rows).
   const linkMap = await loadSupplierCategoryMap(suppliers.map((s) => s.id));
+  // Item-category links are ENRICHMENT — a failure (or an unconfigured table)
+  // must never fail the supplier list itself.
+  const itemMap = await loadSupplierItemCategoryMap(suppliers.map((s) => s.id)).catch(
+    () => new Map<number, Array<{ id: number; name: string }>>(),
+  );
   res.json(
     suppliers.map((s) => {
       const base = serializeSupplier(s);
+      const itemCategories = (itemMap.get(s.id) ?? []).map((c) => ({ id: c.id, name: c.name }));
       const links = linkMap.get(s.id);
-      if (!links || links.length === 0) return base;
+      if (!links || links.length === 0) return { ...base, itemCategories };
       const names = links.map((l) => l.name);
-      return { ...base, category: categoriesToStored(names), categories: names };
+      return { ...base, category: categoriesToStored(names), categories: names, itemCategories };
     }),
   );
 });
+
+/**
+ * Suppliers that can SUPPLY a given item category — «مين يقدر يورّد بند من
+ * تصنيف كابلات؟». Includes the category's whole subtree (a supplier linked to
+ * «كهرباء» can supply «كابلات»). Read-only.
+ */
+router.get(
+  "/suppliers/for-item-category/:categoryId",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const categoryId = parseInt(req.params.categoryId as string, 10);
+    if (!Number.isFinite(categoryId)) {
+      res.status(400).json({ error: "معرّف التصنيف غير صالح" });
+      return;
+    }
+    const all = await db
+      .select({
+        id: itemCategoriesTable.id,
+        name: itemCategoriesTable.name,
+        parentId: itemCategoriesTable.parentId,
+      })
+      .from(itemCategoriesTable);
+    const subtree = [...descendantIds(all, categoryId)];
+    const byCategory = await suppliersForItemCategories(subtree);
+    const supplierIds = [...new Set([...byCategory.values()].flat())];
+    const rows = supplierIds.length
+      ? await db.select().from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
+      : [];
+    res.json({
+      categoryId,
+      subtreeIds: subtree,
+      suppliers: rows.map((s) => ({ id: s.id, name: s.name, phone: s.phone, email: s.email })),
+    });
+  },
+);
 
 // قائمة تقييمات جميع الموردين دفعة واحدة
 router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => {
@@ -769,6 +824,18 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
   } catch (linkErr) {
     console.warn("supplier category link save failed (create)", supplier.id, linkErr);
   }
+  // Supplier ↔ ITEM-category links — «المورد ده بيورّد إيه». Optional; a create
+  // without them is valid, and a failure must never fail the create.
+  const itemCategoryIds = Array.isArray(req.body.itemCategoryIds)
+    ? (req.body.itemCategoryIds as Array<number | string>).map((v) => Number(v))
+    : undefined;
+  if (itemCategoryIds !== undefined) {
+    try {
+      await saveSupplierItemCategoryLinks(supplier.id, itemCategoryIds);
+    } catch (linkErr) {
+      console.warn("supplier item-category link save failed (create)", supplier.id, linkErr);
+    }
+  }
   res.status(201).json(serializeSupplier(supplier));
 });
 
@@ -780,7 +847,9 @@ router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  res.json(serializeSupplier(supplier));
+  const itemMap = await loadSupplierItemCategoryMap([id]);
+  const itemCategories = (itemMap.get(id) ?? []).map((c) => ({ id: c.id, name: c.name }));
+  res.json({ ...serializeSupplier(supplier), itemCategories });
 });
 
 router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
@@ -865,7 +934,21 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
       console.warn("supplier category link save failed (patch)", id, linkErr);
     }
   }
-  res.json(serializeSupplier(supplier));
+  // Supplier ↔ ITEM-category links. `itemCategoryIds: []` clears them; omitting
+  // the field leaves them untouched.
+  if (Array.isArray(req.body.itemCategoryIds)) {
+    try {
+      await saveSupplierItemCategoryLinks(
+        id,
+        (req.body.itemCategoryIds as Array<number | string>).map((v) => Number(v)),
+      );
+    } catch (linkErr) {
+      console.warn("supplier item-category link save failed (patch)", id, linkErr);
+    }
+  }
+  const itemMap = await loadSupplierItemCategoryMap([id]);
+  const itemCategories = (itemMap.get(id) ?? []).map((c) => ({ id: c.id, name: c.name }));
+  res.json({ ...serializeSupplier(supplier), itemCategories });
 });
 
 // Only admin or manager can delete a supplier

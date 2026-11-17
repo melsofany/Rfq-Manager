@@ -31,6 +31,12 @@ vi.mock("@workspace/db", () => {
     customerPoItemsTable: { _: "customerPoItems" },
     customerPosTable: { _: "customerPos" },
     rfqTable: { _: "rfq" },
+    itemCategoriesTable: { _: "itemCategories", id: "id", name: "name" },
+    supplierItemCategoryLinksTable: {
+      _: "supplierItemCategoryLinks",
+      supplierId: "supplier_id",
+      categoryId: "category_id",
+    },
   };
   function chainableThenable(rows: any): any {
     const api: any = {

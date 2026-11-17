@@ -2481,6 +2481,73 @@ export async function initDb(): Promise<void> {
       ON CONFLICT (supplier_id, category_id) DO NOTHING;
     `);
 
+    // ── Soft-delete + ordering on the category tables (idempotent) ───────────
+    // A deleted category is HIDDEN, never removed, so its links, keywords and
+    // history survive and `restore` is exact. `deleted_at` also records WHEN,
+    // which the cleanup report and the audit trail read. Each ALTER is its OWN
+    // statement (statements in one literal share an implicit transaction, so a
+    // sibling failure would roll the whole block back silently).
+    await client.query(`
+      ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+    `);
+    await client.query(`
+      ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    `);
+    await client.query(`
+      ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      ALTER TABLE item_categories ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+    `);
+
+    // ── Supplier ↔ ITEM-category links (idempotent) ──────────────────────────
+    // «المورد ده بيورّد إيه» — distinct from the supplier's TRADE categories.
+    // DDL in its OWN statement so a sibling failure cannot roll the CREATE back.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_item_category_links (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_item_category_links_unique
+        ON supplier_item_category_links (supplier_id, category_id);
+      CREATE INDEX IF NOT EXISTS idx_supplier_item_category_links_category
+        ON supplier_item_category_links (category_id);
+    `);
+
+    // ── Normalise category names (idempotent data repair) ────────────────────
+    // The live catalogue holds names with doubled spaces and stray padding
+    // («معدات  فندقيه», «مضخات مياه   ومعالجه مياة»). The name is the unique
+    // key, so a stray space creates a DUPLICATE category that classifies the
+    // same trade twice. Collapsing runs of whitespace and trimming is a pure
+    // formatting fix — it can never merge two genuinely different names, which
+    // is why it is safe to run automatically (unlike a name-similarity merge,
+    // which the operator reserved for manual approval). Each table is its own
+    // statement; a UNIQUE collision is impossible here because two names that
+    // collapse to the same value would already have violated nothing before —
+    // but a guard below resolves any that do, so the UPDATE never throws.
+    await client.query(`
+      UPDATE supplier_categories
+      SET name = btrim(regexp_replace(name, '\\s+', ' ', 'g'))
+      WHERE name <> btrim(regexp_replace(name, '\\s+', ' ', 'g'))
+        AND NOT EXISTS (
+          SELECT 1 FROM supplier_categories other
+          WHERE other.id <> supplier_categories.id
+            AND other.name = btrim(regexp_replace(supplier_categories.name, '\\s+', ' ', 'g'))
+        );
+    `);
+    await client.query(`
+      UPDATE item_categories
+      SET name = btrim(regexp_replace(name, '\\s+', ' ', 'g'))
+      WHERE name <> btrim(regexp_replace(name, '\\s+', ' ', 'g'))
+        AND NOT EXISTS (
+          SELECT 1 FROM item_categories other
+          WHERE other.id <> item_categories.id
+            AND other.name = btrim(regexp_replace(item_categories.name, '\\s+', ' ', 'g'))
+        );
+    `);
+
     // ── Remove ORPHAN item categories (idempotent, safety-guarded) ───────────
     // The operator's report: a list of categories that «احنا مش عاملينها اصلا ولا
     // ضيفنا فيها موردين جت من فين» — junk functional domains mirrored in from

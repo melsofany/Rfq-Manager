@@ -1,70 +1,161 @@
+/**
+ * Supplier trade categories — تصنيفات الموردين
+ *
+ * Routes (behind requireAuth):
+ *   GET    /categories                 — list (active by default; ?includeDeleted=1)
+ *   GET    /categories/report          — cleanup report (counts, unused, duplicates)
+ *   POST   /categories                 — create (admin/manager)
+ *   PATCH  /categories/:id             — rename / re-parent / reorder (admin/manager)
+ *   DELETE /categories/:id             — SOFT delete (admin/manager) — hidden, restorable
+ *   POST   /categories/:id/restore     — restore a soft-deleted category
+ *   POST   /categories/merge           — merge two categories (admin/manager, explicit)
+ *
+ * Design rules, each from a live defect:
+ *   • SOFT delete. A category with history is never removed — hiding it keeps
+ *     every link, keyword and audit row intact, and restore is exact.
+ *   • A name is normalised on write (trim + collapse whitespace) and compared by
+ *     `categoryKey`, so «معدات  فندقيه» and «معدات فندقيه» are ONE category.
+ *   • A merge is NEVER automatic. `POST /categories/merge` performs an explicit,
+ *     audited move of every relation; nothing here decides on name similarity.
+ *   • The parent cycle check uses `wouldCycle`, so a deep tree cannot loop.
+ */
 import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
-import { db } from "@workspace/db";
 import {
+  db,
   supplierCategoriesTable,
   supplierCategoryLinksTable,
   itemCategoriesTable,
+  auditLogTable,
 } from "@workspace/db";
-import { eq, asc, count, or, ilike, and, isNotNull } from "drizzle-orm";
-import { requireAuth } from "../../middlewares/auth";
+import { eq, asc, count, and, sql } from "drizzle-orm";
+import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
+import { canonicalCategoryName, categoryKey, wouldCycle } from "../../shared/category-tree";
+import { mergeSupplierCategories } from "../../shared/category-merge";
 
 const router = Router();
 router.use("/categories", guardFor("/categories"));
-router.use("/categories", guardFor("/categories"));
 
-router.get("/categories", requireAuth, async (_req, res): Promise<void> => {
+interface CategoryRow {
+  id: number;
+  name: string;
+  parentId: number | null;
+}
+
+function serialize(row: typeof supplierCategoriesTable.$inferSelect, supplierCount = 0) {
+  return {
+    id: row.id,
+    name: row.name,
+    parentId: row.parentId ?? null,
+    isActive: row.isActive,
+    deletedAt: row.deletedAt ?? null,
+    sortOrder: row.sortOrder,
+    supplierCount,
+  };
+}
+
+/** Supplier counts per category, batched (one query, no N+1). */
+async function loadSupplierCounts(): Promise<Map<number, number>> {
+  const rows = await db
+    .select({
+      categoryId: supplierCategoryLinksTable.categoryId,
+      n: count(),
+    })
+    .from(supplierCategoryLinksTable)
+    .groupBy(supplierCategoryLinksTable.categoryId);
+  return new Map(rows.map((r) => [r.categoryId, Number(r.n)]));
+}
+
+router.get("/categories", requireAuth, async (req, res): Promise<void> => {
+  const includeDeleted = String(req.query.includeDeleted ?? "") === "1";
   const rows = await db
     .select()
     .from(supplierCategoriesTable)
-    .orderBy(asc(supplierCategoriesTable.name));
-  res.json(rows.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null })));
+    .where(includeDeleted ? undefined : eq(supplierCategoriesTable.isActive, true))
+    .orderBy(asc(supplierCategoriesTable.sortOrder), asc(supplierCategoriesTable.name));
+  const counts = await loadSupplierCounts();
+  res.json(rows.map((r) => serialize(r, counts.get(r.id) ?? 0)));
 });
 
-router.post("/categories", async (req, res): Promise<void> => {
+/**
+ * Cleanup report — what an operator needs before tidying the catalogue:
+ * which categories are unused, which look like duplicates (same `categoryKey`),
+ * and the totals. Read-only; it NEVER merges or deletes anything.
+ */
+router.get("/categories/report", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db.select().from(supplierCategoriesTable);
+  const counts = await loadSupplierCounts();
+
+  const byKey = new Map<string, CategoryRow[]>();
+  for (const r of rows) {
+    const key = categoryKey(r.name);
+    const list = byKey.get(key) ?? [];
+    list.push({ id: r.id, name: r.name, parentId: r.parentId ?? null });
+    byKey.set(key, list);
+  }
+  const duplicates = [...byKey.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => ({ key: categoryKey(g[0].name), categories: g }));
+
+  const unused = rows
+    .filter((r) => r.isActive && (counts.get(r.id) ?? 0) === 0)
+    .map((r) => serialize(r, 0));
+
+  res.json({
+    totals: {
+      total: rows.length,
+      active: rows.filter((r) => r.isActive).length,
+      deleted: rows.filter((r) => !r.isActive).length,
+      unused: unused.length,
+      duplicateGroups: duplicates.length,
+    },
+    unused,
+    duplicates,
+  });
+});
+
+/** Create a category. The name is normalised; a duplicate key is refused. */
+router.post("/categories", requireRole("admin", "manager"), async (req, res): Promise<void> => {
   const { name, parentId } = req.body as { name?: string; parentId?: number | null };
   if (!name?.trim()) {
-    res.status(400).json({ error: "Name required" });
+    res.status(400).json({ error: "اسم التصنيف مطلوب" });
     return;
   }
-
+  const clean = canonicalCategoryName(name);
   const pId = parentId ? Number(parentId) : null;
-  if (pId) {
-    const [parent] = await db
-      .select()
-      .from(supplierCategoriesTable)
-      .where(eq(supplierCategoriesTable.id, pId));
-    if (!parent) {
-      res.status(400).json({ error: "Parent category not found" });
-      return;
-    }
-  }
 
-  const existing = await db
-    .select()
-    .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.name, name.trim()));
-  if (existing.length > 0) {
-    res.status(409).json({ error: "Category already exists" });
+  const all = await db
+    .select({
+      id: supplierCategoriesTable.id,
+      name: supplierCategoriesTable.name,
+      parentId: supplierCategoriesTable.parentId,
+    })
+    .from(supplierCategoriesTable);
+  if (pId != null && !all.some((c) => c.id === pId)) {
+    res.status(400).json({ error: "التصنيف الأب غير موجود" });
+    return;
+  }
+  const clash = all.find((c) => categoryKey(c.name) === categoryKey(clean));
+  if (clash) {
+    res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
     return;
   }
 
   const [row] = await db
     .insert(supplierCategoriesTable)
-    .values({ name: name.trim(), parentId: pId })
+    .values({ name: clean, parentId: pId })
     .returning();
-  // Mirror into the item categories ONLY when the name is already a CANONICAL
-  // item category (it carries a code). A free-text supplier-category spelling
-  // must never create a junk functional domain that classifies no item and owns
-  // no responsibility — the class of orphan the operator reported
-  // (`plumbing_sanitary_supplier` …). Best-effort: a mirror failure must never
-  // fail the supplier-category create.
+  // Mirror into the item catalogue ONLY when the name is already a CANONICAL
+  // item category (it carries a code). A free-text spelling must never create a
+  // junk functional domain that classifies no item and owns no responsibility.
   try {
     const canonical = await db
       .select({ id: itemCategoriesTable.id })
       .from(itemCategoriesTable)
-      .where(and(eq(itemCategoriesTable.name, row.name), isNotNull(itemCategoriesTable.code)))
+      .where(
+        and(eq(itemCategoriesTable.name, row.name), sql`${itemCategoriesTable.code} IS NOT NULL`),
+      )
       .limit(1);
     if (canonical.length > 0) {
       await db
@@ -75,123 +166,219 @@ router.post("/categories", async (req, res): Promise<void> => {
   } catch {
     // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
   }
-  res.status(201).json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
+  await db.insert(auditLogTable).values({
+    action: "supplier_category.created",
+    entityType: "supplier_category",
+    entityId: row.id,
+    employeeId: req.session.employeeId,
+    description: `Supplier category created: ${row.name}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.status(201).json(serialize(row, 0));
 });
 
-router.patch("/categories/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  const { name, parentId } = req.body as { name?: string; parentId?: number | null };
+router.patch(
+  "/categories/:id",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const id = parseInt(req.params.id as string, 10);
+    const { name, parentId, sortOrder } = req.body as {
+      name?: string;
+      parentId?: number | null;
+      sortOrder?: number;
+    };
 
-  const [current] = await db
-    .select()
-    .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.id, id));
-  if (!current) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
+    const [current] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, id));
+    if (!current) {
+      res.status(404).json({ error: "التصنيف غير موجود" });
+      return;
+    }
 
-  const newName = name !== undefined ? name.trim() : current.name;
-  if (!newName) {
-    res.status(400).json({ error: "Name required" });
-    return;
-  }
+    const newName = name !== undefined ? canonicalCategoryName(name) : current.name;
+    if (!newName) {
+      res.status(400).json({ error: "اسم التصنيف مطلوب" });
+      return;
+    }
+    const pId = parentId !== undefined ? (parentId ? Number(parentId) : null) : current.parentId;
 
-  const pId = parentId !== undefined ? (parentId ? Number(parentId) : null) : current.parentId;
-  if (pId === id) {
-    res.status(400).json({ error: "Category cannot be its own parent" });
-    return;
-  }
-  if (pId) {
-    // check circular reference
-    let curr: number | null = pId;
-    while (curr) {
-      if (curr === id) {
-        res.status(400).json({ error: "Circular parent reference not allowed" });
-        return;
+    const all = await db
+      .select({
+        id: supplierCategoriesTable.id,
+        name: supplierCategoriesTable.name,
+        parentId: supplierCategoriesTable.parentId,
+      })
+      .from(supplierCategoriesTable);
+    if (pId != null && !all.some((c) => c.id === pId)) {
+      res.status(400).json({ error: "التصنيف الأب غير موجود" });
+      return;
+    }
+    if (pId != null && wouldCycle(all, id, pId)) {
+      res.status(400).json({ error: "لا يمكن أن يصبح التصنيف تابعًا لنفسه أو لأحد أبنائه" });
+      return;
+    }
+    const clash = all.find((c) => c.id !== id && categoryKey(c.name) === categoryKey(newName));
+    if (clash) {
+      res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
+      return;
+    }
+
+    const updates: Record<string, unknown> = { name: newName, parentId: pId };
+    if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
+
+    const [row] = await db
+      .update(supplierCategoriesTable)
+      .set(updates)
+      .where(eq(supplierCategoriesTable.id, id))
+      .returning();
+    if (!row) {
+      res.status(404).json({ error: "التصنيف غير موجود" });
+      return;
+    }
+    // Keep the item categories in step with the supplier categories (the SAME
+    // list). The OLD name is the key — a rename moves the item category too.
+    if (newName !== current.name) {
+      try {
+        await db
+          .update(itemCategoriesTable)
+          .set({ name: row.name })
+          .where(eq(itemCategoriesTable.name, current.name));
+      } catch {
+        // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
       }
-      const [par] = await db
-        .select({ parentId: supplierCategoriesTable.parentId })
-        .from(supplierCategoriesTable)
-        .where(eq(supplierCategoriesTable.id, curr));
-      if (!par) break;
-      curr = par.parentId ?? null;
+      await rewriteSupplierCategoryName(current.name, row.name);
     }
-  }
+    await db.insert(auditLogTable).values({
+      action: "supplier_category.updated",
+      entityType: "supplier_category",
+      entityId: row.id,
+      employeeId: req.session.employeeId,
+      description: `Supplier category updated: ${current.name} → ${row.name}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json(serialize(row, 0));
+  },
+);
 
-  const existing = await db
-    .select()
-    .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.name, newName));
-  if (existing.length > 0 && existing[0].id !== id) {
-    res.status(409).json({ error: "Category already exists" });
-    return;
-  }
+/**
+ * SOFT delete — hide the category, never remove it. Every relation (links,
+ * keywords, history) is preserved so `restore` is exact. The guard that used to
+ * block a delete when suppliers were linked is GONE on purpose: soft delete
+ * cannot break a relation, so a used category is now deletable and restorable.
+ */
+router.delete(
+  "/categories/:id",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const id = parseInt(req.params.id as string, 10);
+    const [category] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, id));
+    if (!category) {
+      res.status(404).json({ error: "التصنيف غير موجود" });
+      return;
+    }
+    await db
+      .update(supplierCategoriesTable)
+      .set({ isActive: false, deletedAt: new Date() })
+      .where(eq(supplierCategoriesTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "supplier_category.soft_deleted",
+      entityType: "supplier_category",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Supplier category soft-deleted: ${category.name}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true, id, restored: false });
+  },
+);
 
-  const [row] = await db
-    .update(supplierCategoriesTable)
-    .set({ name: newName, parentId: pId })
-    .where(eq(supplierCategoriesTable.id, id))
-    .returning();
-  if (!row) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-  // Keep the item categories in step with the supplier categories (the SAME
-  // list). The OLD name is the key — a rename moves the item category too.
-  if (newName !== current.name) {
+/** Restore a soft-deleted category. The relations were never touched. */
+router.post(
+  "/categories/:id/restore",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const id = parseInt(req.params.id as string, 10);
+    const [category] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, id));
+    if (!category) {
+      res.status(404).json({ error: "التصنيف غير موجود" });
+      return;
+    }
+    await db
+      .update(supplierCategoriesTable)
+      .set({ isActive: true, deletedAt: null })
+      .where(eq(supplierCategoriesTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "supplier_category.restored",
+      entityType: "supplier_category",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Supplier category restored: ${category.name}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true, id, restored: true });
+  },
+);
+
+/**
+ * Merge two categories — EXPLICIT, admin/manager only, never automatic. Every
+ * relation moves to the target and the source is soft-deleted. Audited with the
+ * full before/after so the change is explainable later.
+ */
+router.post(
+  "/categories/merge",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const { sourceId, targetId } = req.body as { sourceId?: number; targetId?: number };
+    const src = Number(sourceId);
+    const dst = Number(targetId);
+    if (!Number.isInteger(src) || !Number.isInteger(dst)) {
+      res.status(400).json({ error: "sourceId و targetId مطلوبان" });
+      return;
+    }
+    if (src === dst) {
+      res.status(400).json({ error: "لا يمكن دمج التصنيف مع نفسه" });
+      return;
+    }
+    const [srcRow] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, src));
+    const [dstRow] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, dst));
+    if (!srcRow || !dstRow) {
+      res.status(404).json({ error: "أحد التصنيفين غير موجود" });
+      return;
+    }
     try {
-      await db
-        .update(itemCategoriesTable)
-        .set({ name: row.name })
-        .where(eq(itemCategoriesTable.name, current.name));
-    } catch {
-      // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
+      const result = await mergeSupplierCategories(src, dst, req.session.employeeId ?? null);
+      await db.insert(auditLogTable).values({
+        action: "supplier_category.merged",
+        entityType: "supplier_category",
+        entityId: dst,
+        employeeId: req.session.employeeId,
+        description: `Merged supplier category «${srcRow.name}» (#${src}) into «${dstRow.name}» (#${dst}); links moved: ${result.movedLinks}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+      res.json({ ok: true, ...result, sourceName: srcRow.name, targetName: dstRow.name });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
     }
-    await rewriteSupplierCategoryName(current.name, row.name);
-  }
-  res.json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
-});
-
-router.delete("/categories/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-
-  const [category] = await db
-    .select()
-    .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.id, id));
-  if (!category) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  // Check if category has subcategories
-  const [{ subCount }] = await db
-    .select({ subCount: count() })
-    .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.parentId, id));
-  if (subCount > 0) {
-    res.status(409).json({ error: `Cannot delete: category has ${subCount} sub-category(ies)` });
-    return;
-  }
-
-  // Guard via the LINK table (the authoritative relationship). The legacy text
-  // is kept in step, but the link count is what decides — a supplier linked to
-  // this category blocks the delete regardless of the stored spelling.
-  const [{ supplierCount }] = await db
-    .select({ supplierCount: count() })
-    .from(supplierCategoryLinksTable)
-    .where(eq(supplierCategoryLinksTable.categoryId, id));
-
-  if (supplierCount > 0) {
-    res
-      .status(409)
-      .json({ error: `Cannot delete: ${supplierCount} supplier(s) use this category` });
-    return;
-  }
-
-  await db.delete(supplierCategoriesTable).where(eq(supplierCategoriesTable.id, id));
-  res.status(204).end();
-});
+  },
+);
 
 export default router;

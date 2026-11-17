@@ -27,9 +27,9 @@ import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
+import { mergeItemCategories } from "../../shared/category-merge";
 
 const router = Router();
-router.use("/item-categories", guardFor("/item-categories"));
 router.use("/item-categories", guardFor("/item-categories"));
 router.use("/employees", guardFor("/employees"));
 
@@ -66,6 +66,7 @@ function serializeCategory(c: typeof itemCategoriesTable.$inferSelect, aliases: 
     kind: c.kind,
     parentId: c.parentId,
     isActive: c.isActive,
+    deletedAt: c.deletedAt ?? null,
     sortOrder: c.sortOrder,
     aliases,
   };
@@ -244,16 +245,14 @@ router.delete("/item-categories/:id/keywords/:keywordId", async (req, res): Prom
 // that equality; a `brand` is metadata; an inactive row is retired. The rows stay
 // in `item_categories` — items keep their category and ownership still resolves
 // to the domain — they are simply not offered as trade categories.
-router.get("/item-categories", requireAuth, async (_req, res): Promise<void> => {
+router.get("/item-categories", requireAuth, async (req, res): Promise<void> => {
+  const includeDeleted = String(req.query.includeDeleted ?? "") === "1";
+  const conditions = [sql`coalesce(${itemCategoriesTable.kind}, 'functional') = 'functional'`];
+  if (!includeDeleted) conditions.push(eq(itemCategoriesTable.isActive, true));
   const rows = await db
     .select()
     .from(itemCategoriesTable)
-    .where(
-      and(
-        eq(itemCategoriesTable.isActive, true),
-        sql`coalesce(${itemCategoriesTable.kind}, 'functional') = 'functional'`,
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(asc(itemCategoriesTable.sortOrder), asc(itemCategoriesTable.name));
   const aliases = await loadAliases();
   res.json(rows.map((c) => serializeCategory(c, aliases.get(c.id) ?? [])));
@@ -449,6 +448,14 @@ async function saveAliases(categoryId: number, raw: unknown): Promise<string[]> 
   return (await loadAliases()).get(categoryId) ?? [];
 }
 
+/**
+ * SOFT delete — hide the category, never remove it. A hard delete used to
+ * cascade `employee_categories` away and set every item's `category_id` to NULL,
+ * so an accidental delete silently unclassified thousands of items and lost the
+ * owner coverage. Hiding keeps every relation, keyword and history row intact,
+ * so `restore` is exact. Guarded by admin/manager (the route mounts a guard
+ * upstream; the role check is explicit here).
+ */
 router.delete("/item-categories/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const [row] = await db
@@ -459,15 +466,16 @@ router.delete("/item-categories/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  // employee_categories cascade-delete; rfq_item_assignments.category_id is
-  // ON DELETE SET NULL, so an item's assignment survives as "unclassified".
-  await db.delete(itemCategoriesTable).where(eq(itemCategoriesTable.id, id));
-  // Deleting the item category must not leave `/suppliers` listing a name the
-  // item side no longer has — unless a supplier still links to it, in which case
-  // the link is a real trade and the row stays. Best-effort.
+  await db
+    .update(itemCategoriesTable)
+    .set({ isActive: false, deletedAt: new Date() })
+    .where(eq(itemCategoriesTable.id, id));
+  // The trade catalogue mirrors the item catalogue; hide the matching trade row
+  // too, but ONLY while no supplier links to it (a linked trade must stay).
   try {
     await db
-      .delete(supplierCategoriesTable)
+      .update(supplierCategoriesTable)
+      .set({ isActive: false, deletedAt: new Date() })
       .where(
         and(
           eq(supplierCategoriesTable.name, row.name),
@@ -477,7 +485,99 @@ router.delete("/item-categories/:id", async (req, res): Promise<void> => {
   } catch {
     // best-effort — the next boot reconciles
   }
-  res.status(204).end();
+  await db.insert(auditLogTable).values({
+    action: "item_category.soft_deleted",
+    entityType: "item_category",
+    entityId: id,
+    employeeId: req.session.employeeId,
+    description: `Item category soft-deleted: ${row.name}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json({ ok: true, id, restored: false });
+});
+
+/** Restore a soft-deleted item category. The relations were never touched. */
+router.post("/item-categories/:id/restore", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const [row] = await db
+    .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.id, id));
+  if (!row) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  await db
+    .update(itemCategoriesTable)
+    .set({ isActive: true, deletedAt: null })
+    .where(eq(itemCategoriesTable.id, id));
+  try {
+    await db
+      .update(supplierCategoriesTable)
+      .set({ isActive: true, deletedAt: null })
+      .where(eq(supplierCategoriesTable.name, row.name));
+  } catch {
+    // best-effort
+  }
+  await db.insert(auditLogTable).values({
+    action: "item_category.restored",
+    entityType: "item_category",
+    entityId: id,
+    employeeId: req.session.employeeId,
+    description: `Item category restored: ${row.name}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json({ ok: true, id, restored: true });
+});
+
+/**
+ * Merge two ITEM categories — EXPLICIT and audited, never automatic. Every
+ * relation (items, owners, keywords, aliases, subcategories, classification
+ * memory, supplier-item links) moves to the target; the source is soft-deleted.
+ * Admin/manager only, exactly like the supplier-category merge.
+ */
+router.post("/item-categories/merge", async (req, res): Promise<void> => {
+  const role = req.session.role;
+  if (role !== "admin" && role !== "manager") {
+    res.status(403).json({ error: "دمج التصنيفات متاح للمدير أو الأدمن فقط" });
+    return;
+  }
+  const { sourceId, targetId } = req.body as { sourceId?: number; targetId?: number };
+  const src = Number(sourceId);
+  const dst = Number(targetId);
+  if (!Number.isInteger(src) || !Number.isInteger(dst) || src === dst) {
+    res.status(400).json({ error: "sourceId و targetId مطلوبان ويجب أن يكونا مختلفين" });
+    return;
+  }
+  const [srcRow] = await db
+    .select()
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.id, src));
+  const [dstRow] = await db
+    .select()
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.id, dst));
+  if (!srcRow || !dstRow) {
+    res.status(404).json({ error: "أحد التصنيفين غير موجود" });
+    return;
+  }
+  try {
+    const result = await mergeItemCategories(src, dst, req.session.employeeId ?? null);
+    await db.insert(auditLogTable).values({
+      action: "item_category.merged",
+      entityType: "item_category",
+      entityId: dst,
+      employeeId: req.session.employeeId,
+      description: `Merged item category «${srcRow.name}» (#${src}) into «${dstRow.name}» (#${dst})`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true, ...result, sourceName: srcRow.name, targetName: dstRow.name });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
 });
 
 // ── Owners of a category ────────────────────────────────────────────────────
