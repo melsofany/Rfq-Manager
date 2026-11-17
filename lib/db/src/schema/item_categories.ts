@@ -47,6 +47,10 @@ export const itemCategoriesTable = pgTable("item_categories", {
   // categories and brands.
   parentId: integer("parent_id"),
   isActive: boolean("is_active").notNull().default(true),
+  // Soft delete — a hidden category keeps every relation, keyword and audit
+  // row, so `restore` is exact. A hard delete used to cascade the owners away
+  // and NULL every item's category.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

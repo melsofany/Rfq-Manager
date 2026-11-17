@@ -35,6 +35,12 @@ vi.mock("@workspace/db", () => {
     customerPoItemsTable: { _: "customerPoItems" },
     customerPosTable: { _: "customerPos" },
     rfqTable: { _: "rfq" },
+    itemCategoriesTable: { _: "itemCategories", id: "id", name: "name" },
+    supplierItemCategoryLinksTable: {
+      _: "supplierItemCategoryLinks",
+      supplierId: "supplier_id",
+      categoryId: "category_id",
+    },
   };
 
   // A row that carries every field the routes serialize.
