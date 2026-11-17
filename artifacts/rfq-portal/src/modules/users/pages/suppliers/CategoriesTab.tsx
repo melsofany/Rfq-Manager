@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useListCategories, getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { Boxes, Search, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { orderCategoryTree } from "@/lib/category-tree";
-import { CategoryManagerDialog } from "./CategoryManagerDialog";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { TradeCategoryManager } from "./TradeCategoryManager";
 
 interface ItemCategoryRow {
   id: number;
@@ -14,7 +14,34 @@ interface ItemCategoryRow {
   code?: string | null;
 }
 
-function CatalogueList({
+/** One card per catalogue: the same header, body and spacing for both. */
+function CatalogueCard({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-border bg-card">
+      <header className="border-b border-border px-4 py-3">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          {icon}
+          {title}
+        </h2>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** Read-only list (used for the trade catalogue when the viewer cannot manage it, and for the item catalogue). */
+function ReadOnlyList({
   rows,
   emptyText,
 }: {
@@ -22,17 +49,16 @@ function CatalogueList({
   emptyText: string;
 }) {
   if (rows.length === 0)
-    return <p className="px-4 py-6 text-center text-xs text-muted-foreground">{emptyText}</p>;
+    return <p className="py-10 text-center text-sm text-muted-foreground">{emptyText}</p>;
   return (
-    <ul className="divide-y divide-border">
+    <ul className="py-1">
       {rows.map((c) => (
         <li
           key={c.id}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-foreground"
-          style={{ paddingRight: 16 + c.depth * 20 }}
+          className="border-b border-border py-2 pe-4 text-sm last:border-0"
+          style={{ paddingInlineStart: 16 + c.depth * 24 }}
         >
-          <span className={c.depth > 0 ? "text-muted-foreground" : "font-medium"}>
-            {c.depth > 0 ? "↳ " : ""}
+          <span className={c.depth > 0 ? "text-muted-foreground" : "font-semibold text-foreground"}>
             {c.name}
           </span>
         </li>
@@ -42,17 +68,13 @@ function CatalogueList({
 }
 
 /**
- * «التصنيفات» — a tab of its own.
+ * «التصنيفات» — the catalogue screen.
  *
- * The list screen used to carry the whole catalogue as two walls of chips
- * (fifty-plus buttons each), which the operator rejected as «مشوّهة وتشتت
- * النظر». The catalogue now lives here, where there is room to read it, and the
- * list screen keeps a compact searchable filter instead.
- *
- * Two catalogues, deliberately side by side because they answer different
- * questions:
- *   • التصنيفات التجارية — how we GROUP suppliers (what a supplier trades in).
- *   • تصنيفات البنود — what a supplier can SUPPLY (item level).
+ * Two catalogues with different purposes, shown as two cards with the same
+ * structure so the difference is about content, not layout:
+ *   • التصنيفات التجارية — how we GROUP suppliers. Managed here (admin/manager).
+ *   • تصنيفات البنود — what a supplier can SUPPLY. Learned automatically from
+ *     quotes and purchase orders, so it is read-only here.
  */
 export function CategoriesTab({ canManage }: { canManage: boolean }) {
   const { t } = useLanguage();
@@ -82,61 +104,54 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
   const orderedTrade = useMemo(() => orderCategoryTree(tradeCategories), [tradeCategories]);
 
   return (
-    <div className="space-y-6 px-4 py-4 sm:px-6">
+    <div className="space-y-4 px-4 py-4 sm:px-6">
       <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
-        <Tag size={16} className="mt-0.5 shrink-0 text-primary" />
+        <Tag size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
         <div className="text-xs leading-relaxed text-muted-foreground">
           <p className="font-medium text-foreground">{t("sup.cat.kind.title")}</p>
           <p>{t("sup.cat.kind.body")}</p>
         </div>
       </div>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-foreground">{t("sup.cat.trade.heading")}</h2>
-        <p className="text-xs text-muted-foreground">
-          {canManage ? t("sup.cat.trade.manage") : t("sup.cat.trade.viewOnly")}
-        </p>
+      <CatalogueCard
+        icon={<Tag size={14} className="text-primary" aria-hidden />}
+        title={t("sup.cat.trade.heading")}
+        description={canManage ? t("sup.cat.trade.manage") : t("sup.cat.trade.viewOnly")}
+      >
         {canManage ? (
-          <CategoryManagerDialog variant="panel" />
+          <TradeCategoryManager />
         ) : (
-          <div className="rounded-lg border border-border bg-card">
-            <CatalogueList rows={orderedTrade} emptyText={t("sup.cat.empty")} />
-          </div>
+          <ReadOnlyList rows={orderedTrade} emptyText={t("sup.cat.empty")} />
         )}
-      </section>
+      </CatalogueCard>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <Boxes size={15} className="text-emerald-600" />
-            {t("sup.cat.item.heading")}
-          </h2>
-          <div className="relative w-56">
+      <CatalogueCard
+        icon={<Boxes size={14} className="text-emerald-600" aria-hidden />}
+        title={t("sup.cat.item.heading")}
+        description={t("sup.cat.learnHint")}
+      >
+        <div className="border-b border-border px-4 py-3">
+          <div className="relative max-w-xs">
             <Search
               size={14}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground"
             />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("sup.cat.item.search")}
-              className="h-8 pr-7 text-sm"
+              aria-label={t("sup.cat.item.search")}
+              className="h-8 pr-8 text-sm"
             />
           </div>
         </div>
-
-        <p className="text-xs text-muted-foreground">{t("sup.cat.learnHint")}</p>
-
-        <div className="rounded-lg border border-border bg-card">
-          {isLoading ? (
-            <p className="px-4 py-6 text-center text-xs text-muted-foreground">
-              {t("sup.loading")}
-            </p>
-          ) : (
-            <CatalogueList rows={orderedItem} emptyText={t("sup.cat.empty")} />
-          )}
-        </div>
-      </section>
+        {isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">{t("sup.loading")}</p>
+        ) : (
+          <ReadOnlyList rows={orderedItem} emptyText={t("sup.cat.empty")} />
+        )}
+      </CatalogueCard>
     </div>
   );
 }

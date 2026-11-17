@@ -1,4 +1,5 @@
 import { orderCategoryTree } from "@/lib/category-tree";
+import { TradeCategoryPicker } from "./TradeCategoryPicker";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
@@ -743,26 +744,11 @@ export default function SupplierDetailPage() {
                       {t("supNew.multiHint")}
                     </span>
                   </Label>
-                  <div className="flex flex-wrap gap-2">
-                    {orderCategoryTree(mergedCategories).map((c) => {
-                      const active = selectedCats.has(c.name);
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => toggleCat(c.name)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
-                            active
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {c.depth > 0 ? "↳ " : ""}
-                          {c.name}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <TradeCategoryPicker
+                    options={mergedCategories}
+                    selected={Array.from(selectedCats)}
+                    onToggle={toggleCat}
+                  />
                 </div>
                 {/* «المورد ده بيورّد إيه» — item categories the supplier can SUPPLY.
                     Distinct from the trade categories above; optional. */}
@@ -892,7 +878,9 @@ export default function SupplierDetailPage() {
                   </div>
                 )}
                 <div>
-                  <p className="text-muted-foreground text-xs mb-1">Categories</p>
+                  <p className="text-muted-foreground text-xs mb-1">
+                    {t("supF.categories")} ({supplierCategories.length})
+                  </p>
                   <div className="flex flex-wrap gap-1">
                     {supplierCategories.length > 0 ? (
                       supplierCategories.map((cat) => (
