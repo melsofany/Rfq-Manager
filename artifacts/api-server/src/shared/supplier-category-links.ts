@@ -12,18 +12,27 @@
  */
 import { db, supplierCategoryLinksTable, supplierCategoriesTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
+import { canonicalCategoryName } from "./category-tree";
 
 export interface SupplierCategoryRef {
   id: number;
   name: string;
 }
 
-/** Trim + drop empties + de-duplicate (case-insensitive, first spelling wins). */
+/**
+ * Canonicalise + drop empties + de-duplicate (first spelling wins).
+ *
+ * Canonicalisation is not cosmetic here: the catalogue's uniqueness index is on
+ * the NORMALISED name, and the live duplicate defect was a stray space creating
+ * a second row for one trade («معدات  فندقيه» beside «معدات فندقيه»). Trimming
+ * and collapsing runs of whitespace is exactly what the index enforces, so a
+ * caller cannot hand it a spelling the database will treat as a new category.
+ */
 export function normalizeCategoryNames(names: string[] | null | undefined): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of names ?? []) {
-    const name = String(raw ?? "").trim();
+    const name = canonicalCategoryName(String(raw ?? ""));
     if (!name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;

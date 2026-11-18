@@ -33,6 +33,7 @@ import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import { canonicalCategoryName, categoryKey, wouldCycle } from "../../shared/category-tree";
 import { mergeSupplierCategories } from "../../shared/category-merge";
+import { findActiveTwin } from "../../shared/category-dedupe";
 
 const router = Router();
 router.use("/categories", guardFor("/categories"));
@@ -312,6 +313,18 @@ router.post(
       .where(eq(supplierCategoriesTable.id, id));
     if (!category) {
       res.status(404).json({ error: "التصنيف غير موجود" });
+      return;
+    }
+    // The uniqueness index is on the NORMALISED name, so restoring a retired
+    // duplicate while its twin is still active would violate it and surface as
+    // an opaque 500. Refuse with the real reason: the two names are one trade,
+    // and the operator should merge them instead (which is the confirmed flow).
+    const twin = await findActiveTwin(supplierCategoriesTable, category.name, id);
+    if (twin) {
+      res.status(409).json({
+        error: `يوجد تصنيف آخر بنفس الاسم: «${twin.name}» — استخدم «دمج» لضمّه إليه`,
+        existingId: twin.id,
+      });
       return;
     }
     await db

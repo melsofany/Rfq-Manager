@@ -28,7 +28,8 @@ import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import { mergeItemCategories } from "../../shared/category-merge";
-import { findCategoryClash } from "../../shared/category-tree";
+import { canonicalCategoryName, findCategoryClash } from "../../shared/category-tree";
+import { findActiveTwin } from "../../shared/category-dedupe";
 
 const router = Router();
 router.use("/item-categories", guardFor("/item-categories"));
@@ -315,7 +316,10 @@ router.post("/item-categories", async (req, res): Promise<void> => {
   // mirror failure must never fail the create — the next boot reconciles.
   if (kindValue === "functional") {
     try {
-      await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+      await db
+        .insert(supplierCategoriesTable)
+        .values({ name: canonicalCategoryName(row.name) })
+        .onConflictDoNothing();
     } catch {
       // best-effort
     }
@@ -416,7 +420,10 @@ router.patch("/item-categories/:id", async (req, res): Promise<void> => {
   try {
     const nowTrade = (row.kind ?? "functional") === "functional" && row.isActive;
     if (nowTrade) {
-      await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+      await db
+        .insert(supplierCategoriesTable)
+        .values({ name: canonicalCategoryName(row.name) })
+        .onConflictDoNothing();
     } else {
       await db
         .delete(supplierCategoriesTable)
@@ -514,6 +521,17 @@ router.post("/item-categories/:id/restore", async (req, res): Promise<void> => {
     .where(eq(itemCategoriesTable.id, id));
   if (!row) {
     res.status(404).json({ error: "Not found" });
+    return;
+  }
+  // Same guard as the supplier side: the unique index is on the NORMALISED
+  // name, so restoring a retired duplicate whose twin is still active would be
+  // rejected by the index and read as a server error. Say what to do instead.
+  const twin = await findActiveTwin(itemCategoriesTable, row.name, id);
+  if (twin) {
+    res.status(409).json({
+      error: `يوجد تصنيف آخر بنفس الاسم: «${twin.name}» — استخدم «دمج» لضمّه إليه`,
+      existingId: twin.id,
+    });
     return;
   }
   await db
