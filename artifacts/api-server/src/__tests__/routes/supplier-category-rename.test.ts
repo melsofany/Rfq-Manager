@@ -78,9 +78,12 @@ const dbMock: any = {
         });
       }
       if (table === supplierCategoryLinksTable) {
-        // The delete guard now counts from the LINK table.
-        return chainable([{ supplierCount: 0 }], {
+        // The delete guard counts from the LINK table; the reparent warning
+        // groups the same table by category.
+        const counts = [{ categoryId: 1, n: 0 }];
+        return chainable(counts, {
           where: vi.fn(() => chainable([{ supplierCount: 0 }])),
+          groupBy: vi.fn(() => chainable(counts)),
         });
       }
       if (table === itemCategoriesTable) {

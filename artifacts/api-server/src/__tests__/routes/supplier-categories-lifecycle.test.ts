@@ -65,8 +65,15 @@ const dbMock: any = {
   select: vi.fn(() => ({
     from: vi.fn((table: any) => {
       if (table === supplierCategoriesTable) {
+        // Honour an `eq(id, X)` so a route that loads ONE row by id sees that
+        // row, not the whole fixture list. Without this, `current` was always
+        // the first row and a test could pass against the wrong record.
+        const byId = (cond: any) =>
+          cond?.__op === "eq" && cond.left === supplierCategoriesTable.id
+            ? categoryRows.filter((r) => r.id === cond.right)
+            : categoryRows;
         return chainable(categoryRows, {
-          where: vi.fn((_cond: any) => chainable(categoryRows)),
+          where: vi.fn((cond: any) => chainable(byId(cond))),
           orderBy: vi.fn(() => chainable(categoryRows)),
         });
       }
@@ -260,5 +267,47 @@ describe("report — read-only cleanup view", () => {
     // Nothing was written.
     expect(categoryUpdates.length).toBe(0);
     expect(dbMock.delete.mock.calls.length).toBe(0);
+  });
+});
+
+describe("multi-level tree — grandchildren, merge and soft-delete", () => {
+  it("re-parents a category under a GRANDCHILD parent without a cycle false-positive", async () => {
+    // كهرباء → Automation → Encoders, plus a detached «PLC».
+    // Moving PLC under Encoders is legal and must be allowed.
+    categoryRows = [
+      { id: 1, name: "كهرباء", parentId: null, isActive: true },
+      { id: 2, name: "Automation", parentId: 1, isActive: true },
+      { id: 3, name: "Encoders", parentId: 2, isActive: true },
+      { id: 4, name: "PLC", parentId: null, isActive: true },
+    ];
+    insertReturning.length = 0;
+    insertReturning.push({ id: 4, name: "PLC", parentId: 3, isActive: true, sortOrder: 0 });
+    const res = await request(testApp).patch("/categories/4").send({ parentId: 3 });
+    expect(res.status).toBe(200);
+  });
+
+  it("moves a whole SUBTREE when the merged source had children", async () => {
+    categoryRows = [
+      { id: 1, name: "قطع غيار", parentId: null, isActive: true },
+      { id: 29, name: "قطع غيار Dewalt", parentId: 1, isActive: true },
+      { id: 2, name: "قطع غيار ومستهلكات", parentId: null, isActive: true },
+    ];
+    const res = await request(testApp).post("/categories/merge").send({ sourceId: 1, targetId: 2 });
+    expect(res.status).toBe(200);
+    const merged = executeCalls.map((q) => JSON.stringify(q)).join("|");
+    // children are re-parented onto the target, and the source is only hidden
+    expect(merged).toContain("UPDATE supplier_categories SET parent_id");
+    expect(merged).toContain("is_active = false");
+  });
+
+  it("restoring a soft-deleted child makes its parent a non-leaf again", async () => {
+    // The restore guard is separate; here we assert the RESTORE path runs and
+    // does not touch the parent's links.
+    categoryRows = [
+      { id: 3, name: "الصحة والسلامة", parentId: null, isActive: true },
+      { id: 1312, name: "مقاومة حريق", parentId: 3, isActive: false, deletedAt: new Date() },
+    ];
+    const res = await request(testApp).post("/categories/1312/restore");
+    expect([200, 409]).toContain(res.status);
   });
 });

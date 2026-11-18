@@ -27,13 +27,26 @@ import {
   supplierCategoryLinksTable,
   itemCategoriesTable,
   auditLogTable,
+  suppliersTable,
 } from "@workspace/db";
 import { eq, asc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
-import { canonicalCategoryName, categoryKey, wouldCycle } from "../../shared/category-tree";
+import {
+  canonicalCategoryName,
+  categoryKey,
+  descendantIds,
+  nonLeafHolders,
+  redundantParentLinks,
+  wouldCycle,
+} from "../../shared/category-tree";
 import { mergeSupplierCategories } from "../../shared/category-merge";
 import { findActiveTwin } from "../../shared/category-dedupe";
+import {
+  isReviewPlaceholder,
+  moveOrphansToPlaceholder,
+  pruneEmptyReviewPlaceholders,
+} from "../../shared/category-placeholder";
 
 const router = Router();
 router.use("/categories", guardFor("/categories"));
@@ -116,6 +129,215 @@ router.get("/categories/report", requireAuth, async (_req, res): Promise<void> =
   });
 });
 
+/**
+ * READ-ONLY: the categories that are NOT leaves but still hold suppliers — the
+ * list the operator must re-file by hand before the leaf-only rule is fully
+ * satisfied. Nothing is moved or deleted here: an automatic re-file would
+ * silently change which trade a supplier belongs to, and the operator asked
+ * explicitly that no assignment change without review.
+ */
+router.get("/categories/parent-assignments", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db.select().from(supplierCategoriesTable);
+  const live = rows.filter((r) => r.deletedAt == null);
+  const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+  const liveIds = new Set(nodes.map((n) => n.id));
+
+  const links = await db
+    .select({
+      categoryId: supplierCategoryLinksTable.categoryId,
+      supplierId: supplierCategoryLinksTable.supplierId,
+      supplierName: suppliersTable.name,
+    })
+    .from(supplierCategoryLinksTable)
+    .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
+
+  const holders = new Map<number, Array<{ id: number; name: string }>>();
+  for (const l of links) {
+    const list = holders.get(l.categoryId) ?? [];
+    list.push({ id: l.supplierId, name: l.supplierName });
+    holders.set(l.categoryId, list);
+  }
+
+  // The placeholder is a WORKING STATE, not a category to review — it must not
+  // appear in its own report.
+  const groups = nonLeafHolders(nodes, holders, liveIds).filter(
+    (g) => !isReviewPlaceholder(g.name),
+  );
+
+  // The PROVABLE half: a supplier filed under a grouping category AND under one
+  // of its descendants. Filtering the tree already reaches him through the
+  // subtree, so the parent link is redundant and can be dropped with no loss.
+  const allLinks = await db
+    .select({
+      supplierId: supplierCategoryLinksTable.supplierId,
+      categoryId: supplierCategoryLinksTable.categoryId,
+    })
+    .from(supplierCategoryLinksTable);
+  const nameById = new Map(nodes.map((n) => [n.id, n.name]));
+  const supplierNameById = new Map<number, string>();
+  for (const l of links) supplierNameById.set(l.supplierId, l.supplierName);
+  const redundant = redundantParentLinks(nodes, allLinks).map((l) => {
+    const sub = descendantIds(nodes, l.categoryId);
+    const keptOn = allLinks
+      .filter(
+        (x) =>
+          x.supplierId === l.supplierId && x.categoryId !== l.categoryId && sub.has(x.categoryId),
+      )
+      .map((x) => nameById.get(x.categoryId) ?? `#${x.categoryId}`);
+    return {
+      supplierId: l.supplierId,
+      supplierName: supplierNameById.get(l.supplierId) ?? `#${l.supplierId}`,
+      categoryId: l.categoryId,
+      categoryName: nameById.get(l.categoryId) ?? `#${l.categoryId}`,
+      keptOn,
+    };
+  });
+
+  const redundantByCategory = new Map<number, number>();
+  for (const r of redundant) {
+    redundantByCategory.set(r.categoryId, (redundantByCategory.get(r.categoryId) ?? 0) + 1);
+  }
+
+  // The «يحتاج للمراجعة» placeholders: the suppliers waiting to be re-filed.
+  // This is the operator's actual to-do list once the cleanup has run.
+  const placeholders = nodes
+    .filter((n) => isReviewPlaceholder(n.name))
+    .map((n) => ({
+      id: n.id,
+      parentId: n.parentId ?? null,
+      parentName: n.parentId != null ? (nameById.get(n.parentId) ?? null) : null,
+      holderCount: (holders.get(n.id) ?? []).length,
+      holders: holders.get(n.id) ?? [],
+    }))
+    .filter((p) => p.holderCount > 0);
+
+  res.json({
+    totals: {
+      categoriesWithSuppliers: groups.length,
+      suppliersToRefile: groups.reduce((n, g) => n + g.holderCount, 0),
+      redundantLinks: redundant.length,
+      onlyOnParent: groups.reduce((n, g) => n + g.holderCount, 0) - redundant.length,
+    },
+    groups: groups.map((g) => ({ ...g, redundantCount: redundantByCategory.get(g.id) ?? 0 })),
+    redundant,
+    placeholders,
+  });
+});
+
+/**
+ * Remove ONLY the provable redundant parent links (see `redundantParentLinks`).
+ * A supplier filed under a grouping category AND one of its descendants keeps
+ * the descendant link; the parent link adds nothing and is dropped. A supplier
+ * filed under the grouping category ALONE is never touched — nobody knows which
+ * leaf his trade belongs to, so the operator re-files him by hand.
+ */
+router.post(
+  "/categories/parent-assignments/cleanup",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const rows = await db.select().from(supplierCategoriesTable);
+    const live = rows.filter((r) => r.deletedAt == null);
+    const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+    const liveIds = new Set(nodes.map((n) => n.id));
+
+    const allLinks = await db
+      .select({
+        supplierId: supplierCategoryLinksTable.supplierId,
+        categoryId: supplierCategoryLinksTable.categoryId,
+        supplierName: suppliersTable.name,
+      })
+      .from(supplierCategoryLinksTable)
+      .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
+
+    const links = allLinks.map((l) => ({ supplierId: l.supplierId, categoryId: l.categoryId }));
+
+    // 1) Drop the provable redundant parent links.
+    const redundant = redundantParentLinks(nodes, links);
+    const nameById = new Map(nodes.map((n) => [n.id, n.name]));
+    const removedBySupplier = new Map<number, Set<number>>();
+    for (const l of redundant) {
+      const set = removedBySupplier.get(l.supplierId) ?? new Set<number>();
+      set.add(l.categoryId);
+      removedBySupplier.set(l.supplierId, set);
+    }
+    const survivingNames = new Map<number, string[]>();
+    for (const [supplierId, removed] of removedBySupplier) {
+      const names = links
+        .filter((x) => x.supplierId === supplierId && !removed.has(x.categoryId))
+        .map((x) => nameById.get(x.categoryId))
+        .filter((n): n is string => Boolean(n));
+      survivingNames.set(supplierId, names);
+    }
+
+    if (redundant.length > 0) {
+      await db.transaction(async (tx) => {
+        for (const l of redundant) {
+          await tx
+            .delete(supplierCategoryLinksTable)
+            .where(
+              and(
+                eq(supplierCategoryLinksTable.supplierId, l.supplierId),
+                eq(supplierCategoryLinksTable.categoryId, l.categoryId),
+              ),
+            );
+        }
+        // The free-text mirror on `suppliers.category` is a comma-joined name
+        // list; leaving it stale would make the list show a category the link no
+        // longer holds. Rewrite it from the SURVIVING links.
+        for (const [supplierId, names] of survivingNames) {
+          await tx
+            .update(suppliersTable)
+            .set({ category: names.join(",") })
+            .where(eq(suppliersTable.id, supplierId));
+        }
+        await tx.insert(auditLogTable).values({
+          action: "supplier_category.parent_links_cleaned",
+          entityType: "supplier_category",
+          employeeId: req.session.employeeId,
+          description: `Removed ${redundant.length} redundant parent-category supplier link(s)`,
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        });
+      });
+    }
+
+    // 2) Move every supplier who is STILL on a grouping category ALONE into that
+    //    category's «يحتاج للمراجعة» placeholder leaf. Recompute the holders from
+    //    the links that survive step 1, so a supplier just cleaned up is not
+    //    moved as well.
+    const removedKeys = new Set(redundant.map((l) => `${l.supplierId}:${l.categoryId}`));
+    const survivingLinks = links.filter((l) => !removedKeys.has(`${l.supplierId}:${l.categoryId}`));
+    const holders = new Map<number, Array<{ id: number; name: string }>>();
+    for (const l of allLinks) {
+      if (removedKeys.has(`${l.supplierId}:${l.categoryId}`)) continue;
+      const list = holders.get(l.categoryId) ?? [];
+      list.push({ id: l.supplierId, name: l.supplierName });
+      holders.set(l.categoryId, list);
+    }
+    const groups = nonLeafHolders(nodes, holders, liveIds).filter(
+      (g) => !isReviewPlaceholder(g.name),
+    );
+
+    let moved = 0;
+    for (const g of groups) {
+      moved += await moveOrphansToPlaceholder(g.id, g.name, g.holders);
+    }
+
+    // 3) A placeholder that now holds nothing (its suppliers were all re-filed)
+    //    is removed. Runs even when nothing moved, so a placeholder emptied by
+    //    hand disappears on the next run.
+    const pruned = await pruneEmptyReviewPlaceholders();
+
+    res.json({
+      ok: true,
+      removed: redundant.length,
+      moved,
+      pruned,
+      remaining: survivingLinks.length,
+    });
+  },
+);
+
 /** Create a category. The name is normalised; a duplicate key is refused. */
 router.post("/categories", requireRole("admin", "manager"), async (req, res): Promise<void> => {
   const { name, parentId } = req.body as { name?: string; parentId?: number | null };
@@ -137,7 +359,9 @@ router.post("/categories", requireRole("admin", "manager"), async (req, res): Pr
     res.status(400).json({ error: "التصنيف الأب غير موجود" });
     return;
   }
-  const clash = all.find((c) => categoryKey(c.name) === categoryKey(clean));
+  const clash = all.find(
+    (c) => (c.parentId ?? null) === pId && categoryKey(c.name) === categoryKey(clean),
+  );
   if (clash) {
     res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
     return;
@@ -221,11 +445,24 @@ router.patch(
       res.status(400).json({ error: "لا يمكن أن يصبح التصنيف تابعًا لنفسه أو لأحد أبنائه" });
       return;
     }
-    const clash = all.find((c) => c.id !== id && categoryKey(c.name) === categoryKey(newName));
+    // Uniqueness is per PARENT: the same name may exist under another branch.
+    const clash = all.find(
+      (c) =>
+        c.id !== id && (c.parentId ?? null) === pId && categoryKey(c.name) === categoryKey(newName),
+    );
     if (clash) {
       res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
       return;
     }
+
+    // REPARENTING must not lose data: every supplier link follows by id, so
+    // nothing is rewritten here. The move CAN leave this category a non-leaf
+    // that still holds suppliers (it already has children), which the leaf-only
+    // rule must eventually resolve. We never move those suppliers — the operator
+    // reviews them — but the response SAYS so, so the state is not silent.
+    const suppliersOnCategory = (await loadSupplierCounts()).get(id) ?? 0;
+    const hasChildren = all.some((c) => c.id !== id && c.parentId === id);
+    const becomesNonLeaf = suppliersOnCategory > 0 && hasChildren;
 
     const updates: Record<string, unknown> = { name: newName, parentId: pId };
     if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
@@ -261,7 +498,20 @@ router.patch(
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
-    res.json(serialize(row, 0));
+    res.json({
+      ...serialize(row, suppliersOnCategory),
+      // Present only when the move creates a state the leaf-only rule must
+      // eventually resolve. Informational: nothing was moved or deleted.
+      ...(becomesNonLeaf
+        ? {
+            reviewNeeded: {
+              suppliersOnCategory,
+              reason:
+                "التصنيف أصبح رئيسيًا وعليه موردون — أعد إسنادهم لتصنيف فرعي (لم يتم تغيير أي ارتباط تلقائيًا)",
+            },
+          }
+        : {}),
+    });
   },
 );
 
@@ -319,7 +569,12 @@ router.post(
     // duplicate while its twin is still active would violate it and surface as
     // an opaque 500. Refuse with the real reason: the two names are one trade,
     // and the operator should merge them instead (which is the confirmed flow).
-    const twin = await findActiveTwin(supplierCategoriesTable, category.name, id);
+    const twin = await findActiveTwin(
+      supplierCategoriesTable,
+      category.name,
+      id,
+      category.parentId ?? null,
+    );
     if (twin) {
       res.status(409).json({
         error: `يوجد تصنيف آخر بنفس الاسم: «${twin.name}» — استخدم «دمج» لضمّه إليه`,

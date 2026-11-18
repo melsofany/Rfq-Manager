@@ -1061,6 +1061,23 @@ const translations: Record<Lang, Record<string, string>> = {
     "sup.cm.deletedLabel": "Deleted",
     "sup.pick.selected": "{n} selected",
     "sup.pick.none": "No trade category selected yet",
+    "sup.pick.parentBadge": "group",
+    "sup.cat.review.title": "Categories that need review",
+    "sup.cat.review.body":
+      "These categories have sub-categories, so a supplier should not be filed under them directly. Nothing was changed automatically — re-file these suppliers onto a sub-category.",
+    "sup.cat.review.holders": "{n} suppliers",
+    "sup.cat.review.redundant": "{n} redundant",
+    "sup.cat.review.split":
+      "{redundant} of them are filed on a sub-category as well (the parent link is redundant and can be removed safely); {only} are on the parent only and need your review.",
+    "sup.cat.review.clean": "Remove the redundant links",
+    "sup.cat.review.confirm":
+      "Remove {n} redundant parent-category link(s)? Suppliers filed on the parent ONLY are not touched.",
+    "sup.cat.review.cleaned": "Removed {n} link(s).",
+    "sup.cat.review.cleanFailed": "The cleanup failed — nothing was changed.",
+    "sup.cat.review.todoTitle": "Waiting to be re-filed (يحتاج للمراجعة)",
+    "sup.cat.review.placeholder": "يحتاج للمراجعة",
+    "sup.pick.parentDisabled":
+      "A group category cannot hold a supplier — pick one of its sub-categories",
     "sup.cm.showSuppliers": "Suppliers",
     "sup.cm.hideSuppliers": "Hide suppliers",
     "sup.cm.noSuppliersHere": "No suppliers in this category yet",
@@ -2272,6 +2289,22 @@ const translations: Record<Lang, Record<string, string>> = {
     "sup.cm.deletedLabel": "محذوفة",
     "sup.pick.selected": "{n} محدد",
     "sup.pick.none": "لم يُختر تصنيف تجاري بعد",
+    "sup.pick.parentBadge": "رئيسي",
+    "sup.cat.review.title": "تصنيفات تحتاج مراجعة",
+    "sup.cat.review.body":
+      "هذه تصنيفات رئيسية لها تصنيفات فرعية، فلا يصح إسناد مورد عليها مباشرة. لم يتم تغيير أي ارتباط تلقائيًا — أعد إسناد هؤلاء الموردين لتصنيف فرعي.",
+    "sup.cat.review.holders": "{n} مورد",
+    "sup.cat.review.redundant": "{n} مكرر",
+    "sup.cat.review.split":
+      "{redundant} منهم على تصنيف فرعي أيضًا (رابط التصنيف الرئيسي مكرر ويمكن حذفه بأمان)، و{only} على التصنيف الرئيسي فقط ويحتاجون مراجعتك.",
+    "sup.cat.review.clean": "حذف الروابط المكررة",
+    "sup.cat.review.confirm":
+      "حذف {n} رابطًا مكررًا للتصنيف الرئيسي؟ الموردون على التصنيف الرئيسي وحده لن يُمسّوا.",
+    "sup.cat.review.cleaned": "تم حذف {n} رابطًا.",
+    "sup.cat.review.cleanFailed": "فشل التنظيف — لم يتغيّر شيء.",
+    "sup.cat.review.todoTitle": "بانتظار إعادة الإسناد (يحتاج للمراجعة)",
+    "sup.cat.review.placeholder": "يحتاج للمراجعة",
+    "sup.pick.parentDisabled": "تصنيف رئيسي له فروع — اختر أحد تصنيفاته الفرعية",
     "sup.cm.showSuppliers": "الموردون",
     "sup.cm.hideSuppliers": "إخفاء الموردين",
     "sup.cm.noSuppliersHere": "لا يوجد موردون في هذا التصنيف بعد",

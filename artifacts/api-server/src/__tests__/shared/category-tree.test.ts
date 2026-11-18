@@ -1,164 +1,160 @@
 import { describe, it, expect } from "vitest";
 import {
-  categoryKey,
-  canonicalCategoryName,
-  descendantIds,
-  wouldCycle,
-  flattenTree,
   categoryPath,
-  type CategoryNode,
-  findCategoryClash,
+  descendantIds,
+  flattenTree,
+  isLeaf,
+  leafCategoryIds,
+  nonLeafHolders,
+  redundantParentLinks,
 } from "../../shared/category-tree";
 
 /**
- * The tree rules the whole catalogue depends on. Each guard reproduces a live
- * defect: a stray space that created a duplicate category, a parent filter that
- * missed a grandchild, and a re-parent that could close a loop.
+ * The live shape measured on production: three parents hold suppliers directly
+ * (كهرباء 79, الصحة والسلامة ومقاومة الحريق 42, أدوات النظافة 6), and
+ * «قطع غيار» has grandchildren. These fixtures mirror it.
  */
-describe("categoryKey — the ONE comparison key", () => {
-  it("folds doubled and stray whitespace so «معدات  فندقيه» == «معدات فندقيه»", () => {
-    // The live catalogue held «معدات  فندقيه» (two spaces) beside the same name
-    // with one space — two categories for one trade.
-    expect(categoryKey("معدات  فندقيه")).toBe(categoryKey("معدات فندقيه"));
-    expect(categoryKey("  مضخات مياه   ومعالجه مياة ")).toBe(
-      categoryKey("مضخات مياه ومعالجه مياة"),
-    );
+const nodes = [
+  { id: 1, name: "كهرباء", parentId: null },
+  { id: 13, name: "بطاريات UPS", parentId: 1 },
+  { id: 14, name: "إضاءة", parentId: 1 },
+  { id: 1311, name: "قطع غيار", parentId: null },
+  { id: 29, name: "قطع غيار Dewalt", parentId: 1311 },
+  { id: 433, name: "قطع غيار lowara", parentId: 1311 },
+  { id: 3, name: "الصحة والسلامة", parentId: null },
+  { id: 1312, name: "مقاومة حريق", parentId: 3 },
+];
+
+describe("isLeaf — the only kind a supplier may be filed under", () => {
+  it("a parent with children is NOT a leaf", () => {
+    expect(isLeaf(nodes, 1)).toBe(false);
+    expect(isLeaf(nodes, 1311)).toBe(false);
   });
 
-  it("folds Arabic spelling variants (hamza / taa marbuta / yaa)", () => {
-    expect(categoryKey("إضاءة")).toBe(categoryKey("اضاءه"));
-    expect(categoryKey("مقاومة")).toBe(categoryKey("مقاومه"));
+  it("a childless category IS a leaf", () => {
+    expect(isLeaf(nodes, 13)).toBe(true);
+    expect(isLeaf(nodes, 433)).toBe(true);
   });
 
-  it("folds Latin case and punctuation", () => {
-    expect(categoryKey("ELEC")).toBe(categoryKey("elec"));
-    expect(categoryKey("3M   Schotch")).toBe(categoryKey("3m schotch"));
-  });
-
-  it("keeps genuinely different names apart", () => {
-    expect(categoryKey("كابلات")).not.toBe(categoryKey("كونتاكتورات"));
-    expect(categoryKey("CABLE 50 MM")).not.toBe(categoryKey("CABLE 70 MM"));
-  });
-
-  it("returns an empty key for null/empty input", () => {
-    expect(categoryKey(null)).toBe("");
-    expect(categoryKey("   ")).toBe("");
-  });
-});
-
-describe("canonicalCategoryName — the display form persisted on write", () => {
-  it("trims and collapses whitespace runs to one space", () => {
-    expect(canonicalCategoryName("  معدات   فندقيه  ")).toBe("معدات فندقيه");
+  it("a RETIRED child does not make its parent unusable", () => {
+    // 1312 is the only child of 3; retiring it must make 3 a leaf again,
+    // otherwise a soft-deleted leaf permanently blocks filing under the parent.
+    const liveIds = new Set([1, 13, 14, 1311, 29, 433, 3]);
+    expect(isLeaf(nodes, 3)).toBe(false);
+    expect(isLeaf(nodes, 3, liveIds)).toBe(true);
   });
 });
 
-describe("descendantIds — the whole subtree, not just the direct children", () => {
-  const nodes: CategoryNode[] = [
-    { id: 1, name: "كهرباء", parentId: null },
-    { id: 2, name: "Automation", parentId: 1 },
-    { id: 3, name: "Encoders", parentId: 2 },
-    { id: 4, name: "كابلات", parentId: 1 },
-    { id: 5, name: "أجهزة", parentId: null },
-  ];
-
-  it("includes the node AND every node below it at any depth", () => {
-    // The live defect: filtering on «كهرباء» missed «Encoders» (a grandchild).
-    expect([...descendantIds(nodes, 1)].sort()).toEqual([1, 2, 3, 4]);
+describe("leafCategoryIds", () => {
+  it("excludes every category that has a child", () => {
+    const leaves = leafCategoryIds(nodes);
+    expect([...leaves].sort((a, b) => a - b)).toEqual([13, 14, 29, 433, 1312]);
   });
 
-  it("returns only the node itself for a leaf", () => {
-    expect([...descendantIds(nodes, 3)]).toEqual([3]);
+  it("honours the live filter", () => {
+    const leaves = leafCategoryIds(nodes, new Set([1, 13, 14, 1311, 29, 433, 3]));
+    expect(leaves.has(3)).toBe(true);
+  });
+});
+
+describe("nonLeafHolders — the review list, never applied", () => {
+  it("reports only the non-leaf categories that actually hold something", () => {
+    const holders = new Map([
+      [
+        1,
+        [
+          { id: 10, name: "أ" },
+          { id: 11, name: "ب" },
+        ],
+      ],
+      [13, [{ id: 12, name: "ج" }]], // a LEAF — not reported
+    ]);
+    const groups = nonLeafHolders(nodes, holders);
+    expect(groups.map((g) => g.id)).toEqual([1]);
+    expect(groups[0].holderCount).toBe(2);
+    expect(groups[0].children).toBe(2);
+    expect(groups[0].holders.map((h) => h.name)).toEqual(["أ", "ب"]);
   });
 
-  it("does not leak across trees", () => {
-    expect([...descendantIds(nodes, 5)]).toEqual([5]);
+  it("sorts the busiest parent first", () => {
+    const holders = new Map([
+      [1, [{ id: 1, name: "x" }]],
+      [
+        1311,
+        [
+          { id: 2, name: "y" },
+          { id: 3, name: "z" },
+        ],
+      ],
+    ]);
+    expect(nonLeafHolders(nodes, holders).map((g) => g.id)).toEqual([1311, 1]);
   });
 
-  it("cannot loop on a stray cycle", () => {
-    const cyclic: CategoryNode[] = [
-      { id: 1, name: "a", parentId: 2 },
-      { id: 2, name: "b", parentId: 1 },
+  it("returns nothing when every holder is a leaf", () => {
+    const holders = new Map([[13, [{ id: 1, name: "x" }]]]);
+    expect(nonLeafHolders(nodes, holders)).toEqual([]);
+  });
+});
+
+describe("existing tree helpers still hold", () => {
+  it("descendantIds walks the whole subtree", () => {
+    expect([...descendantIds(nodes, 1311)].sort((a, b) => a - b)).toEqual([29, 433, 1311]);
+  });
+  it("categoryPath resolves the full chain", () => {
+    expect(categoryPath(nodes, 29)).toEqual(["قطع غيار", "قطع غيار Dewalt"]);
+  });
+  it("flattenTree keeps a grandchild", () => {
+    const flat = flattenTree(nodes);
+    expect(flat.find((n) => n.id === 29)?.depth).toBe(1);
+  });
+});
+
+describe("redundantParentLinks — only the provable case", () => {
+  it("flags a parent link when the supplier is ALSO on a child", () => {
+    const links = [
+      { supplierId: 1, categoryId: 1 }, // كهرباء (parent)
+      { supplierId: 1, categoryId: 13 }, // بطاريات UPS (child)
     ];
-    expect([...descendantIds(cyclic, 1)].sort()).toEqual([1, 2]);
-  });
-});
-
-describe("wouldCycle — a re-parent must not close a loop", () => {
-  const nodes: CategoryNode[] = [
-    { id: 1, name: "كهرباء", parentId: null },
-    { id: 2, name: "Automation", parentId: 1 },
-    { id: 3, name: "Encoders", parentId: 2 },
-  ];
-
-  it("refuses a node as its own parent", () => {
-    expect(wouldCycle(nodes, 1, 1)).toBe(true);
+    expect(redundantParentLinks(nodes, links)).toEqual([{ supplierId: 1, categoryId: 1 }]);
   });
 
-  it("refuses moving a node under one of its own descendants", () => {
-    expect(wouldCycle(nodes, 1, 3)).toBe(true);
-  });
-
-  it("allows a genuine move to a different branch or to root", () => {
-    expect(wouldCycle(nodes, 3, 1)).toBe(false);
-    expect(wouldCycle(nodes, 2, null)).toBe(false);
-  });
-});
-
-describe("flattenTree — depth-first order with a real depth", () => {
-  it("emits a root then its whole subtree, with the correct depth", () => {
-    const nodes: CategoryNode[] = [
-      { id: 1, name: "كهرباء", parentId: null },
-      { id: 2, name: "Automation", parentId: 1 },
-      { id: 3, name: "Encoders", parentId: 2 },
-      { id: 4, name: "أجهزة", parentId: null },
+  it("flags a GRANDchild too — any descendant makes the parent link redundant", () => {
+    const links = [
+      { supplierId: 2, categoryId: 1311 }, // قطع غيار
+      { supplierId: 2, categoryId: 29 }, // قطع غيار Dewalt (child)
     ];
-    expect(flattenTree(nodes).map((n) => [n.id, n.depth])).toEqual([
-      [1, 0],
-      [2, 1],
-      [3, 2],
-      [4, 0],
+    expect(redundantParentLinks(nodes, links)).toEqual([{ supplierId: 2, categoryId: 1311 }]);
+  });
+
+  it("does NOT flag a supplier who is on the parent ALONE (nobody knows his leaf)", () => {
+    const links = [{ supplierId: 3, categoryId: 1 }];
+    expect(redundantParentLinks(nodes, links)).toEqual([]);
+  });
+
+  it("does NOT flag a leaf link — a leaf has no descendants", () => {
+    const links = [{ supplierId: 4, categoryId: 13 }];
+    expect(redundantParentLinks(nodes, links)).toEqual([]);
+  });
+
+  it("flags only the parent of an unrelated pair, leaving both leaves alone", () => {
+    const links = [
+      { supplierId: 5, categoryId: 1 },
+      { supplierId: 5, categoryId: 13 },
+      { supplierId: 5, categoryId: 1311 },
+      { supplierId: 5, categoryId: 29 },
+    ];
+    expect(redundantParentLinks(nodes, links)).toEqual([
+      { supplierId: 5, categoryId: 1 },
+      { supplierId: 5, categoryId: 1311 },
     ]);
   });
 
-  it("shows an orphan (missing parent) as a root instead of dropping it", () => {
-    const nodes: CategoryNode[] = [{ id: 7, name: "x", parentId: 999 }];
-    expect(flattenTree(nodes).map((n) => n.id)).toEqual([7]);
-  });
-});
-
-describe("categoryPath — the full display path", () => {
-  it("renders the whole ancestor chain", () => {
-    const nodes: CategoryNode[] = [
-      { id: 1, name: "كهرباء", parentId: null },
-      { id: 2, name: "Automation", parentId: 1 },
-      { id: 3, name: "Encoders", parentId: 2 },
-    ];
-    expect(categoryPath(nodes, 3)).toEqual(["كهرباء", "Automation", "Encoders"]);
-  });
-
-  it("returns just the name for a root", () => {
-    const nodes: CategoryNode[] = [{ id: 1, name: "كهرباء", parentId: null }];
-    expect(categoryPath(nodes, 1)).toEqual(["كهرباء"]);
-  });
-});
-
-describe("findCategoryClash", () => {
-  const rows = [
-    { id: 1, name: "كهرباء" },
-    { id: 2, name: "أدوات تنظيف" },
-  ];
-
-  it("matches a name that differs only in spacing or spelling variants", () => {
-    expect(findCategoryClash(rows, " كهرباء ")?.id).toBe(1);
-    expect(findCategoryClash(rows, "ادوات  تنظيف")?.id).toBe(2);
-  });
-
-  it("finds no clash for a genuinely new name", () => {
-    expect(findCategoryClash(rows, "مواد بناء")).toBeUndefined();
-  });
-
-  it("ignores the row being renamed, so a category keeps its own name", () => {
-    expect(findCategoryClash(rows, "كهرباء", 1)).toBeUndefined();
-    expect(findCategoryClash(rows, "كهرباء", 2)?.id).toBe(1);
+  it("returns nothing when every link is a leaf", () => {
+    expect(
+      redundantParentLinks(nodes, [
+        { supplierId: 6, categoryId: 13 },
+        { supplierId: 6, categoryId: 14 },
+      ]),
+    ).toEqual([]);
   });
 });

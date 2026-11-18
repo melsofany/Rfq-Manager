@@ -559,21 +559,31 @@ describe("category de-duplication migration", () => {
     // constraint existed.
     const dropIdx = src.indexOf("DROP CONSTRAINT IF EXISTS supplier_categories_name_key");
     const planIdx = src.indexOf("planCategoryDedupe(");
-    const indexIdx = src.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_name_uq");
+    const indexIdx = src.indexOf(
+      "CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_parent_name_uq",
+    );
     expect(dropIdx).toBeGreaterThan(-1);
     expect(planIdx).toBeGreaterThan(dropIdx);
     expect(indexIdx).toBeGreaterThan(planIdx);
   });
 
-  it("enforces uniqueness on the NORMALISED name so the duplicate cannot return", () => {
+  it("enforces uniqueness on the NORMALISED name WITHIN ITS PARENT", () => {
     // Uniqueness on the raw name is exactly what let «معدات فندقيه» and
     // «معدات  فندقيه» coexist. The index must match `categoryUniqueKey`, and be
     // partial so a retired row stays restorable.
     expect(src).toContain("CATEGORY_UNIQUE_EXPR");
-    expect(src).toContain("supplier_categories_name_uq");
-    expect(src).toContain("item_categories_name_uq");
-    const idx = src.slice(src.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS item_categories_name_uq"));
-    expect(idx.slice(0, 200)).toContain("WHERE deleted_at IS NULL");
+    // Scoped to the PARENT: every domain holds its own «يحتاج للمراجعة»
+    // placeholder, and a brand may trade in two domains.
+    expect(src).toContain("CATEGORY_UNIQUE_EXPR_WITH_PARENT");
+    expect(src).toContain("supplier_categories_parent_name_uq");
+    expect(src).toContain("item_categories_parent_name_uq");
+    const idx = src.slice(
+      src.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS item_categories_parent_name_uq"),
+    );
+    expect(idx.slice(0, 220)).toContain("WHERE deleted_at IS NULL");
+    // The old GLOBAL index must be dropped, or the second placeholder is refused.
+    expect(src).toContain("DROP INDEX IF EXISTS supplier_categories_name_uq");
+    expect(src).toContain("DROP INDEX IF EXISTS item_categories_name_uq");
   });
 
   it("keeps the ORPHAN sweep away from RETIRED rows", () => {

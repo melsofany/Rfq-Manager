@@ -3510,6 +3510,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
  * operator cleared the assignment and still could not delete. Its own rows are
  * removed with the request instead (see the route).
  *
+ * A CANCELLED item is not a frozen achievement either. The refusal tells the
+ * operator to «cancel its items», but cancelling only sets `is_cancelled` — it
+ * leaves `attribution_first_po_at` in place, so counting it kept the request
+ * blocked AFTER the operator did exactly what the message asked. A cancelled item
+ * is a working state, and the incentive KPI already excludes it for the same
+ * reason. Only a LIVE frozen attribution protects the request.
+ *
  * Live counts: 4,748 requests total; this footprint protects 1,067 (829 of them
  * refused by the database anyway, 238 linked only through the `SET NULL` FKs that
  * would otherwise have been severed in silence).
@@ -3537,7 +3544,9 @@ export async function loadRfqFootprint(id: number): Promise<string[]> {
       EXISTS (SELECT 1 FROM sales_invoices si WHERE si.customer_rfq_id = ${id}) AS sales_invoice,
       EXISTS (
         SELECT 1 FROM customer_rfq_items i
-         WHERE i.customer_rfq_id = ${id} AND i.attribution_first_po_at IS NOT NULL
+         WHERE i.customer_rfq_id = ${id}
+           AND i.attribution_first_po_at IS NOT NULL
+           AND i.is_cancelled = false
       ) AS attribution
   `);
   const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0] ?? {};

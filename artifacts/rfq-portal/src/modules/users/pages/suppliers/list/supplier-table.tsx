@@ -80,7 +80,7 @@ export function SupplierTable({
               )}
             </td>
             <td className="px-4 py-3 align-middle">
-              <TradeTags names={tradeCategoriesOf(s)} />
+              <TradeTags names={tradeCategoriesOf(s)} paths={s.categoryPaths} />
             </td>
             <td className="px-4 py-3 align-middle">
               <ItemTags cats={s.itemCategories ?? []} t={t} />

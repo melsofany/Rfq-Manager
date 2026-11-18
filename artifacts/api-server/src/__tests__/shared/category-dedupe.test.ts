@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   categoryUniqueKey,
+  categoryUniqueKeyWithParent,
   planCategoryDedupe,
   categoryDedupeSql,
   CATEGORY_REFERENCES,
@@ -179,5 +180,62 @@ describe("categoryDedupeSql — generated from the tested plan", () => {
       parentColumn: true,
     });
     expect(sql.length).toBeGreaterThanOrEqual(CATEGORY_REFERENCES.item.length + 3);
+  });
+});
+
+describe("categoryUniqueKeyWithParent — uniqueness is scoped to the branch", () => {
+  it("gives the SAME name under two parents two DIFFERENT keys", () => {
+    const a = categoryUniqueKeyWithParent("يحتاج للمراجعة", 1);
+    const b = categoryUniqueKeyWithParent("يحتاج للمراجعة", 3);
+    expect(a).not.toBe(b);
+  });
+
+  it("gives the same name under the SAME parent one key, spelling-tolerant", () => {
+    expect(categoryUniqueKeyWithParent("معدات  فندقيه", 1)).toBe(
+      categoryUniqueKeyWithParent("معدات فندقيه", 1),
+    );
+  });
+
+  it("treats a root category as parent 0, distinct from a child of id 0", () => {
+    expect(categoryUniqueKeyWithParent("x", null)).toBe("root::x");
+    expect(categoryUniqueKeyWithParent("x", 0)).toBe("0::x");
+  });
+});
+
+describe("planCategoryDedupe — per-parent grouping", () => {
+  it("does NOT group two same-named categories under DIFFERENT parents", () => {
+    const plan = planCategoryDedupe([
+      { id: 10, name: "يحتاج للمراجعة", parentId: 1 },
+      { id: 11, name: "يحتاج للمراجعة", parentId: 3 },
+    ]);
+    expect(plan).toEqual([]);
+  });
+
+  it("DOES group two same-named categories under the SAME parent", () => {
+    const plan = planCategoryDedupe([
+      { id: 10, name: "يحتاج للمراجعة", parentId: 1 },
+      { id: 11, name: "يحتاج للمراجعة ", parentId: 1 },
+    ]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0].loserIds).toEqual([11]);
+  });
+});
+
+describe("categoryDedupeSql — a child collision keeps EXACTLY one row", () => {
+  const plan = [{ key: "k", survivorId: 1, loserIds: [2] }];
+  const sql = categoryDedupeSql("supplier_categories", [], plan, { parentColumn: true });
+
+  it("retires the colliding child with a STRICT id test, not a symmetric one", () => {
+    const retire = sql.find((s) => s.includes("EXISTS"));
+    expect(retire).toBeTruthy();
+    // `k.id < c.id` keeps one row; `k.id <> c.id` would retire BOTH, because
+    // each row sees the other as the duplicate (measured on a real Postgres).
+    expect(retire).toContain("k.id < c.id");
+    expect(retire).not.toContain("k.id <> c.id");
+  });
+
+  it("scopes the collision test to the SAME parent", () => {
+    const retire = sql.find((s) => s.includes("EXISTS"));
+    expect(retire).toContain("k.parent_id = c.parent_id");
   });
 });
