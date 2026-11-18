@@ -191,6 +191,8 @@ export function TradeCategoryManager() {
   const [openSuppliers, setOpenSuppliers] = useState<Set<number>>(new Set());
   const [showGroups, setShowGroups] = useState(false);
   const [groupTargets, setGroupTargets] = useState<Record<string, number>>({});
+  // A group merge is two steps: choose, then confirm with the consequences shown.
+  const [pendingMerge, setPendingMerge] = useState<{ key: string; targetId: number } | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -754,15 +756,52 @@ export function TradeCategoryManager() {
                           </option>
                         ))}
                       </select>
-                      <Button
-                        size="sm"
-                        className="h-8"
-                        disabled={busy}
-                        onClick={() => mergeGroup(g.members, target)}
-                      >
-                        {t("sup.cm.mergeGroup")}
-                      </Button>
+                      {pendingMerge?.key === g.key ? null : (
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          disabled={busy}
+                          onClick={() => setPendingMerge({ key: g.key, targetId: target })}
+                        >
+                          {t("sup.cm.mergeGroup")}
+                        </Button>
+                      )}
                     </div>
+                    {pendingMerge?.key === g.key &&
+                      (() => {
+                        const targetName =
+                          g.members.find((m) => m.id === pendingMerge.targetId)?.name ?? "";
+                        const movers = g.members
+                          .filter((m) => m.id !== pendingMerge.targetId)
+                          .reduce((sum, m) => sum + m.supplierCount, 0);
+                        return (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                            <p className="w-full text-xs leading-relaxed text-foreground">
+                              {t("sup.cm.mergeConfirm", { n: movers, target: targetName })}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-8"
+                              disabled={busy}
+                              onClick={() => {
+                                setPendingMerge(null);
+                                mergeGroup(g.members, pendingMerge.targetId);
+                              }}
+                            >
+                              {t("sup.cm.confirmMerge")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => setPendingMerge(null)}
+                            >
+                              {t("sup.cm.cancel")}
+                            </Button>
+                          </div>
+                        );
+                      })()}
                   </li>
                 );
               })}

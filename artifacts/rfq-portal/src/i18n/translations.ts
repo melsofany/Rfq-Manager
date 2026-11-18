@@ -1072,6 +1072,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "sup.cm.keepTarget": "Keep",
     "sup.cm.mergeGroup": "Merge the group",
     "sup.cm.groupMerged": "Merged {n} into «{target}»",
+    "sup.cm.mergeConfirm":
+      "Move {n} suppliers into «{target}» and hide the other names? The merge is recorded in the audit log, and hidden names can be restored.",
     "sup.cm.close": "Close",
     "supF.supplierId": "Supplier ID",
     "supF.companyName": "Company Name",
@@ -2290,6 +2292,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "sup.cm.keepTarget": "الاحتفاظ بـ",
     "sup.cm.mergeGroup": "دمج المجموعة",
     "sup.cm.groupMerged": "تم دمج {n} في «{target}»",
+    "sup.cm.mergeConfirm":
+      "نقل {n} مورد إلى «{target}» وإخفاء الأسماء الأخرى؟ العملية مسجلة في سجل التدقيق، والأسماء المخفية تقدر تستعيدها.",
     "sup.cm.close": "إغلاق",
     "supF.supplierId": "رقم المورد",
     "supF.companyName": "اسم الشركة",
