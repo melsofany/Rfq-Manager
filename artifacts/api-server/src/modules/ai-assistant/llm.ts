@@ -921,7 +921,14 @@ export async function transcribeAudio(
   // primary changed.
   const mediaBase = GEMINI_BASE_URL;
   if (isGeminiEndpoint(mediaBase)) {
-    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model, TRANSCRIBE_EXTRA_MODELS);
+    return extractWithGemini(
+      buffer,
+      mimeType,
+      TRANSCRIBE_PROMPT,
+      mediaBase,
+      model,
+      TRANSCRIBE_EXTRA_MODELS,
+    );
   }
   // Only reached when the operator explicitly points the media endpoint at a
   // non-Gemini whisper-compatible gateway.
@@ -994,9 +1001,11 @@ async function extractWithGemini(
   // `generateContent`. `GEMINI_MEDIA_MODEL` heads the chain and the Gemini
   // fallbacks follow, so a retired media id degrades instead of failing.
   const mediaModel = isGeminiModelId(model) ? model : null;
-  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS, ...extraCandidates].filter(
-    (m, i, arr) => Boolean(m) && arr.indexOf(m) === i,
-  );
+  const candidates = [
+    mediaModel || GEMINI_MEDIA_MODEL,
+    ...FALLBACK_MODELS,
+    ...extraCandidates,
+  ].filter((m, i, arr) => Boolean(m) && arr.indexOf(m) === i);
   for (const candidate of candidates) {
     const text = await extractWithGeminiModel(buffer, mimeType, prompt, baseUrl, candidate);
     if (text) {
