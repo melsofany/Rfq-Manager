@@ -1779,6 +1779,24 @@ describe("DELETE /api/customer-rfq/:id", () => {
     expect(res.body.footprint).toContain("تاريخ إنجاز مُثبَّت");
   });
 
+  // The refusal tells the operator to «cancel its items». Cancelling only sets
+  // `is_cancelled` and LEAVES `attribution_first_po_at` in place, so counting a
+  // cancelled item kept the request blocked AFTER the operator did exactly what
+  // the message asked — the recorded live report.
+  it("does NOT count a CANCELLED item as a frozen achievement", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, attribution: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    // The mock returns the row it is given, so assert the QUERY: the attribution
+    // EXISTS must exclude cancelled items, or the fix is not really applied.
+    const sqlCall = (dbMock.execute as any).mock.calls
+      .map((c: any[]) => c[0])
+      .find((q: any) => q?.strings?.join("")?.includes("attribution_first_po_at"));
+    const text = sqlCall.strings.join("");
+    expect(text).toContain("is_cancelled = false");
+  });
+
   it("reports every footprint reason, not just the first", async () => {
     detailRow = insertedRfq;
     footprintRow = {
