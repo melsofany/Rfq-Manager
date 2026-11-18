@@ -27,11 +27,17 @@ import {
   supplierCategoryLinksTable,
   itemCategoriesTable,
   auditLogTable,
+  suppliersTable,
 } from "@workspace/db";
 import { eq, asc, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
-import { canonicalCategoryName, categoryKey, wouldCycle } from "../../shared/category-tree";
+import {
+  canonicalCategoryName,
+  categoryKey,
+  nonLeafHolders,
+  wouldCycle,
+} from "../../shared/category-tree";
 import { mergeSupplierCategories } from "../../shared/category-merge";
 import { findActiveTwin } from "../../shared/category-dedupe";
 
@@ -113,6 +119,45 @@ router.get("/categories/report", requireAuth, async (_req, res): Promise<void> =
     },
     unused,
     duplicates,
+  });
+});
+
+/**
+ * READ-ONLY: the categories that are NOT leaves but still hold suppliers — the
+ * list the operator must re-file by hand before the leaf-only rule is fully
+ * satisfied. Nothing is moved or deleted here: an automatic re-file would
+ * silently change which trade a supplier belongs to, and the operator asked
+ * explicitly that no assignment change without review.
+ */
+router.get("/categories/parent-assignments", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db.select().from(supplierCategoriesTable);
+  const live = rows.filter((r) => r.deletedAt == null);
+  const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+  const liveIds = new Set(nodes.map((n) => n.id));
+
+  const links = await db
+    .select({
+      categoryId: supplierCategoryLinksTable.categoryId,
+      supplierId: supplierCategoryLinksTable.supplierId,
+      supplierName: suppliersTable.name,
+    })
+    .from(supplierCategoryLinksTable)
+    .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
+
+  const holders = new Map<number, Array<{ id: number; name: string }>>();
+  for (const l of links) {
+    const list = holders.get(l.categoryId) ?? [];
+    list.push({ id: l.supplierId, name: l.supplierName });
+    holders.set(l.categoryId, list);
+  }
+
+  const groups = nonLeafHolders(nodes, holders, liveIds);
+  res.json({
+    totals: {
+      categoriesWithSuppliers: groups.length,
+      suppliersToRefile: groups.reduce((n, g) => n + g.holderCount, 0),
+    },
+    groups,
   });
 });
 
@@ -227,6 +272,15 @@ router.patch(
       return;
     }
 
+    // REPARENTING must not lose data: every supplier link follows by id, so
+    // nothing is rewritten here. The move CAN leave this category a non-leaf
+    // that still holds suppliers (it already has children), which the leaf-only
+    // rule must eventually resolve. We never move those suppliers — the operator
+    // reviews them — but the response SAYS so, so the state is not silent.
+    const suppliersOnCategory = (await loadSupplierCounts()).get(id) ?? 0;
+    const hasChildren = all.some((c) => c.id !== id && c.parentId === id);
+    const becomesNonLeaf = suppliersOnCategory > 0 && hasChildren;
+
     const updates: Record<string, unknown> = { name: newName, parentId: pId };
     if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
 
@@ -261,7 +315,20 @@ router.patch(
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
-    res.json(serialize(row, 0));
+    res.json({
+      ...serialize(row, suppliersOnCategory),
+      // Present only when the move creates a state the leaf-only rule must
+      // eventually resolve. Informational: nothing was moved or deleted.
+      ...(becomesNonLeaf
+        ? {
+            reviewNeeded: {
+              suppliersOnCategory,
+              reason:
+                "التصنيف أصبح رئيسيًا وعليه موردون — أعد إسنادهم لتصنيف فرعي (لم يتم تغيير أي ارتباط تلقائيًا)",
+            },
+          }
+        : {}),
+    });
   },
 );
 

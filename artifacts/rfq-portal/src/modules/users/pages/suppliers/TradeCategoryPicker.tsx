@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { orderCategoryTree, type CategoryNode } from "@/lib/category-tree";
+import { leafCategoryIds, orderCategoryTree, type CategoryNode } from "@/lib/category-tree";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,6 +24,11 @@ export function TradeCategoryPicker({
   const [query, setQuery] = useState("");
 
   const ordered = useMemo(() => orderCategoryTree(options), [options]);
+  // A category that HAS children is a grouping, not a trade: a supplier filed
+  // under it would count once for the parent and once for every subtree filter.
+  // The server refuses such an assignment, so the picker disables the option
+  // instead of letting the operator submit something that will be rejected.
+  const leaves = useMemo(() => leafCategoryIds(options), [options]);
   const selectedSet = useMemo(() => new Set(selected), [selected]);
   const q = query.trim().toLowerCase();
   const shown = q ? ordered.filter((c) => c.name.toLowerCase().includes(q)) : ordered;
@@ -80,16 +85,20 @@ export function TradeCategoryPicker({
       <ul role="listbox" aria-multiselectable="true" className="max-h-64 overflow-y-auto py-1">
         {shown.map((c) => {
           const on = selectedSet.has(c.name);
+          const isLeaf = leaves.has(c.id);
           return (
             <li key={c.id}>
               <button
                 type="button"
                 role="option"
                 aria-selected={on}
-                onClick={() => onToggle(c.name)}
+                disabled={!isLeaf}
+                title={isLeaf ? undefined : t("sup.pick.parentDisabled")}
+                onClick={() => isLeaf && onToggle(c.name)}
                 className={cn(
                   "flex w-full items-center gap-2.5 py-2 pe-3 text-start text-sm transition-colors hover:bg-muted/50",
                   on && "bg-primary/5",
+                  !isLeaf && "cursor-not-allowed opacity-50 hover:bg-transparent",
                 )}
                 style={{ paddingInlineStart: 12 + c.depth * 20 }}
               >
@@ -103,10 +112,18 @@ export function TradeCategoryPicker({
                   {on && <Check size={11} />}
                 </span>
                 <span
-                  className={c.depth > 0 ? "text-muted-foreground" : "font-medium text-foreground"}
+                  className={cn(
+                    "flex-1",
+                    c.depth > 0 ? "text-muted-foreground" : "font-medium text-foreground",
+                  )}
                 >
                   {c.name}
                 </span>
+                {!isLeaf && (
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {t("sup.pick.parentBadge")}
+                  </span>
+                )}
               </button>
             </li>
           );

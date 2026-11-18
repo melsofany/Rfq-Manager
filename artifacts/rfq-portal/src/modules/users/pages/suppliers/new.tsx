@@ -1,5 +1,5 @@
-import { orderCategoryTree } from "@/lib/category-tree";
-import { useState } from "react";
+import { leafCategoryIds, orderCategoryTree } from "@/lib/category-tree";
+import { useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -44,6 +44,8 @@ export default function NewSupplierPage() {
   const [invoiceHasVat, setInvoiceHasVat] = useState(true);
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [serverError, setServerError] = useState<string | null>(null);
+  // Categories that may hold a supplier (a grouping category may not).
+  const leaves = useMemo(() => leafCategoryIds(categories), [categories]);
 
   const createMutation = useCreateSupplier({
     mutation: {
@@ -283,19 +285,25 @@ export default function NewSupplierPage() {
               <div className="flex flex-wrap gap-2">
                 {orderCategoryTree(categories).map((c) => {
                   const active = selectedCats.has(c.name);
+                  // A grouping category cannot hold a supplier (the server
+                  // refuses it), so the checkbox is disabled and labelled.
+                  const isLeaf = leaves.has(c.id);
                   return (
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => toggleCat(c.name)}
+                      disabled={!isLeaf}
+                      title={isLeaf ? undefined : t("sup.pick.parentDisabled")}
+                      onClick={() => isLeaf && toggleCat(c.name)}
                       className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize ${
                         active
                           ? "bg-primary text-primary-foreground border-primary"
                           : "bg-muted text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-                      }`}
+                      } ${!isLeaf ? "cursor-not-allowed opacity-50 hover:border-border hover:text-muted-foreground" : ""}`}
                     >
                       {c.depth > 0 ? "↳ " : ""}
                       {c.name}
+                      {!isLeaf ? ` · ${t("sup.pick.parentBadge")}` : ""}
                     </button>
                   );
                 })}

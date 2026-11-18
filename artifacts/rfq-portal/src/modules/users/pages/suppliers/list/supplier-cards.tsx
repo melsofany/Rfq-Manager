@@ -50,7 +50,7 @@ export function SupplierCardList({
                 )}
               </span>
             )}
-            <TradeTags names={tradeCategoriesOf(s)} />
+            <TradeTags names={tradeCategoriesOf(s)} paths={s.categoryPaths} />
             <ItemTags cats={s.itemCategories ?? []} t={t} />
           </button>
         </li>

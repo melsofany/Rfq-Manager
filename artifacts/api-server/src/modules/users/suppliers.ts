@@ -25,6 +25,7 @@ import {
   categoriesToStored,
   loadSupplierCategoryMap,
   saveSupplierCategoryLinks,
+  nonLeafCategoryNames,
 } from "../../shared/supplier-category-links";
 import { descendantIds } from "../../shared/category-tree";
 import {
@@ -480,6 +481,21 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
     const rawCats = row.categories ?? row.category;
     const category = rawCats ? toStored(rawCats as string | string[]) : "general";
 
+    // Same leaf-only rule, reported PER ROW so an import cannot file a supplier
+    // under a parent unnoticed. The row is skipped with a reason, never
+    // half-imported.
+    const nonLeaf = await nonLeafCategoryNames(toArray(category));
+    if (nonLeaf.length > 0) {
+      skipped++;
+      details.push({
+        row: i + 1,
+        name,
+        status: "skipped",
+        reason: `تصنيف رئيسي له فروع: ${nonLeaf.join("، ")} — اختر تصنيفًا فرعيًا`,
+      });
+      continue;
+    }
+
     if (!name) {
       errors++;
       details.push({
@@ -753,6 +769,9 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
         ...base,
         category: categoriesToStored(names),
         categories: names,
+        // The FULL path per category, so the UI can show «كهرباء / كابلات»
+        // instead of an ambiguous leaf name.
+        categoryPaths: links.map((l) => ({ id: l.id, name: l.name, path: l.path })),
         itemCategories,
         itemCategoryEvidence,
       };
@@ -852,6 +871,19 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  // A supplier is filed under a LEAF trade only (ERPNext's «only leaf nodes are
+  // allowed in transaction»). Filing him under a parent would make him count
+  // once for the parent AND once for each subtree query, so the totals cannot be
+  // trusted. Refuse and NAME the category instead of silently dropping the link.
+  const nonLeaf = await nonLeafCategoryNames(toArray(category));
+  if (nonLeaf.length > 0) {
+    res.status(400).json({
+      error: `لا يمكن إسناد المورد لتصنيف رئيسي له تصنيفات فرعية: ${nonLeaf.join("، ")} — اختر تصنيفًا فرعيًا`,
+      nonLeafCategories: nonLeaf,
+    });
+    return;
+  }
+
   if (email && email.trim()) {
     const [existing] = await db
       .select()
@@ -928,7 +960,21 @@ router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     ordered: c.ordered,
     manual: c.manual,
   }));
-  res.json({ ...serializeSupplier(supplier), itemCategories, itemCategoryEvidence });
+  // Full path per trade category — the detail header shows «كهرباء / كابلات».
+  const links = (await loadSupplierCategoryMap([id])).get(id) ?? [];
+  const categoryPaths = links.map((l) => ({ id: l.id, name: l.name, path: l.path }));
+  res.json({
+    ...serializeSupplier(supplier),
+    ...(links.length > 0
+      ? {
+          category: categoriesToStored(links.map((l) => l.name)),
+          categories: links.map((l) => l.name),
+        }
+      : {}),
+    categoryPaths,
+    itemCategories,
+    itemCategoryEvidence,
+  });
 });
 
 router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
@@ -950,7 +996,19 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   }
   if (req.body.categories !== undefined || req.body.category !== undefined) {
     const rawCats = req.body.categories ?? req.body.category;
+    // Same leaf-only rule as create. A PATCH that moves a supplier onto a
+    // parent is refused; the link table is left exactly as it was.
     updates.category = toStored(rawCats);
+    // Same leaf-only rule as create. A PATCH that moves a supplier onto a
+    // parent is refused; the link table is left exactly as it was.
+    const nonLeaf = await nonLeafCategoryNames(toArray(String(updates.category)));
+    if (nonLeaf.length > 0) {
+      res.status(400).json({
+        error: `لا يمكن إسناد المورد لتصنيف رئيسي له تصنيفات فرعية: ${nonLeaf.join("، ")} — اختر تصنيفًا فرعيًا`,
+        nonLeafCategories: nonLeaf,
+      });
+      return;
+    }
   }
 
   if (updates.email && String(updates.email).trim()) {

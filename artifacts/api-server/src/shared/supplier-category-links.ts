@@ -12,11 +12,15 @@
  */
 import { db, supplierCategoryLinksTable, supplierCategoriesTable } from "@workspace/db";
 import { eq, inArray } from "drizzle-orm";
-import { canonicalCategoryName } from "./category-tree";
+import { canonicalCategoryName, categoryKey, categoryPath, isLeaf } from "./category-tree";
 
 export interface SupplierCategoryRef {
   id: number;
   name: string;
+  /** The full root→leaf path, e.g. ["كهرباء","كابلات"] — the leaf alone is
+   * ambiguous once two branches share a name (both «قطع غيار» and «إضاءة»
+   * exist under different parents). */
+  path: string[];
 }
 
 /**
@@ -140,10 +144,56 @@ export async function loadSupplierCategoryMap(
     )
     .where(inArray(supplierCategoryLinksTable.supplierId, ids));
 
+  // ONE read of the whole catalogue to resolve each link's full path — the tree
+  // is small (tens of rows) and this avoids a query per link.
+  const tree = await db
+    .select({
+      id: supplierCategoriesTable.id,
+      name: supplierCategoriesTable.name,
+      parentId: supplierCategoriesTable.parentId,
+    })
+    .from(supplierCategoriesTable);
+
   for (const r of rows) {
     const arr = out.get(r.supplierId) ?? [];
-    arr.push({ id: r.id, name: r.name });
+    arr.push({ id: r.id, name: r.name, path: categoryPath(tree, r.id) });
     out.set(r.supplierId, arr);
+  }
+  return out;
+}
+
+/**
+ * The categories in `names` that are NOT leaves, resolved against the live
+ * catalogue. A supplier may only be filed under a leaf (ERPNext's «only leaf
+ * nodes are allowed in transaction»), so a caller that receives a non-leaf
+ * refuses the write and names it instead of creating an ambiguous link.
+ *
+ * Returns the offending names in the ORDER they were submitted, so the message
+ * reads like the operator's own input. A name that matches no category at all
+ * is NOT reported here — a free-typed name is a separate concern and must keep
+ * working, because the catalogue is edited by hand.
+ */
+export async function nonLeafCategoryNames(names: string[]): Promise<string[]> {
+  const wanted = normalizeCategoryNames(names);
+  if (wanted.length === 0) return [];
+  const rows = await db
+    .select({
+      id: supplierCategoriesTable.id,
+      name: supplierCategoriesTable.name,
+      parentId: supplierCategoriesTable.parentId,
+      deletedAt: supplierCategoriesTable.deletedAt,
+    })
+    .from(supplierCategoriesTable);
+  const liveIds = new Set(rows.filter((r) => r.deletedAt == null).map((r) => r.id));
+  const nodes = rows
+    .filter((r) => r.deletedAt == null)
+    .map((r) => ({ id: r.id, name: r.name, parentId: r.parentId }));
+  const byKey = new Map(nodes.map((n) => [categoryKey(n.name), n]));
+  const out: string[] = [];
+  for (const name of wanted) {
+    const node = byKey.get(categoryKey(name));
+    if (!node) continue; // not a catalogued category — out of scope here
+    if (!isLeaf(nodes, node.id, liveIds)) out.push(name);
   }
   return out;
 }

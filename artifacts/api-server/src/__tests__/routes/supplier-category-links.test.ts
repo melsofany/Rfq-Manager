@@ -26,7 +26,7 @@ function applyCond(row: any, cond: any): boolean {
 }
 
 vi.mock("@workspace/db", () => {
-  const supplierCategoriesTable = { _: "cat", id: "id", name: "name" };
+  const supplierCategoriesTable = { _: "cat", id: "id", name: "name", parentId: "parent_id" };
   const supplierCategoryLinksTable = {
     _: "link",
     id: "id",
@@ -64,6 +64,12 @@ vi.mock("@workspace/db", () => {
       from: (table: any) => {
         let joinTable: any = null;
         const b: any = {
+          // A select with no `.where()` (the catalogue read for full paths)
+          // must still resolve to rows.
+          then: (resolve: any) =>
+            Promise.resolve(
+              table._ === "cat" ? store.categories.map((c: any) => ({ ...c, parentId: null })) : [],
+            ).then(resolve),
           innerJoin: (t2: any) => {
             joinTable = t2;
             return b;

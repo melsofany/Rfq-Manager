@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useListCategories, getListCategoriesQueryKey } from "@workspace/api-client-react";
-import { Boxes, Search, Tag } from "lucide-react";
+import { AlertTriangle, Boxes, Search, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { orderCategoryTree } from "@/lib/category-tree";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -12,6 +12,64 @@ interface ItemCategoryRow {
   name: string;
   parentId?: number | null;
   code?: string | null;
+}
+
+interface ParentAssignmentGroup {
+  id: number;
+  name: string;
+  children: number;
+  holderCount: number;
+  holders: Array<{ id: number; name: string }>;
+}
+
+/**
+ * The categories that are NOT leaves but still hold suppliers. Read-only: it
+ * NAMES the work the operator must do by hand. Nothing is re-filed
+ * automatically, because that would silently change a supplier's trade.
+ */
+function ParentAssignmentReview({
+  t,
+}: {
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const { data } = useQuery({
+    queryKey: ["category-parent-assignments"],
+    queryFn: async () => {
+      const res = await fetch("/api/categories/parent-assignments", { credentials: "include" });
+      if (!res.ok) throw new Error("failed");
+      return (await res.json()) as {
+        totals: { categoriesWithSuppliers: number; suppliersToRefile: number };
+        groups: ParentAssignmentGroup[];
+      };
+    },
+    staleTime: 60 * 1000,
+  });
+  if (!data || data.groups.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50/60 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+      <p className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+        <AlertTriangle size={15} aria-hidden />
+        {t("sup.cat.review.title")}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+        {t("sup.cat.review.body")}
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {data.groups.map((g) => (
+          <li key={g.id} className="text-xs text-amber-900 dark:text-amber-200">
+            <span className="font-semibold">{g.name}</span>
+            <span className="text-amber-700 dark:text-amber-400">
+              {" "}
+              — {t("sup.cat.review.holders", { n: g.holderCount })}
+            </span>
+            <span className="block ps-3 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+              {g.holders.map((h) => h.name).join("، ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /** One card per catalogue: the same header, body and spacing for both. */
@@ -105,6 +163,7 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="space-y-4 px-4 py-4 sm:px-6">
+      <ParentAssignmentReview t={t} />
       <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
         <Tag size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
         <div className="text-xs leading-relaxed text-muted-foreground">

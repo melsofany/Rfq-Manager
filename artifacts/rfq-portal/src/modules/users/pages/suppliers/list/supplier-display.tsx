@@ -26,6 +26,8 @@ export interface SupplierRow {
   phone?: string | null;
   category?: string | null;
   categories?: string[];
+  /** Full root→leaf path per trade category, e.g. ["كهرباء","كابلات"]. */
+  categoryPaths?: Array<{ id: number; name: string; path: string[] }>;
   isActive?: boolean;
   invoiceHasVat?: boolean | null;
   itemCategories?: ItemCategoryRef[];
@@ -110,17 +112,32 @@ function ChipList<T>({
   );
 }
 
-/** Trade categories: one neutral style, because they describe the supplier rather than evidence. */
-export function TradeTags({ names }: { names: string[] }) {
+/**
+ * Trade categories: one neutral style, because they describe the supplier rather
+ * than evidence. The FULL path is shown («كهرباء / كابلات») when the API supplies
+ * it, because a leaf name alone is ambiguous once two branches share it.
+ */
+export function TradeTags({
+  names,
+  paths,
+}: {
+  names: string[];
+  paths?: Array<{ id: number; name: string; path: string[] }>;
+}) {
   if (names.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+  const pathByKey = new Map((paths ?? []).map((p) => [p.name, p.path]));
+  const label = (name: string) => {
+    const parts = pathByKey.get(name);
+    return parts && parts.length > 1 ? parts.join(" / ") : name;
+  };
   return (
     <ChipList
       items={names}
       getKey={(n) => n}
-      getLabel={(n) => n}
+      getLabel={label}
       render={(name) => (
         <span className="inline-flex items-center rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-foreground">
-          {name}
+          {label(name)}
         </span>
       )}
     />

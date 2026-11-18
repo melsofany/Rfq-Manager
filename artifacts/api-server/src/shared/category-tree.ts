@@ -159,3 +159,78 @@ export function categoryPath(nodes: CategoryNode[], id: number): string[] {
   }
   return out;
 }
+
+/**
+ * True when a category has NO live child — the only kind a supplier may be
+ * filed under.
+ *
+ * ERPNext enforces this with `is_group` plus «Only leaf nodes are allowed in
+ * transaction»; a supplier tagged with a parent is counted by every subtree
+ * query AND by the parent's own count, so one relationship appears twice and
+ * the totals cannot be trusted. Measured live before the rule: 127 links sat on
+ * three parents (كهرباء 79, الصحة والسلامة ومقاومة الحريق 42, أدوات النظافة 6).
+ *
+ * `liveIds` restricts the check to rows that still exist: a RETIRED child must
+ * not make its parent unusable, or a soft-deleted leaf would permanently block
+ * filing a supplier under the parent it left behind.
+ */
+export function isLeaf(nodes: CategoryNode[], id: number, liveIds?: Set<number>): boolean {
+  return !nodes.some(
+    (n) => n.parentId === id && (liveIds == null || (liveIds.has(n.id) && n.id !== id)),
+  );
+}
+
+/**
+ * The ids of every LEAF in the forest — the categories a supplier may be filed
+ * under. A node whose parent is missing from the list is still evaluated on its
+ * own children, so a detached subtree is never silently treated as a leaf.
+ */
+export function leafCategoryIds(nodes: CategoryNode[], liveIds?: Set<number>): Set<number> {
+  const hasChild = new Set<number>();
+  for (const n of nodes) {
+    if (n.parentId == null) continue;
+    if (liveIds != null && !liveIds.has(n.id)) continue;
+    hasChild.add(n.parentId);
+  }
+  const out = new Set<number>();
+  for (const n of nodes) {
+    if (liveIds != null && !liveIds.has(n.id)) continue;
+    if (!hasChild.has(n.id)) out.add(n.id);
+  }
+  return out;
+}
+
+/**
+ * The categories that must be FIXED before a leaf-only rule can hold: a
+ * non-leaf that currently holds something. Returned as a report, never applied
+ * — the operator reviews the list and re-files the relationships by hand, so no
+ * assignment is moved or removed automatically.
+ */
+export function nonLeafHolders<T extends { id: number; name: string }>(
+  nodes: CategoryNode[],
+  holders: Map<number, T[]>,
+  liveIds?: Set<number>,
+): Array<{ id: number; name: string; children: number; holderCount: number; holders: T[] }> {
+  const out: Array<{
+    id: number;
+    name: string;
+    children: number;
+    holderCount: number;
+    holders: T[];
+  }> = [];
+  for (const node of nodes) {
+    if (liveIds != null && !liveIds.has(node.id)) continue;
+    if (isLeaf(nodes, node.id, liveIds)) continue;
+    const held = holders.get(node.id) ?? [];
+    if (held.length === 0) continue;
+    const children = nodes.filter((n) => n.parentId === node.id).length;
+    out.push({
+      id: node.id,
+      name: node.name,
+      children,
+      holderCount: held.length,
+      holders: held,
+    });
+  }
+  return out.sort((a, b) => b.holderCount - a.holderCount);
+}
