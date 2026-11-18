@@ -69,6 +69,23 @@ describe("Gemini integration (llm.ts)", () => {
     }
   });
 
+  it("falls through every media model and uses the transcription model when the rest fail", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("gemini-3.5-transcribe")) {
+        return {
+          ok: true,
+          json: async () => ({ candidates: [{ content: { parts: [{ text: "تم التحويل" }] } }] }),
+        };
+      }
+      return { ok: false, status: 404, text: async () => "not found" };
+    });
+    const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
+    const text = await transcribeAudio(Buffer.from("ogg"), "audio/ogg", null, "gemini-3.8-flash");
+    expect(text).toBe("تم التحويل");
+    const tried = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(tried[tried.length - 1]).toContain("gemini-3.5-transcribe");
+  });
+
   it("does not retry a non-transient error such as a bad request", async () => {
     fetchMock.mockResolvedValue({
       ok: false,

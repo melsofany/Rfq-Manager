@@ -12,6 +12,7 @@ import {
   DEFAULT_MODEL,
   GEMINI_BASE_URL,
   GEMINI_MEDIA_MODEL,
+  TRANSCRIBE_EXTRA_MODELS,
   DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL,
   DEEPSEEK_FALLBACK_MODELS,
@@ -920,7 +921,7 @@ export async function transcribeAudio(
   // primary changed.
   const mediaBase = GEMINI_BASE_URL;
   if (isGeminiEndpoint(mediaBase)) {
-    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model);
+    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model, TRANSCRIBE_EXTRA_MODELS);
   }
   // Only reached when the operator explicitly points the media endpoint at a
   // non-Gemini whisper-compatible gateway.
@@ -986,18 +987,22 @@ async function extractWithGemini(
   prompt: string,
   baseUrl?: string | null,
   model?: string | null,
+  extraCandidates: readonly string[] = [],
 ): Promise<string | null> {
   // The media chain is a GEMINI chain: the caller's `model` is the CHAT model,
   // which is DeepSeek in the default deployment and would 404 against
   // `generateContent`. `GEMINI_MEDIA_MODEL` heads the chain and the Gemini
   // fallbacks follow, so a retired media id degrades instead of failing.
   const mediaModel = isGeminiModelId(model) ? model : null;
-  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS].filter(
+  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS, ...extraCandidates].filter(
     (m, i, arr) => Boolean(m) && arr.indexOf(m) === i,
   );
   for (const candidate of candidates) {
     const text = await extractWithGeminiModel(buffer, mimeType, prompt, baseUrl, candidate);
-    if (text) return text;
+    if (text) {
+      logger.info({ model: candidate }, "AI assistant: Gemini media model answered");
+      return text;
+    }
   }
   return null;
 }
