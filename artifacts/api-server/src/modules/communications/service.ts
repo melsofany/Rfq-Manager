@@ -830,13 +830,146 @@ function buildContactText(opts: SendRfqOpts): string {
   );
 }
 
-async function sendTemplate(to: string, template: Template): Promise<string> {
+/**
+ * The raw template send. Split out so a caller can suppress the shared-inbox
+ * record — a payslip must not be published to `/whatsapp`, which every
+ * colleague can open.
+ */
+async function sendTemplateNoRecord(to: string, template: Template): Promise<string> {
   requireConfigured();
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, template);
   if ("error" in result && result.error) {
     throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
   }
   return result.messages?.[0]?.id ?? "";
+}
+
+async function sendTemplate(to: string, template: Template, body?: string): Promise<string> {
+  const waId = await sendTemplateNoRecord(to, template);
+  // Every approved template goes through here — the greeting that carries the
+  // «طلبات التسعير» list button, the RFQ, the PO, the cancellation. The
+  // greeting in particular was NEVER recorded (0 rows in the table), so the
+  // supplier's reply to it could never be quoted.
+  await recordOutboundMessage({
+    phone: normalizePhone(to),
+    waMessageId: waId || null,
+    body: body ?? `[قالب: ${template.name}]`,
+  });
+  return waId;
+}
+
+// ─── Outbound message persistence ────────────────────────────────────────────
+// Meta returns the sent message's own `wamid`; that id is what the supplier's
+// reply quotes back in `context.id`. If we never store it, the reply's quote
+// can never be resolved and the console shows «رسالة غير موجودة» — which is
+// exactly what happened for the 2,980 outbound rows (as of 2026-11) that were
+// written without a `wa_message_id`, including EVERY interactive menu and
+// button message. Chatwoot solves the same problem by writing the id at send
+// time (`message.update!(source_id: message_id)`), and that is the layer this
+// helper adds: one description of an outbound row, called from ONE place.
+
+/** The columns an outbound row needs. `waMessageId` is the reply-quote key. */
+export interface OutboundChatRecord {
+  /** The phone the message was sent to (already normalised by the caller). */
+  phone: string;
+  /** The `wamid` Meta returned. Without it the row cannot be quoted. */
+  waMessageId: string | null;
+  /** What the operator should read in the console (never a raw payload). */
+  body: string;
+  /** Set when the message carries media, so the console renders it. */
+  mediaType?: string | null;
+  filename?: string | null;
+  /** Links the row to a supplier, so the console shows the name not the number. */
+  supplierId?: number | null;
+}
+
+/**
+ * Persist an outbound WhatsApp message so its id can be resolved later when a
+ * supplier replies to it. Best-effort by design: the message is already sent,
+ * so a bookkeeping failure must never turn a delivered message into an error.
+ * The `@workspace/db` import is lazy because many route tests mock that module
+ * partially — importing it at module load breaks them (same trap as
+ * `db-tools.ts`'s lazy registry).
+ *
+ * `overwrite` is how a caller that knows the real content upgrades the generic
+ * row `sendTemplate` wrote a moment earlier. Without it the first writer would
+ * win the UNIQUE `wa_message_id` and the console would show «[قالب: rfq_pdf_ar]»
+ * instead of the message the supplier actually received. The default is
+ * insert-only: a caller must opt IN to replacing another writer's row.
+ */
+export async function recordOutboundMessage(
+  rec: OutboundChatRecord,
+  opts?: { overwrite?: boolean },
+): Promise<void> {
+  if (!rec.waMessageId) return;
+  // A conversation with the ASSISTANT is private, and a REPRESENTATIVE's thread
+  // is internal — neither belongs in the shared supplier inbox `/whatsapp`
+  // renders. `recordInboundOnce` guards the inbound half; without the same
+  // guard here, recording outbound rows would leak those threads into it (one
+  // rep already has 189 rows there). A read error answers "not private" so a
+  // real supplier message is never silently dropped.
+  if (await isPrivatePhone(rec.phone)) return;
+  try {
+    const { db, whatsappChatsTable } = await import("@workspace/db");
+    const values: typeof whatsappChatsTable.$inferInsert = {
+      waMessageId: rec.waMessageId,
+      direction: "outbound",
+      phone: rec.phone,
+      body: rec.body,
+      mediaType: rec.mediaType ?? null,
+      filename: rec.filename ?? null,
+      supplierId: rec.supplierId ?? null,
+      isRead: true,
+    };
+    if (opts?.overwrite) {
+      // Only the descriptive fields are replaced; direction/phone/createdAt
+      // belong to the row that was already written.
+      await db
+        .insert(whatsappChatsTable)
+        .values(values)
+        .onConflictDoUpdate({
+          target: whatsappChatsTable.waMessageId,
+          set: {
+            body: values.body,
+            mediaType: values.mediaType,
+            filename: values.filename,
+            supplierId: values.supplierId,
+          },
+        });
+      return;
+    }
+    await db.insert(whatsappChatsTable).values(values).onConflictDoNothing({
+      target: whatsappChatsTable.waMessageId,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, phone: rec.phone, waMessageId: rec.waMessageId },
+      "WhatsApp outbound record failed (non-fatal)",
+    );
+  }
+}
+
+/**
+ * Phones whose conversation must NOT appear in the shared supplier inbox: the
+ * AI assistant's allowlisted operators, and registered representatives (whose
+ * bot thread is an internal conversation). Mirrors the inbound guard so the two
+ * halves of a conversation are classified identically.
+ */
+async function isPrivatePhone(phone: string): Promise<boolean> {
+  try {
+    const { isAiAssistantPhone } = await import("../ai-assistant/config");
+    if (await isAiAssistantPhone(phone)) return true;
+    const { db, representativesTable } = await import("@workspace/db");
+    const { canonicalPhone } = await import("./supplier-requests");
+    const target = canonicalPhone(phone);
+    if (!target) return false;
+    const reps = await db
+      .select({ phone: representativesTable.phone, isActive: representativesTable.isActive })
+      .from(representativesTable);
+    return reps.some((r) => r.isActive !== false && canonicalPhone(r.phone ?? "") === target);
+  } catch {
+    return false;
+  }
 }
 
 async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<string> {
@@ -853,7 +986,7 @@ async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<st
     ),
     new URLComponent(pricingToken),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[RFQ ${opts.rfqNo}] طلب عرض سعر`);
   logger.info(
     { to, rfqNo: opts.rfqNo, waMessageId: waId },
     "RFQ UTILITY template sent via WhatsApp",
@@ -894,7 +1027,7 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<st
     ),
     new URLComponent(pricingToken),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[RFQ ${opts.rfqNo}] طلب عرض سعر — PDF`);
   logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ PDF template sent via WhatsApp");
   return waId;
 }
@@ -913,7 +1046,7 @@ async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<s
     ),
     new URLComponent(pricingToken),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[RFQ ${opts.rfqNo}] طلب عرض سعر — نص`);
   logger.info(
     { to, rfqNo: opts.rfqNo, waMessageId: waId },
     "RFQ text-only template sent via WhatsApp",
@@ -1061,7 +1194,7 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
         new BodyParameter(buildPoContactText(opts)), // {{3}} employee contact
       ),
     );
-    const waId = await sendTemplate(to, template);
+    const waId = await sendTemplate(to, template, `[أمر شراء PDF: ${opts.poNo}]`);
     logger.info({ to, poNo: opts.poNo, waId }, "PO sent via po_pdf_ar template");
     return waId || null;
   } catch (templateErr) {
@@ -1107,7 +1240,7 @@ export async function sendPoCancelWhatsApp(opts: SendPoCancelOpts): Promise<stri
       new BodyParameter(reason), // {{3}} cancellation reason
     ),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[إلغاء أمر شراء: ${opts.poNo}]`);
   logger.info({ to, poNo: opts.poNo, waId }, "PO cancellation sent via po_cancel_ar template");
   return waId || null;
 }
@@ -1233,7 +1366,7 @@ export async function sendSupplierGreetingWhatsApp(
   }
 
   const template = new Template(templateName, new Language(TEMPLATE_LANG), ...components);
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[ترحيب مورد: ${opts.name}]`);
   logger.info(
     { to, tier: opts.tier, template: templateName, guideAttached: Boolean(guide), waId },
     "Supplier greeting sent via WhatsApp",
@@ -1266,7 +1399,7 @@ export async function sendSupplierRegistrationWhatsApp(
     ),
     new URLComponent(opts.token),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[استكمال بيانات المورد: ${opts.supplierName}]`);
   logger.info({ to, waId }, "Supplier registration link sent via supplier_registration_ar");
   return waId || null;
 }
@@ -1299,7 +1432,7 @@ export async function sendSupplierRegistrationMismatchWhatsApp(
       new BodyParameter(fields), // {{2}} mismatched fields
     ),
   );
-  const waId = await sendTemplate(to, template);
+  const waId = await sendTemplate(to, template, `[عدم تطابق بيانات المورد: ${opts.supplierName}]`);
   logger.info({ to, waId }, "Supplier registration mismatch notice sent");
   return waId || null;
 }
@@ -1349,7 +1482,11 @@ export async function sendPayslipWhatsApp(opts: SendPayslipOpts): Promise<string
       new BodyParameter(net), // {{3}} net pay
     ),
   );
-  const waId = await sendTemplate(to, template);
+  // `sendTemplate` records every template it sends; a payslip must NOT be
+  // recorded — the console `/whatsapp` is a SHARED inbox, so a payslip row
+  // would publish one employee's net pay to every colleague who opens it.
+  // The send still happens; only the shared record is suppressed.
+  const waId = await sendTemplateNoRecord(to, template);
   logger.info(
     { to, period: opts.period, waId },
     "Payslip sent to employee via payslip_pdf_ar template",

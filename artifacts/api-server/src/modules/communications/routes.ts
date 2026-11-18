@@ -50,6 +50,7 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50
 import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
 import { supplierByPhone } from "./supplier-requests";
+import { matchQuotedMessage, wamidToken } from "./reply-quote";
 
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
@@ -1996,6 +1997,42 @@ router.get("/whatsapp/chats/:phone", requireAuth, async (req, res): Promise<void
     reactions: m.waMessageId ? (reactionMap.get(m.waMessageId) ?? []) : [],
   }));
   res.json(enriched);
+});
+
+// ─── GET /api/whatsapp/chats/:phone/quoted?waMessageId=… ──────────────────
+// Resolve the message a reply quotes when it is NOT in the 200-message page the
+// console loads. The quote is a `wamid`; it is matched exactly first, then by
+// its inner token, because the same message can carry more than one wamid
+// (phone-scoped vs BSUID-scoped) — the case Chatwoot's InReplyToMessageFinder
+// exists for. An ambiguous token resolves to nothing rather than to a guess.
+//
+// The id travels as a QUERY parameter, not a path segment: a wamid is base64
+// and contains `/`, `+` and `=`, which a path segment would split or mangle.
+router.get("/whatsapp/chats/:phone/quoted", requireAuth, async (req, res): Promise<void> => {
+  const phone = req.params.phone as string;
+  const target = (req.query.waMessageId as string | undefined) ?? "";
+  if (!target) {
+    res.status(400).json({ error: "waMessageId is required" });
+    return;
+  }
+  // Scoped to the conversation: a wamid from another supplier's thread must
+  // not be readable here even by an authenticated employee.
+  const rows = await db
+    .select()
+    .from(whatsappChatsTable)
+    .where(eq(whatsappChatsTable.phone, phone))
+    .orderBy(desc(whatsappChatsTable.createdAt))
+    .limit(2000);
+  const found = matchQuotedMessage(target, rows);
+  if (!found) {
+    // `not_stored` = we could derive the id's token, so the message simply was
+    // never recorded (the 2,980-row gap). `unresolvable` = the id itself is not
+    // something we can key on. The console says which, instead of a blanket
+    // «رسالة غير موجودة» that reads as a bug.
+    res.json({ found: false, reason: wamidToken(target) ? "not_stored" : "unresolvable" });
+    return;
+  }
+  res.json({ found: true, message: { ...found, reactions: [] } });
 });
 
 // ─── POST /api/whatsapp/react ─────────────────────────────────────────────

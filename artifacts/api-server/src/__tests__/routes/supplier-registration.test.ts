@@ -17,6 +17,12 @@ vi.mock("../../modules/communications/service", () => ({
   },
   sendSupplierRegistrationWhatsApp: (...a: any[]) => sendRegistrationWhatsApp(...a),
   sendSupplierRegistrationMismatchWhatsApp: (...a: any[]) => sendMismatchWhatsApp(...a),
+  // The route records the outbound row through the shared helper now, so the
+  // mock must expose it — otherwise the route's own catch swallows the call and
+  // the «row was saved» assertion would pass for the wrong reason.
+  recordOutboundMessage: vi.fn(async (rec: any) => {
+    insertCalls.push({ table: "wa", vals: { ...rec, direction: "outbound" } });
+  }),
 }));
 
 const sendRegistrationEmail = vi.fn().mockResolvedValue(undefined);

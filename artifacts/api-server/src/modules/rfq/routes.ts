@@ -20,7 +20,11 @@ import { generateToken } from "../../shared/token";
 import { generateOffersPdf } from "./offers-pdf.js";
 import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
 import { sendRfqEmail, sendSupplierGreetingEmail } from "../../shared/email";
-import { sendRfqWhatsApp, sendSupplierGreetingWhatsApp } from "../communications/service";
+import {
+  recordOutboundMessage,
+  sendRfqWhatsApp,
+  sendSupplierGreetingWhatsApp,
+} from "../communications/service";
 import {
   GREETING_REASON_LABEL,
   GREETING_TIER_LABEL,
@@ -30,7 +34,6 @@ import {
 } from "../../shared/supplier-greeting";
 import { loadSupplierGuide, supplierGuideUrl } from "../../shared/supplier-guide";
 import { resolvePublicBaseUrl } from "../../shared/base-url";
-import { whatsappChatsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 import { ensureAssignmentsForRfqSafe } from "./assignment";
 import { guardFor } from "../../shared/permissions";
@@ -1176,24 +1179,30 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
         }
 
         try {
+          // `sendRfqWhatsApp` already recorded this message through the shared
+          // outbound helper; upgrading that row with the real body is what the
+          // console shows. `overwrite` keeps the rich text instead of the
+          // generic «[قالب: …]» the safety net wrote.
           if (pdfSent) {
-            await db.insert(whatsappChatsTable).values({
-              waMessageId: sentWaId,
-              direction: "outbound",
+            await recordOutboundMessage(
+              {
+                waMessageId: sentWaId,
+                phone: normalizedPhone,
+                supplierId: supplier.id,
+                body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
+              },
+              { overwrite: true },
+            );
+          }
+          await recordOutboundMessage(
+            {
+              waMessageId: pdfSent ? null : sentWaId,
               phone: normalizedPhone,
               supplierId: supplier.id,
-              body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
-              isRead: true,
-            });
-          }
-          await db.insert(whatsappChatsTable).values({
-            waMessageId: pdfSent ? null : sentWaId,
-            direction: "outbound",
-            phone: normalizedPhone,
-            supplierId: supplier.id,
-            body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
-            isRead: true,
-          });
+              body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
+            },
+            { overwrite: true },
+          );
         } catch (chatErr) {
           req.log.warn(
             { err: chatErr, supplierId: supplier.id },

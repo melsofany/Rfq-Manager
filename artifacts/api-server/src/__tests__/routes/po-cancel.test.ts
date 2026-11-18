@@ -40,6 +40,12 @@ vi.mock("../../modules/communications/service", () => ({
   sendRepPoDispatchWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendPoCancelWhatsApp: sendPoCancelMock,
   sendPoCancelItemWhatsApp: sendPoCancelItemMock,
+  // The route records the outbound row through the shared helper now, so the
+  // mock must expose it — otherwise the call is swallowed by the route's own
+  // catch and the assertion below would pass for the wrong reason.
+  recordOutboundMessage: vi.fn(async (rec: any) => {
+    insertCalls.push({ table: "wa", vals: { ...rec, direction: "outbound" } });
+  }),
   formatQty: (q: any) =>
     q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0",
 }));

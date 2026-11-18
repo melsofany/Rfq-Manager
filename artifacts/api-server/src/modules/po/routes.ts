@@ -33,6 +33,7 @@ import {
   formatQty as formatWaQty,
   sendPoCancelWhatsApp,
   sendPoCancelItemWhatsApp,
+  recordOutboundMessage,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 import { normalizeSinglePhone, pickSendablePhone, splitPhoneCandidates } from "../../shared/phone";
@@ -931,16 +932,17 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         // Save to whatsapp_chats so the message appears in the chat history
         const chatPhone = normalizePhone(supplier.phone.trim());
         try {
-          await db.insert(whatsappChatsTable).values({
-            waMessageId: wamid ?? null,
-            direction: "outbound",
-            phone: chatPhone,
-            supplierId,
-            body: `[أمر شراء PDF: ${poNo}]`,
-            mediaType: "document",
-            filename: `PO-${poNo}.pdf`,
-            isRead: true,
-          });
+          await recordOutboundMessage(
+            {
+              waMessageId: wamid ?? null,
+              phone: chatPhone,
+              supplierId,
+              body: `[أمر شراء PDF: ${poNo}]`,
+              mediaType: "document",
+              filename: `PO-${poNo}.pdf`,
+            },
+            { overwrite: true },
+          );
         } catch (saveErr) {
           req.log.error(
             { err: saveErr, supplierId, poNo, chatPhone, wamid },
@@ -1293,14 +1295,15 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           itemIdsToCancel.length < itemRows.length
             ? ` (${itemIdsToCancel.length}/${itemRows.length} بنود)`
             : "";
-        await db.insert(whatsappChatsTable).values({
-          waMessageId: waId ?? null,
-          direction: "outbound",
-          phone: normalizePhone(supplier.phone.trim()),
-          supplierId: supplier.id,
-          body: `[إلغاء أمر شراء: ${poNo} — ${supplier.name}${partialNote}]${cancelReason ? ` — ${cancelReason}` : ""}`,
-          isRead: true,
-        });
+        await recordOutboundMessage(
+          {
+            waMessageId: waId ?? null,
+            phone: normalizePhone(supplier.phone.trim()),
+            supplierId: supplier.id,
+            body: `[إلغاء أمر شراء: ${poNo} — ${supplier.name}${partialNote}]${cancelReason ? ` — ${cancelReason}` : ""}`,
+          },
+          { overwrite: true },
+        );
       } catch (saveErr) {
         req.log.error(
           { err: saveErr, supplierId: supplier.id, poNo },
