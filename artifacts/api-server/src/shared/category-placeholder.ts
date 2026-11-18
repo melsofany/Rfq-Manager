@@ -15,12 +15,18 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  auditLogTable,
   db,
   supplierCategoriesTable,
   supplierCategoryLinksTable,
   suppliersTable,
 } from "@workspace/db";
-import { categoryKey, type CategoryNode } from "./category-tree";
+import {
+  categoryKey,
+  nonLeafHolders,
+  redundantParentLinks,
+  type CategoryNode,
+} from "./category-tree";
 
 export const REVIEW_PLACEHOLDER_NAME = "يحتاج للمراجعة";
 
@@ -159,4 +165,132 @@ export async function moveOrphansToPlaceholder(
     });
   }
   return suppliers.length;
+}
+
+export interface ReviewSweepResult {
+  /** Redundant parent links dropped (a supplier on a parent AND one of its children). */
+  removed: number;
+  /** Suppliers moved from a bare grouping category into its placeholder. */
+  moved: number;
+  /** Empty placeholders soft-deleted. */
+  pruned: number;
+  /** Supplier↔category links that remain after step 1. */
+  remaining: number;
+}
+
+/**
+ * The whole review rule in one place, and idempotent:
+ *   1. drop the parent links that add nothing (the supplier also sits on a child);
+ *   2. move every supplier still standing ALONE on a grouping category into that
+ *      category's «يحتاج للمراجعة» leaf, so no supplier stays on a main category;
+ *   3. soft-delete placeholders that now hold nobody.
+ *
+ * It runs after every supplier create/update and once at boot, so the rule holds
+ * without someone pressing a button. A sweep that changes anything writes one
+ * audit entry.
+ */
+export async function sweepReviewQueues(
+  actorEmployeeId: number | null = null,
+): Promise<ReviewSweepResult> {
+  const live = await db
+    .select({
+      id: supplierCategoriesTable.id,
+      name: supplierCategoriesTable.name,
+      parentId: supplierCategoriesTable.parentId,
+    })
+    .from(supplierCategoriesTable)
+    .where(eq(supplierCategoriesTable.isActive, true));
+  const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+  const liveIds = new Set(nodes.map((n) => n.id));
+  const nameById = new Map(nodes.map((n) => [n.id, n.name]));
+
+  const allLinks = await db
+    .select({
+      supplierId: supplierCategoryLinksTable.supplierId,
+      categoryId: supplierCategoryLinksTable.categoryId,
+      supplierName: suppliersTable.name,
+    })
+    .from(supplierCategoryLinksTable)
+    .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
+  const links = allLinks.map((l) => ({ supplierId: l.supplierId, categoryId: l.categoryId }));
+
+  // 1) Redundant parent links.
+  const redundant = redundantParentLinks(nodes, links);
+  if (redundant.length > 0) {
+    const removedBySupplier = new Map<number, Set<number>>();
+    for (const l of redundant) {
+      const set = removedBySupplier.get(l.supplierId) ?? new Set<number>();
+      set.add(l.categoryId);
+      removedBySupplier.set(l.supplierId, set);
+    }
+    await db.transaction(async (tx) => {
+      for (const l of redundant) {
+        await tx
+          .delete(supplierCategoryLinksTable)
+          .where(
+            and(
+              eq(supplierCategoryLinksTable.supplierId, l.supplierId),
+              eq(supplierCategoryLinksTable.categoryId, l.categoryId),
+            ),
+          );
+      }
+      // The free-text mirror must match the SURVIVING links.
+      for (const [supplierId, removed] of removedBySupplier) {
+        const names = links
+          .filter((x) => x.supplierId === supplierId && !removed.has(x.categoryId))
+          .map((x) => nameById.get(x.categoryId))
+          .filter((n): n is string => Boolean(n));
+        await tx
+          .update(suppliersTable)
+          .set({ category: names.join(",") })
+          .where(eq(suppliersTable.id, supplierId));
+      }
+    });
+  }
+
+  // 2) Suppliers still standing alone on a grouping category.
+  const removedKeys = new Set(redundant.map((l) => `${l.supplierId}:${l.categoryId}`));
+  const holders = new Map<number, Array<{ id: number; name: string }>>();
+  for (const l of allLinks) {
+    if (removedKeys.has(`${l.supplierId}:${l.categoryId}`)) continue;
+    const list = holders.get(l.categoryId) ?? [];
+    list.push({ id: l.supplierId, name: l.supplierName });
+    holders.set(l.categoryId, list);
+  }
+  const groups = nonLeafHolders(nodes, holders, liveIds).filter(
+    (g) => !isReviewPlaceholder(g.name),
+  );
+  let moved = 0;
+  for (const g of groups) {
+    moved += await moveOrphansToPlaceholder(g.id, g.name, g.holders);
+  }
+
+  // 3) Placeholders that now hold nobody.
+  const pruned = await pruneEmptyReviewPlaceholders();
+
+  const result = {
+    removed: redundant.length,
+    moved,
+    pruned,
+    remaining: links.length - redundant.length,
+  };
+  // One audit entry per kind of change, under the action name each kind has
+  // always had, so the history reads the same as before.
+  if (result.removed > 0) {
+    await db.insert(auditLogTable).values({
+      action: "supplier_category.parent_links_cleaned",
+      entityType: "supplier_category",
+      employeeId: actorEmployeeId,
+      description: `Removed ${result.removed} redundant parent-category supplier link(s)`,
+    });
+  }
+  if (result.moved + result.pruned > 0) {
+    await db.insert(auditLogTable).values({
+      action: "supplier_category.review_swept",
+      entityType: "supplier_category",
+      employeeId: actorEmployeeId,
+      description: `Review sweep: moved ${result.moved} supplier(s) to review, pruned ${result.pruned} empty placeholder(s)`,
+    });
+  }
+  return result;
 }
