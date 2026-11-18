@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { SupplierScoreStanding } from './supplierScoreStanding';
 
 export interface SupplierScore {
   supplierId: number;
@@ -19,6 +20,10 @@ export interface SupplierScore {
      * @nullable
      */
   rating?: number | null;
+  /** عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة */
+  sampleSize?: number;
+  /** حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى) */
+  standing?: SupplierScoreStanding;
   /**
      * نسبة الاستجابة (0-100)
      * @nullable

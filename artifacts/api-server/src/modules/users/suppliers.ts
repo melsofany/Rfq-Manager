@@ -1,5 +1,6 @@
 import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
+import { standingOf } from "../../shared/supplier-standing";
 import {
   db,
   suppliersTable,
@@ -173,6 +174,8 @@ function deriveScore(m: {
   ];
   let totalScore: number | null = null;
   let rating: number | null = null;
+  // Standing is based on offers submitted: that is the sample every component draws on.
+  const sampleSize = m.totalOffersSubmitted;
   const available = components.filter((c) => c.score !== null) as {
     score: number;
     weight: number;
@@ -202,6 +205,8 @@ function deriveScore(m: {
     deliveryScore,
     totalScore,
     rating,
+    sampleSize,
+    standing: standingOf(totalScore, sampleSize),
   };
 }
 
