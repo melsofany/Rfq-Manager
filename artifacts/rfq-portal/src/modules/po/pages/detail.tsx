@@ -283,9 +283,7 @@ export default function PurchaseOrderDetailPage() {
     setEditItems((prev) => prev.filter((i) => i.id !== rowId));
 
   const updateEditTaxIncluded = (rowId: string, taxIncluded: boolean) =>
-    setEditItems((prev) =>
-      prev.map((i) => (i.id === rowId ? applyTaxToggle(i, taxIncluded) : i)),
-    );
+    setEditItems((prev) => prev.map((i) => (i.id === rowId ? applyTaxToggle(i, taxIncluded) : i)));
 
   const updateEditField = <K extends keyof PoItemRow>(rowId: string, key: K, value: PoItemRow[K]) =>
     setEditItems((prev) => prev.map((i) => (i.id === rowId ? { ...i, [key]: value } : i)));
