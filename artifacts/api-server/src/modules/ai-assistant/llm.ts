@@ -12,6 +12,7 @@ import {
   DEFAULT_MODEL,
   GEMINI_BASE_URL,
   GEMINI_MEDIA_MODEL,
+  TRANSCRIBE_EXTRA_MODELS,
   DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL,
   DEEPSEEK_FALLBACK_MODELS,
@@ -920,7 +921,7 @@ export async function transcribeAudio(
   // primary changed.
   const mediaBase = GEMINI_BASE_URL;
   if (isGeminiEndpoint(mediaBase)) {
-    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model);
+    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model, TRANSCRIBE_EXTRA_MODELS);
   }
   // Only reached when the operator explicitly points the media endpoint at a
   // non-Gemini whisper-compatible gateway.
@@ -986,21 +987,35 @@ async function extractWithGemini(
   prompt: string,
   baseUrl?: string | null,
   model?: string | null,
+  extraCandidates: readonly string[] = [],
 ): Promise<string | null> {
   // The media chain is a GEMINI chain: the caller's `model` is the CHAT model,
   // which is DeepSeek in the default deployment and would 404 against
   // `generateContent`. `GEMINI_MEDIA_MODEL` heads the chain and the Gemini
   // fallbacks follow, so a retired media id degrades instead of failing.
   const mediaModel = isGeminiModelId(model) ? model : null;
-  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS].filter(
+  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS, ...extraCandidates].filter(
     (m, i, arr) => Boolean(m) && arr.indexOf(m) === i,
   );
   for (const candidate of candidates) {
     const text = await extractWithGeminiModel(buffer, mimeType, prompt, baseUrl, candidate);
-    if (text) return text;
+    if (text) {
+      logger.info({ model: candidate }, "AI assistant: Gemini media model answered");
+      return text;
+    }
   }
   return null;
 }
+
+/** Statuses Gemini returns when the model is busy or rate-limited; worth retrying. */
+const TRANSIENT_GEMINI_STATUS = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * Waits between attempts on the SAME model when Gemini is overloaded. Two retries
+ * (1.5s, then 3s) ride out a short "high demand" spike before the next model in
+ * the fallback chain is tried.
+ */
+export const GEMINI_RETRY_DELAYS_MS = [1500, 3000];
 
 async function extractWithGeminiModel(
   buffer: Buffer,
@@ -1009,45 +1024,62 @@ async function extractWithGeminiModel(
   baseUrl: string | null | undefined,
   model: string,
 ): Promise<string | null> {
-  try {
-    const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "").replace(/\/openai$/, "");
-    const res = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": AI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [
+  const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "").replace(/\/openai$/, "");
+  const url = `${base}/models/${encodeURIComponent(model)}:generateContent`;
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
           {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType || "application/octet-stream",
-                  data: buffer.toString("base64"),
-                },
-              },
-            ],
+            inline_data: {
+              mime_type: mimeType || "application/octet-stream",
+              data: buffer.toString("base64"),
+            },
           },
         ],
-      }),
-    });
-    if (!res.ok) {
-      logger.warn(
-        { status: res.status, body: (await res.text()).slice(0, 300) },
-        "AI assistant: Gemini transcription failed",
-      );
+      },
+    ],
+  });
+  for (let attempt = 0; ; attempt++) {
+    const retriesLeft = attempt < GEMINI_RETRY_DELAYS_MS.length;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": AI_API_KEY,
+        },
+        body,
+      });
+      if (!res.ok) {
+        if (TRANSIENT_GEMINI_STATUS.has(res.status) && retriesLeft) {
+          logger.info(
+            { status: res.status, model, attempt },
+            "AI assistant: Gemini busy, retrying transcription",
+          );
+          await new Promise((r) => setTimeout(r, GEMINI_RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        logger.warn(
+          { status: res.status, model, body: (await res.text()).slice(0, 300) },
+          "AI assistant: Gemini transcription failed",
+        );
+        return null;
+      }
+      const json = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      return text.trim() || null;
+    } catch (err) {
+      if (retriesLeft) {
+        await new Promise((r) => setTimeout(r, GEMINI_RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+      logger.warn({ err, model }, "AI assistant: Gemini transcription error");
       return null;
     }
-    const json = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    return text.trim() || null;
-  } catch (err) {
-    logger.warn({ err }, "AI assistant: Gemini transcription error");
-    return null;
   }
 }
 
