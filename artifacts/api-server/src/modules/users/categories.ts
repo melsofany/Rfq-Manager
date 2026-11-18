@@ -35,7 +35,9 @@ import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import {
   canonicalCategoryName,
   categoryKey,
+  descendantIds,
   nonLeafHolders,
+  redundantParentLinks,
   wouldCycle,
 } from "../../shared/category-tree";
 import { mergeSupplierCategories } from "../../shared/category-merge";
@@ -152,14 +154,131 @@ router.get("/categories/parent-assignments", requireAuth, async (_req, res): Pro
   }
 
   const groups = nonLeafHolders(nodes, holders, liveIds);
+
+  // The PROVABLE half: a supplier filed under a grouping category AND under one
+  // of its descendants. Filtering the tree already reaches him through the
+  // subtree, so the parent link is redundant and can be dropped with no loss.
+  const allLinks = await db
+    .select({
+      supplierId: supplierCategoryLinksTable.supplierId,
+      categoryId: supplierCategoryLinksTable.categoryId,
+    })
+    .from(supplierCategoryLinksTable);
+  const nameById = new Map(nodes.map((n) => [n.id, n.name]));
+  const supplierNameById = new Map<number, string>();
+  for (const l of links) supplierNameById.set(l.supplierId, l.supplierName);
+  const redundant = redundantParentLinks(nodes, allLinks).map((l) => {
+    const sub = descendantIds(nodes, l.categoryId);
+    const keptOn = allLinks
+      .filter(
+        (x) =>
+          x.supplierId === l.supplierId && x.categoryId !== l.categoryId && sub.has(x.categoryId),
+      )
+      .map((x) => nameById.get(x.categoryId) ?? `#${x.categoryId}`);
+    return {
+      supplierId: l.supplierId,
+      supplierName: supplierNameById.get(l.supplierId) ?? `#${l.supplierId}`,
+      categoryId: l.categoryId,
+      categoryName: nameById.get(l.categoryId) ?? `#${l.categoryId}`,
+      keptOn,
+    };
+  });
+
+  const redundantByCategory = new Map<number, number>();
+  for (const r of redundant) {
+    redundantByCategory.set(r.categoryId, (redundantByCategory.get(r.categoryId) ?? 0) + 1);
+  }
+
   res.json({
     totals: {
       categoriesWithSuppliers: groups.length,
       suppliersToRefile: groups.reduce((n, g) => n + g.holderCount, 0),
+      redundantLinks: redundant.length,
+      onlyOnParent: groups.reduce((n, g) => n + g.holderCount, 0) - redundant.length,
     },
-    groups,
+    groups: groups.map((g) => ({ ...g, redundantCount: redundantByCategory.get(g.id) ?? 0 })),
+    redundant,
   });
 });
+
+/**
+ * Remove ONLY the provable redundant parent links (see `redundantParentLinks`).
+ * A supplier filed under a grouping category AND one of its descendants keeps
+ * the descendant link; the parent link adds nothing and is dropped. A supplier
+ * filed under the grouping category ALONE is never touched — nobody knows which
+ * leaf his trade belongs to, so the operator re-files him by hand.
+ */
+router.post(
+  "/categories/parent-assignments/cleanup",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const rows = await db.select().from(supplierCategoriesTable);
+    const live = rows.filter((r) => r.deletedAt == null);
+    const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+
+    const links = await db
+      .select({
+        supplierId: supplierCategoryLinksTable.supplierId,
+        categoryId: supplierCategoryLinksTable.categoryId,
+      })
+      .from(supplierCategoryLinksTable);
+
+    const redundant = redundantParentLinks(nodes, links);
+    if (redundant.length === 0) {
+      res.json({ ok: true, removed: 0, remaining: 0 });
+      return;
+    }
+
+    const nameById = new Map(nodes.map((n) => [n.id, n.name]));
+    const removedBySupplier = new Map<number, Set<number>>();
+    for (const l of redundant) {
+      const set = removedBySupplier.get(l.supplierId) ?? new Set<number>();
+      set.add(l.categoryId);
+      removedBySupplier.set(l.supplierId, set);
+    }
+    const survivingNames = new Map<number, string[]>();
+    for (const [supplierId, removed] of removedBySupplier) {
+      const names = links
+        .filter((x) => x.supplierId === supplierId && !removed.has(x.categoryId))
+        .map((x) => nameById.get(x.categoryId))
+        .filter((n): n is string => Boolean(n));
+      survivingNames.set(supplierId, names);
+    }
+
+    await db.transaction(async (tx) => {
+      for (const l of redundant) {
+        await tx
+          .delete(supplierCategoryLinksTable)
+          .where(
+            and(
+              eq(supplierCategoryLinksTable.supplierId, l.supplierId),
+              eq(supplierCategoryLinksTable.categoryId, l.categoryId),
+            ),
+          );
+      }
+      // The free-text mirror on `suppliers.category` is a comma-joined name
+      // list; leaving it stale would make the list show a category the link no
+      // longer holds. Rewrite it from the SURVIVING links.
+      for (const [supplierId, names] of survivingNames) {
+        await tx
+          .update(suppliersTable)
+          .set({ category: names.join(",") })
+          .where(eq(suppliersTable.id, supplierId));
+      }
+      await tx.insert(auditLogTable).values({
+        action: "supplier_category.parent_links_cleaned",
+        entityType: "supplier_category",
+        employeeId: req.session.employeeId,
+        description: `Removed ${redundant.length} redundant parent-category supplier link(s)`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+    });
+
+    const remaining = links.length - redundant.length;
+    res.json({ ok: true, removed: redundant.length, remaining });
+  },
+);
 
 /** Create a category. The name is normalised; a duplicate key is refused. */
 router.post("/categories", requireRole("admin", "manager"), async (req, res): Promise<void> => {

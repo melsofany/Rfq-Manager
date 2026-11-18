@@ -234,3 +234,48 @@ export function nonLeafHolders<T extends { id: number; name: string }>(
   }
   return out.sort((a, b) => b.holderCount - a.holderCount);
 }
+
+/**
+ * The supplier→category links that are REDUNDANT because the supplier is also
+ * filed under a DESCENDANT of that same category.
+ *
+ * A supplier may not be filed under a grouping category (only a leaf). Where he
+ * is BOTH on the parent and on a child, the parent link adds nothing: filtering
+ * the tree already reaches him through the subtree, so dropping it loses no
+ * information and stops him being counted twice.
+ *
+ * Deliberately returns ONLY the provable case. A supplier filed under the parent
+ * ALONE is never returned — nobody knows which leaf his trade belongs to, and
+ * guessing would file him under a trade he may not have.
+ */
+export function redundantParentLinks(
+  nodes: CategoryNode[],
+  links: Array<{ supplierId: number; categoryId: number }>,
+): Array<{ supplierId: number; categoryId: number }> {
+  const bySupplier = new Map<number, Set<number>>();
+  for (const l of links) {
+    const set = bySupplier.get(l.supplierId) ?? new Set<number>();
+    set.add(l.categoryId);
+    bySupplier.set(l.supplierId, set);
+  }
+  const subtreeOf = new Map<number, Set<number>>();
+  const subtree = (id: number): Set<number> => {
+    const cached = subtreeOf.get(id);
+    if (cached) return cached;
+    const s = descendantIds(nodes, id);
+    subtreeOf.set(id, s);
+    return s;
+  };
+
+  const out: Array<{ supplierId: number; categoryId: number }> = [];
+  for (const l of links) {
+    const own = bySupplier.get(l.supplierId);
+    if (!own) continue;
+    const sub = subtree(l.categoryId);
+    // A descendant of the category (excluding the category itself) the supplier
+    // is also filed under ⇒ the parent link is redundant.
+    const coveredByChild = [...own].some((cid) => cid !== l.categoryId && sub.has(cid));
+    if (coveredByChild) out.push(l);
+  }
+  return out;
+}

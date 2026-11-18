@@ -6,6 +6,7 @@ import {
   isLeaf,
   leafCategoryIds,
   nonLeafHolders,
+  redundantParentLinks,
 } from "../../shared/category-tree";
 
 /**
@@ -105,5 +106,55 @@ describe("existing tree helpers still hold", () => {
   it("flattenTree keeps a grandchild", () => {
     const flat = flattenTree(nodes);
     expect(flat.find((n) => n.id === 29)?.depth).toBe(1);
+  });
+});
+
+describe("redundantParentLinks — only the provable case", () => {
+  it("flags a parent link when the supplier is ALSO on a child", () => {
+    const links = [
+      { supplierId: 1, categoryId: 1 }, // كهرباء (parent)
+      { supplierId: 1, categoryId: 13 }, // بطاريات UPS (child)
+    ];
+    expect(redundantParentLinks(nodes, links)).toEqual([{ supplierId: 1, categoryId: 1 }]);
+  });
+
+  it("flags a GRANDchild too — any descendant makes the parent link redundant", () => {
+    const links = [
+      { supplierId: 2, categoryId: 1311 }, // قطع غيار
+      { supplierId: 2, categoryId: 29 }, // قطع غيار Dewalt (child)
+    ];
+    expect(redundantParentLinks(nodes, links)).toEqual([{ supplierId: 2, categoryId: 1311 }]);
+  });
+
+  it("does NOT flag a supplier who is on the parent ALONE (nobody knows his leaf)", () => {
+    const links = [{ supplierId: 3, categoryId: 1 }];
+    expect(redundantParentLinks(nodes, links)).toEqual([]);
+  });
+
+  it("does NOT flag a leaf link — a leaf has no descendants", () => {
+    const links = [{ supplierId: 4, categoryId: 13 }];
+    expect(redundantParentLinks(nodes, links)).toEqual([]);
+  });
+
+  it("flags only the parent of an unrelated pair, leaving both leaves alone", () => {
+    const links = [
+      { supplierId: 5, categoryId: 1 },
+      { supplierId: 5, categoryId: 13 },
+      { supplierId: 5, categoryId: 1311 },
+      { supplierId: 5, categoryId: 29 },
+    ];
+    expect(redundantParentLinks(nodes, links)).toEqual([
+      { supplierId: 5, categoryId: 1 },
+      { supplierId: 5, categoryId: 1311 },
+    ]);
+  });
+
+  it("returns nothing when every link is a leaf", () => {
+    expect(
+      redundantParentLinks(nodes, [
+        { supplierId: 6, categoryId: 13 },
+        { supplierId: 6, categoryId: 14 },
+      ]),
+    ).toEqual([]);
   });
 });

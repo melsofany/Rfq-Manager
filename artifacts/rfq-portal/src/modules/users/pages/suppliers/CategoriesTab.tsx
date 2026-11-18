@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useListCategories, getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { AlertTriangle, Boxes, Search, Tag } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { orderCategoryTree } from "@/lib/category-tree";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -19,7 +20,18 @@ interface ParentAssignmentGroup {
   name: string;
   children: number;
   holderCount: number;
+  redundantCount: number;
   holders: Array<{ id: number; name: string }>;
+}
+
+interface ParentAssignments {
+  totals: {
+    categoriesWithSuppliers: number;
+    suppliersToRefile: number;
+    redundantLinks: number;
+    onlyOnParent: number;
+  };
+  groups: ParentAssignmentGroup[];
 }
 
 /**
@@ -29,21 +41,45 @@ interface ParentAssignmentGroup {
  */
 function ParentAssignmentReview({
   t,
+  canManage,
 }: {
   t: (key: string, vars?: Record<string, string | number>) => string;
+  canManage: boolean;
 }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<number | null>(null);
   const { data } = useQuery({
     queryKey: ["category-parent-assignments"],
     queryFn: async () => {
       const res = await fetch("/api/categories/parent-assignments", { credentials: "include" });
       if (!res.ok) throw new Error("failed");
-      return (await res.json()) as {
-        totals: { categoriesWithSuppliers: number; suppliersToRefile: number };
-        groups: ParentAssignmentGroup[];
-      };
+      return (await res.json()) as ParentAssignments;
     },
     staleTime: 60 * 1000,
   });
+
+  const clean = async () => {
+    if (!data || data.totals.redundantLinks === 0) return;
+    if (!window.confirm(t("sup.cat.review.confirm", { n: data.totals.redundantLinks }))) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/categories/parent-assignments/cleanup", {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error ?? "failed");
+      setResult(body.removed as number);
+      await qc.invalidateQueries({ queryKey: ["category-parent-assignments"] });
+      await qc.invalidateQueries({ queryKey: ["suppliers"] });
+    } catch {
+      setResult(-1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!data || data.groups.length === 0) return null;
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50/60 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
@@ -54,6 +90,26 @@ function ParentAssignmentReview({
       <p className="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-300">
         {t("sup.cat.review.body")}
       </p>
+      <p className="mt-2 text-xs font-medium text-amber-900 dark:text-amber-200">
+        {t("sup.cat.review.split", {
+          redundant: data.totals.redundantLinks,
+          only: data.totals.onlyOnParent,
+        })}
+      </p>
+      {canManage && data.totals.redundantLinks > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <Button size="sm" variant="outline" disabled={busy} onClick={clean}>
+            {t("sup.cat.review.clean")}
+          </Button>
+          {result != null && (
+            <span className="text-xs text-amber-900 dark:text-amber-200">
+              {result < 0
+                ? t("sup.cat.review.cleanFailed")
+                : t("sup.cat.review.cleaned", { n: result })}
+            </span>
+          )}
+        </div>
+      )}
       <ul className="mt-2 space-y-1.5">
         {data.groups.map((g) => (
           <li key={g.id} className="text-xs text-amber-900 dark:text-amber-200">
@@ -61,6 +117,9 @@ function ParentAssignmentReview({
             <span className="text-amber-700 dark:text-amber-400">
               {" "}
               — {t("sup.cat.review.holders", { n: g.holderCount })}
+              {g.redundantCount > 0
+                ? " · " + t("sup.cat.review.redundant", { n: g.redundantCount })
+                : ""}
             </span>
             <span className="block ps-3 text-[11px] text-amber-700/80 dark:text-amber-400/80">
               {g.holders.map((h) => h.name).join("، ")}
@@ -163,7 +222,7 @@ export function CategoriesTab({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="space-y-4 px-4 py-4 sm:px-6">
-      <ParentAssignmentReview t={t} />
+      <ParentAssignmentReview t={t} canManage={canManage} />
       <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
         <Tag size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
         <div className="text-xs leading-relaxed text-muted-foreground">

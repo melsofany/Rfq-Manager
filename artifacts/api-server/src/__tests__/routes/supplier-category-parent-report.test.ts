@@ -2,15 +2,35 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
 
+vi.mock("drizzle-orm", () => ({
+  eq: (left: any, right: any) => ({ __op: "eq", left, right }),
+  and: (...args: any[]) => ({ __op: "and", args }),
+  count: () => ({ __op: "count" }),
+  sql: Object.assign(() => ({ __op: "sql" }), { raw: () => ({}) }),
+}));
+
+const sessionState: { employeeId: number; role: string } = { employeeId: 1, role: "admin" };
+
 vi.mock("../../middlewares/auth", () => ({
   requireAuth: (_req: any, _res: any, next: any) => next(),
-  requireRole: () => (_req: any, _res: any, next: any) => next(),
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!roles.includes(req.session?.role ?? "")) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 const state: {
   categories: any[];
   links: any[];
-} = { categories: [], links: [] };
+  deleted: Array<{ supplierId: number; categoryId: number }>;
+  supplierUpdates: any[];
+  audits: any[];
+} = { categories: [], links: [], deleted: [], supplierUpdates: [], audits: [] };
 
 function chainable(rows: any): any {
   const api: any = {
@@ -59,7 +79,32 @@ vi.mock("@workspace/db", () => {
       insert: vi.fn(() => chainable([])),
       update: vi.fn(() => chainable([])),
       delete: vi.fn(() => chainable([])),
-      transaction: vi.fn(async (fn: any) => fn({})),
+      transaction: vi.fn(async (fn: any) => {
+        const tx = {
+          delete: (_t: any) => ({
+            where: (cond: any) => {
+              const c = cond?.__op === "and" ? cond.args : [cond];
+              const sid = c.find((x: any) => x?.left === "supplier_id")?.right;
+              const cid = c.find((x: any) => x?.left === "category_id")?.right;
+              state.deleted.push({ supplierId: sid, categoryId: cid });
+              return Promise.resolve();
+            },
+          }),
+          update: (_t: any) => ({
+            set: (vals: any) => {
+              state.supplierUpdates.push(vals);
+              return { where: () => Promise.resolve() };
+            },
+          }),
+          insert: (_t: any) => ({
+            values: (v: any) => {
+              state.audits.push(v);
+              return Promise.resolve();
+            },
+          }),
+        };
+        return fn(tx);
+      }),
     },
     ...tables,
   };
@@ -68,7 +113,7 @@ vi.mock("@workspace/db", () => {
 const testApp = express();
 testApp.use(express.json());
 testApp.use((req, _res, next) => {
-  (req as any).session = { employeeId: 1, role: "admin" };
+  (req as any).session = sessionState;
   next();
 });
 
@@ -80,6 +125,10 @@ beforeAll(async () => {
 beforeEach(() => {
   state.categories = [];
   state.links = [];
+  state.deleted.length = 0;
+  state.supplierUpdates.length = 0;
+  state.audits.length = 0;
+  sessionState.role = "admin";
 });
 
 describe("GET /categories/parent-assignments — the review list", () => {
@@ -136,5 +185,45 @@ describe("GET /categories/parent-assignments — the review list", () => {
     // the response is a report; the link list is untouched
     expect(state.links.length).toBe(1);
     expect(state.links[0].categoryId).toBe(1);
+  });
+});
+
+describe("POST /categories/parent-assignments/cleanup — only the provable case", () => {
+  it("removes a parent link when the supplier is ALSO on a child, and syncs the mirror", async () => {
+    state.categories = [
+      { id: 1, name: "كهرباء", parentId: null, deletedAt: null },
+      { id: 13, name: "بطاريات UPS", parentId: 1, deletedAt: null },
+    ];
+    state.links = [
+      { supplierId: 42, categoryId: 1 },
+      { supplierId: 42, categoryId: 13 },
+    ];
+    const res = await request(testApp).post("/categories/parent-assignments/cleanup");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, removed: 1, remaining: 1 });
+    expect(state.deleted).toEqual([{ supplierId: 42, categoryId: 1 }]);
+    // the free-text mirror must drop the parent name too, or the list lies
+    expect(state.supplierUpdates).toEqual([{ category: "بطاريات UPS" }]);
+    expect(
+      state.audits.some((a: any) => a.action === "supplier_category.parent_links_cleaned"),
+    ).toBe(true);
+  });
+
+  it("does NOT touch a supplier who is on the parent ALONE", async () => {
+    state.categories = [
+      { id: 1, name: "كهرباء", parentId: null, deletedAt: null },
+      { id: 13, name: "بطاريات UPS", parentId: 1, deletedAt: null },
+    ];
+    state.links = [{ supplierId: 43, categoryId: 1 }];
+    const res = await request(testApp).post("/categories/parent-assignments/cleanup");
+    expect(res.body.removed).toBe(0);
+    expect(state.deleted).toEqual([]);
+    expect(state.supplierUpdates).toEqual([]);
+  });
+
+  it("403s for a non-manager role", async () => {
+    sessionState.role = "data_entry";
+    const res = await request(testApp).post("/categories/parent-assignments/cleanup");
+    expect(res.status).toBe(403);
   });
 });
