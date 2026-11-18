@@ -1406,7 +1406,7 @@ export async function initDb(): Promise<void> {
     const categories = ["الميكانيكا", "معدات البترول"];
     for (const cat of categories) {
       await client.query(
-        `INSERT INTO supplier_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+        `INSERT INTO supplier_categories (name) VALUES ($1) ON CONFLICT DO NOTHING`,
         [cat],
       );
     }
@@ -2007,7 +2007,7 @@ export async function initDb(): Promise<void> {
     for (const c of itemCategories) {
       await client.query(
         `INSERT INTO item_categories (name, code, sort_order, kind) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (name) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [c.name, c.code, c.sort, c.kind],
       );
     }
@@ -2042,9 +2042,17 @@ export async function initDb(): Promise<void> {
       { name: "Electrical Instruments", code: "instruments", parent: "كهرباء", sort: 48 },
     ];
     for (const s of itemSubcategories) {
+      // Guarded by NAME, not by a conflict target: uniqueness is scoped to the
+      // PARENT, and this row is inserted before its parent is resolved, so a
+      // re-run would see no conflict against the already-parented row and insert
+      // a SECOND copy — which the re-parent UPDATE below then collides with
+      // (`duplicate key ... item_categories_parent_name_uq`). A subcategory name
+      // in this seed list is unique, so its presence is the whole test.
       await client.query(
-        `INSERT INTO item_categories (name, code, sort_order, kind) VALUES ($1, $2, $3, 'subcategory')
-         ON CONFLICT (name) DO NOTHING`,
+        `INSERT INTO item_categories (name, code, sort_order, kind)
+         SELECT $1, $2, $3, 'subcategory'
+         WHERE NOT EXISTS (SELECT 1 FROM item_categories WHERE name = $1)
+         ON CONFLICT DO NOTHING`,
         [s.name, s.code, s.sort],
       );
       await client.query(
@@ -2096,7 +2104,7 @@ export async function initDb(): Promise<void> {
                             'Automation', 'PLC', 'Encoders', 'Control Systems',
                             'Electrical Instruments')
         AND NOT EXISTS (SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name)
-      ON CONFLICT (name) DO NOTHING;
+      ON CONFLICT DO NOTHING;
     `);
     // 2) A specialisation is NOT a trade category. First drop a declared
     //    specialisation row that leaked into `supplier_categories` from an
@@ -2135,7 +2143,7 @@ export async function initDb(): Promise<void> {
     await client.query(`
       INSERT INTO supplier_categories (name)
       SELECT 'إضاءة' WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'إضاءة')
-      ON CONFLICT (name) DO NOTHING;
+      ON CONFLICT DO NOTHING;
     `);
     // 4) Mirror every supplier category INTO the item catalogue as a functional
     //    trade domain — LAST, so the demotion above is not undone and the orphan
@@ -2144,7 +2152,7 @@ export async function initDb(): Promise<void> {
       INSERT INTO item_categories (name, sort_order, kind)
       SELECT sc.name, 100, 'functional' FROM supplier_categories sc
       WHERE NOT EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name)
-      ON CONFLICT (name) DO NOTHING;
+      ON CONFLICT DO NOTHING;
     `);
 
     // ── Item classification keywords (admin-managed) ────────────────────────
@@ -2477,7 +2485,7 @@ export async function initDb(): Promise<void> {
       WHERE category IS NOT NULL
         AND trim(elem) <> ''
         AND trim(elem) NOT IN (SELECT name FROM supplier_categories)
-      ON CONFLICT (name) DO NOTHING;
+      ON CONFLICT DO NOTHING;
     `);
     await client.query(`
       INSERT INTO supplier_category_links (supplier_id, category_id)

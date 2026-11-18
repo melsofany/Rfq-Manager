@@ -186,6 +186,20 @@ describe("init-db migrations", () => {
     }
   });
 
+  it("never targets a bare (name) conflict on the category tables", () => {
+    // The category tables' uniqueness is on the NORMALISED name — an EXPRESSION
+    // index (`lower(btrim(regexp_replace(name, ...)))`). A `ON CONFLICT (name)`
+    // target therefore matches NO index and Postgres refuses the statement:
+    // "there is no unique or exclusion constraint matching the ON CONFLICT
+    // specification". That aborted initDb on every boot, so every migration
+    // AFTER this seed was silently skipped (the per-parent index among them).
+    // A target-less `ON CONFLICT DO NOTHING` is satisfied by any unique index.
+    for (const literal of sqlLiterals(source)) {
+      if (!/INSERT INTO (supplier_categories|item_categories)/.test(literal)) continue;
+      expect(literal).not.toContain("ON CONFLICT (name)");
+    }
+  });
+
   it("migrates the legacy rfq_item_assignments deterministically and idempotently", () => {
     // The migration must (a) collapse N supplier lines of one customer item to a
     // single row (DISTINCT ON), (b) prefer a manual responsibility over an auto
