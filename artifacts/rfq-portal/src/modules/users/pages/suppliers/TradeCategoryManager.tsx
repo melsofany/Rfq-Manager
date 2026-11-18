@@ -189,6 +189,8 @@ export function TradeCategoryManager() {
 
   const [mergeSourceId, setMergeSourceId] = useState<number | null>(null);
   const [openSuppliers, setOpenSuppliers] = useState<Set<number>>(new Set());
+  const [showGroups, setShowGroups] = useState(false);
+  const [groupTargets, setGroupTargets] = useState<Record<string, number>>({});
   const [mergeTargetId, setMergeTargetId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -339,6 +341,42 @@ export function TradeCategoryManager() {
 
   const activeRows = useMemo(() => rows.filter((r) => r.isActive), [rows]);
   const mergeSource = rows.find((r) => r.id === mergeSourceId) ?? null;
+
+  // Similar-name groups from the report, restricted to ACTIVE members so a
+  // deleted spelling never offers itself as a merge target.
+  const dupGroups = useMemo(() => {
+    if (!report) return [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return report.duplicates
+      .map((g) => ({
+        key: g.key,
+        members: g.categories
+          .map((c) => byId.get(c.id))
+          .filter((r): r is CategoryRow => Boolean(r && r.isActive)),
+      }))
+      .filter((g) => g.members.length >= 2);
+  }, [report, rows]);
+
+  // The name that already holds the most suppliers is the sensible default to keep.
+  const defaultKeep = (members: CategoryRow[]) =>
+    members.reduce((best, m) => (m.supplierCount > best.supplierCount ? m : best), members[0]);
+
+  const mergeGroup = (members: CategoryRow[], targetId: number) => {
+    const target = members.find((m) => m.id === targetId);
+    if (!target) return;
+    const sources = members.filter((m) => m.id !== targetId);
+    void run(
+      async () => {
+        for (const src of sources) {
+          await api("/categories/merge", {
+            method: "POST",
+            body: JSON.stringify({ sourceId: src.id, targetId }),
+          });
+        }
+      },
+      t("sup.cm.groupMerged", { n: sources.length, target: target.name }),
+    );
+  };
 
   const renderRow = (c: CategoryRow, depth: number): React.ReactNode => {
     const subs = childrenOf.get(c.id) ?? [];
@@ -659,6 +697,77 @@ export function TradeCategoryManager() {
             warn={report.totals.duplicateGroups > 0}
           />
           <StatTile label={t("sup.cm.deletedLabel")} value={report.totals.deleted} />
+        </div>
+      )}
+
+      {/* Similar-name groups, with a merge action per group */}
+      {dupGroups.length > 0 && (
+        <div className="border-b border-border px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+              {t("sup.cm.dupHint")}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              aria-expanded={showGroups}
+              onClick={() => setShowGroups((v) => !v)}
+            >
+              {showGroups ? t("sup.cm.hideGroups") : t("sup.cm.showGroups")} ({dupGroups.length})
+            </Button>
+          </div>
+          {showGroups && (
+            <ul className="mt-3 space-y-3">
+              {dupGroups.map((g) => {
+                const target = groupTargets[g.key] ?? defaultKeep(g.members).id;
+                return (
+                  <li key={g.key} className="rounded-md border border-border p-3">
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {g.members.map((m) => (
+                        <span
+                          key={m.id}
+                          className="rounded-md bg-muted px-2 py-0.5 text-xs text-foreground"
+                        >
+                          {m.name}{" "}
+                          <span className="tabular-nums text-muted-foreground">
+                            ({m.supplierCount})
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs text-muted-foreground" htmlFor={`keep-${g.key}`}>
+                        {t("sup.cm.keepTarget")}
+                      </label>
+                      <select
+                        id={`keep-${g.key}`}
+                        value={target}
+                        onChange={(e) =>
+                          setGroupTargets((prev) => ({ ...prev, [g.key]: Number(e.target.value) }))
+                        }
+                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                      >
+                        {g.members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        className="h-8"
+                        disabled={busy}
+                        onClick={() => mergeGroup(g.members, target)}
+                      >
+                        {t("sup.cm.mergeGroup")}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
