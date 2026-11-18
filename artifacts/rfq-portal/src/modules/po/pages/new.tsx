@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, ChevronDown, Loader2, Trash2 } from "lucide-react";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
+import { applyTaxToggle } from "../vat";
 import {
   SupplierCombobox,
   RepresentativeNameInput,
@@ -325,7 +326,7 @@ export default function NewPurchaseOrderPage() {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, unitPrice } : i)));
 
   const updateTaxIncluded = (id: string, taxIncluded: boolean) =>
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, taxIncluded } : i)));
+    setItems((prev) => prev.map((i) => (i.id === id ? applyTaxToggle(i, taxIncluded) : i)));
 
   const confirmRfqSuggestion = async (notice: RfqLinkNotice, rfqItemId: number) => {
     const res = await fetch(`/api/po/items/${notice.poItemId}/rfq-allocations`, {
@@ -364,6 +365,8 @@ export default function NewPurchaseOrderPage() {
                       ...i,
                       unitPrice: quote.price != null ? String(quote.price) : "",
                       taxIncluded: quote.taxIncluded,
+                      quotedPrice: quote.price != null ? String(quote.price) : null,
+                      quotedTaxIncluded: quote.taxIncluded,
                       offerItemId: quote.offerItemId,
                     }
                   : i,

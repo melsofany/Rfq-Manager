@@ -41,6 +41,7 @@ import {
   type RfqOption,
   type PoItemRow,
 } from "../components/fields";
+import { applyTaxToggle } from "../vat";
 
 interface PoDetail {
   id: number;
@@ -281,6 +282,9 @@ export default function PurchaseOrderDetailPage() {
   const removeEditItem = (rowId: string) =>
     setEditItems((prev) => prev.filter((i) => i.id !== rowId));
 
+  const updateEditTaxIncluded = (rowId: string, taxIncluded: boolean) =>
+    setEditItems((prev) => prev.map((i) => (i.id === rowId ? applyTaxToggle(i, taxIncluded) : i)));
+
   const updateEditField = <K extends keyof PoItemRow>(rowId: string, key: K, value: PoItemRow[K]) =>
     setEditItems((prev) => prev.map((i) => (i.id === rowId ? { ...i, [key]: value } : i)));
 
@@ -299,6 +303,8 @@ export default function PurchaseOrderDetailPage() {
                       ...i,
                       unitPrice: quote.price != null ? String(quote.price) : "",
                       taxIncluded: quote.taxIncluded,
+                      quotedPrice: quote.price != null ? String(quote.price) : null,
+                      quotedTaxIncluded: quote.taxIncluded,
                       offerItemId: quote.offerItemId,
                     }
                   : i,
@@ -1295,9 +1301,7 @@ export default function PurchaseOrderDetailPage() {
                         <input
                           type="checkbox"
                           checked={item.taxIncluded}
-                          onChange={(e) =>
-                            updateEditField(item.id, "taxIncluded", e.target.checked)
-                          }
+                          onChange={(e) => updateEditTaxIncluded(item.id, e.target.checked)}
                           className="h-4 w-4"
                         />
                       </td>

@@ -39,6 +39,10 @@ export interface PoItemRow {
   unitPrice: string;
   supplierId: string;
   taxIncluded: boolean;
+  /** Supplier quote price this line was filled from (before VAT adjustment). */
+  quotedPrice?: string | null;
+  /** Whether that supplier quote already included VAT. */
+  quotedTaxIncluded?: boolean | null;
   /** RFQ number typed for this line (internal or customer). Never sent to suppliers. */
   rfqNumber: string;
 }
