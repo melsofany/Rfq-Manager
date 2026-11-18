@@ -183,9 +183,7 @@ export const FALLBACK_MODELS = (
  * apart from FALLBACK_MODELS so documents and the chat path are unaffected.
  * Override with AI_TRANSCRIBE_MODELS (comma-separated).
  */
-export const TRANSCRIBE_EXTRA_MODELS = (
-  process.env.AI_TRANSCRIBE_MODELS || "gemini-3.5-transcribe"
-)
+export const TRANSCRIBE_EXTRA_MODELS = (process.env.AI_TRANSCRIBE_MODELS || "gemini-3.5-transcribe")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);

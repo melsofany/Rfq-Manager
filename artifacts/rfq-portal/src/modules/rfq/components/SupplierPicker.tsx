@@ -51,7 +51,10 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-function buildTree(categories: SupplierCategory[], suppliers: Supplier[]): {
+function buildTree(
+  categories: SupplierCategory[],
+  suppliers: Supplier[],
+): {
   roots: TreeNode[];
   all: TreeNode;
   unclassified: TreeNode;
@@ -315,11 +318,7 @@ export function SupplierPicker({
                   type="button"
                   onClick={() => toggleOne(s.id)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 text-start transition-colors ${
-                    checked
-                      ? sentBefore
-                        ? "bg-amber-50/60"
-                        : "bg-primary/5"
-                      : "hover:bg-muted/30"
+                    checked ? (sentBefore ? "bg-amber-50/60" : "bg-primary/5") : "hover:bg-muted/30"
                   }`}
                 >
                   <TriBox state={checked ? "all" : "none"} />
@@ -344,9 +343,7 @@ export function SupplierPicker({
         </div>
 
         <div className="px-4 py-2.5 border-t border-border flex items-center justify-between gap-3 bg-muted/20">
-          <span className="text-sm text-muted-foreground">
-            {selectedCount} مورد محدد إجمالاً
-          </span>
+          <span className="text-sm text-muted-foreground">{selectedCount} مورد محدد إجمالاً</span>
           {selectedCount > 0 && (
             <Button variant="ghost" size="sm" onClick={() => onChange(new Set())}>
               مسح التحديد
