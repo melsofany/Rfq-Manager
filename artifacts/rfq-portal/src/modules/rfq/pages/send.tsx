@@ -14,15 +14,13 @@ import {
   type SendRfqInput,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
+import { SupplierPicker } from "../components/SupplierPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   ArrowLeft,
   Send,
-  CheckSquare,
-  Square,
-  Search,
   CheckCircle2,
   XCircle,
   MinusCircle,
@@ -31,14 +29,6 @@ import {
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-
-function parseCategories(cat: string | null | undefined): string[] {
-  if (!cat) return [];
-  return cat
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
 
 type SendResult = {
   supplierId: number;
@@ -56,8 +46,6 @@ export default function SendRfqPage() {
   const queryClient = useQueryClient();
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [category, setCategory] = useState("all");
-  const [search, setSearch] = useState("");
   const [closeDate, setCloseDate] = useState("");
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
 
@@ -68,22 +56,13 @@ export default function SendRfqPage() {
   const { data: dbCategories = [] } = useListCategories({
     query: { queryKey: getListCategoriesQueryKey() },
   });
-  const CATEGORIES = ["all", ...dbCategories.map((c) => c.name)];
 
   const { data: rfq } = useGetRfq(rfqId, {
     query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId },
   });
-  const { data: suppliers } = useListSuppliers(
-    { category: category !== "all" ? category : undefined, search: search || undefined },
-    {
-      query: {
-        queryKey: getListSuppliersQueryKey({
-          category: category !== "all" ? category : undefined,
-          search: search || undefined,
-        }),
-      },
-    },
-  );
+  const { data: suppliers } = useListSuppliers(undefined, {
+    query: { queryKey: getListSuppliersQueryKey() },
+  });
 
   // ── تحميل سجل الإرسال لهذا الطلب ─────────────────────────────────────────
   const { data: sentLog = [] } = useGetRfqSentLog(rfqId, {
@@ -116,25 +95,6 @@ export default function SendRfqPage() {
       },
     },
   });
-
-  const toggleSupplier = (id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (!suppliers) return;
-    const allActive = suppliers.filter((s) => s.isActive);
-    if (selectedIds.size === allActive.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(allActive.map((s) => s.id)));
-    }
-  };
 
   // ── منطق الإرسال مع التحقق من الإرسال المسبق ─────────────────────────────
   const doSend = (force: boolean) => {
@@ -173,9 +133,6 @@ export default function SendRfqPage() {
     setShowResendConfirm(false);
     doSend(true);
   };
-
-  const activeSuppliers = suppliers?.filter((s) => s.isActive) ?? [];
-  const allSelected = activeSuppliers.length > 0 && selectedIds.size === activeSuppliers.length;
 
   // عدد الموردين المحددين الذين أُرسل إليهم مسبقاً
   const selectedAlreadySentCount = Array.from(selectedIds).filter((sid) =>
@@ -363,133 +320,13 @@ export default function SendRfqPage() {
           </div>
         )}
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              {CATEGORIES.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCategory(c)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium capitalize transition-colors ${
-                    category === c
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
-              <Search
-                size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="بحث..."
-                className="pl-8 h-7 text-xs w-40"
-              />
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b border-border text-right">
-                  <th className="px-4 py-2.5 w-10">
-                    <button onClick={toggleAll}>
-                      {allSelected ? (
-                        <CheckSquare size={16} className="text-primary" />
-                      ) : (
-                        <Square size={16} className="text-muted-foreground" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">المورد</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">المسؤول</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإيميل</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                    التصنيفات
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {!activeSuppliers.length ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                      لا يوجد موردون نشطون
-                    </td>
-                  </tr>
-                ) : (
-                  activeSuppliers.map((s) => {
-                    const cats = parseCategories(s.category);
-                    const wasSentBefore = alreadySentIds.has(s.id);
-                    return (
-                      <tr
-                        key={s.id}
-                        className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
-                          selectedIds.has(s.id)
-                            ? wasSentBefore
-                              ? "bg-amber-50/60"
-                              : "bg-primary/5"
-                            : "hover:bg-muted/20"
-                        }`}
-                        onClick={() => toggleSupplier(s.id)}
-                      >
-                        <td className="px-4 py-3">
-                          {selectedIds.has(s.id) ? (
-                            <CheckSquare size={16} className="text-primary" />
-                          ) : (
-                            <Square size={16} className="text-muted-foreground" />
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div>
-                              <p className="font-medium text-foreground">{s.name}</p>
-                              {s.supplierId && (
-                                <p className="text-muted-foreground text-xs font-mono">
-                                  {s.supplierId}
-                                </p>
-                              )}
-                            </div>
-                            {/* شارة "أُرسل مسبقاً" */}
-                            {wasSentBefore && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
-                                <RefreshCw size={9} />
-                                أُرسل مسبقاً
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.contactPerson ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.email ?? <span className="text-amber-500">بدون إيميل</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {cats.map((cat) => (
-                              <span
-                                key={cat}
-                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize"
-                              >
-                                {cat}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <SupplierPicker
+          categories={dbCategories}
+          suppliers={suppliers ?? []}
+          selectedIds={selectedIds}
+          onChange={setSelectedIds}
+          alreadySentIds={alreadySentIds}
+        />
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-muted-foreground">
