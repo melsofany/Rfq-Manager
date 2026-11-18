@@ -31,7 +31,6 @@ import {
   suppliersTable,
   supplierRegistrationRequestsTable,
   auditLogTable,
-  whatsappChatsTable,
   SUPPLIER_REGISTRATION_STATUS,
 } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
@@ -44,6 +43,7 @@ import {
   isWhatsAppConfigured,
   sendSupplierRegistrationWhatsApp,
   sendSupplierRegistrationMismatchWhatsApp,
+  recordOutboundMessage,
 } from "../communications/service";
 import { sendSupplierRegistrationEmail, sendRegistrationMismatchEmail } from "../../shared/email";
 import {
@@ -260,14 +260,15 @@ export async function createRegistrationRequest(opts: {
       whatsappSent = Boolean(wamid);
       if (!whatsappSent) whatsappError = "WhatsApp send returned no message id";
       try {
-        await db.insert(whatsappChatsTable).values({
-          waMessageId: wamid ?? null,
-          direction: "outbound",
-          phone,
-          supplierId: supplier.id,
-          body: `[استكمال بيانات المورد: ${supplier.name}] ${url}`,
-          isRead: true,
-        });
+        await recordOutboundMessage(
+          {
+            waMessageId: wamid ?? null,
+            phone,
+            supplierId: supplier.id,
+            body: `[استكمال بيانات المورد: ${supplier.name}] ${url}`,
+          },
+          { overwrite: true },
+        );
       } catch (saveErr) {
         logger.error({ err: saveErr, supplierId: supplier.id }, "registration chat record failed");
       }

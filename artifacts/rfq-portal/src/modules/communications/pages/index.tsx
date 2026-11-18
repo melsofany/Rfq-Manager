@@ -878,10 +878,45 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
    * quoting the body alone showed the operator that the reply answered
    * «[صورة مرسلة]» — a description of a picture instead of the picture. The
    * quote now renders the image itself, which is what makes it recognisable.
+   *
+   * When the target is not in the loaded page, the server is asked for it: the
+   * quote is keyed on a `wamid`, and the same message can carry more than one
+   * wamid (phone-scoped vs BSUID-scoped), so an exact-match lookup in the
+   * loaded array alone reports «غير موجودة» for messages we do hold. Only when
+   * the server also has nothing does the console say WHY — «لم تُسجَّل» (never
+   * recorded at send time) reads very differently from a lookup failure.
    */
   function ReplyQuoteContent({ waMessageId }: { waMessageId: string }) {
-    const target = getReplyMessage(waMessageId);
-    if (!target) return <p className="text-xs text-muted-foreground">(رسالة غير موجودة)</p>;
+    const [fetched, setFetched] = useState<Message | null>(null);
+    const [fetchFailed, setFetchFailed] = useState(false);
+    const target = getReplyMessage(waMessageId) ?? fetched ?? undefined;
+
+    useEffect(() => {
+      if (getReplyMessage(waMessageId) || fetched) return;
+      let cancelled = false;
+      const url = `/api/whatsapp/chats/${encodeURIComponent(selected ?? "")}/quoted?waMessageId=${encodeURIComponent(waMessageId)}`;
+      fetch(url, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { found?: boolean; message?: Message } | null) => {
+          if (cancelled) return;
+          if (data?.found && data.message) setFetched(data.message);
+          else setFetchFailed(true);
+        })
+        .catch(() => {
+          if (!cancelled) setFetchFailed(true);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [waMessageId, fetched, selected]);
+
+    if (!target) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          {fetchFailed ? "(لم تُسجَّل هذه الرسالة في النظام)" : "(جارٍ تحميل الرسالة…)"}
+        </p>
+      );
+    }
     if (target.mediaId && target.mediaType === "image") {
       return (
         <img
