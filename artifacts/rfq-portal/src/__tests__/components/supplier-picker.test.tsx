@@ -10,11 +10,51 @@ const categories = [
 ];
 
 const suppliers = [
-  { id: 10, name: "مورد أ", category: "كابلات", isActive: true, contactPerson: null, email: "a@x.com", supplierId: null },
-  { id: 11, name: "مورد ب", category: "مواسير", isActive: true, contactPerson: null, email: "b@x.com", supplierId: null },
-  { id: 12, name: "مورد ج", category: "أدوات", isActive: true, contactPerson: null, email: null, supplierId: null },
-  { id: 13, name: "مورد د", category: "", isActive: true, contactPerson: null, email: null, supplierId: null },
-  { id: 14, name: "مورد هـ", category: "كابلات, أدوات", isActive: true, contactPerson: null, email: null, supplierId: null },
+  {
+    id: 10,
+    name: "مورد أ",
+    category: "كابلات",
+    isActive: true,
+    contactPerson: null,
+    email: "a@x.com",
+    supplierId: null,
+  },
+  {
+    id: 11,
+    name: "مورد ب",
+    category: "مواسير",
+    isActive: true,
+    contactPerson: null,
+    email: "b@x.com",
+    supplierId: null,
+  },
+  {
+    id: 12,
+    name: "مورد ج",
+    category: "أدوات",
+    isActive: true,
+    contactPerson: null,
+    email: null,
+    supplierId: null,
+  },
+  {
+    id: 13,
+    name: "مورد د",
+    category: "",
+    isActive: true,
+    contactPerson: null,
+    email: null,
+    supplierId: null,
+  },
+  {
+    id: 14,
+    name: "مورد هـ",
+    category: "كابلات, أدوات",
+    isActive: true,
+    contactPerson: null,
+    email: null,
+    supplierId: null,
+  },
 ] as never[];
 
 function renderPicker(selected: number[], onChange = vi.fn()) {

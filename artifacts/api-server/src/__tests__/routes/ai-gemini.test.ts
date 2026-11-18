@@ -42,6 +42,68 @@ describe("Gemini integration (llm.ts)", () => {
     expect(DEFAULT_MODEL).toBe(DEEPSEEK_MODEL);
   });
 
+  it("retries a busy (503) Gemini transcription before giving up", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          text: async () => "high demand",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: "تمام" }] } }],
+          }),
+        });
+      const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
+      const pending = transcribeAudio(Buffer.from("ogg"), "audio/ogg", null, "gemini-3.8-flash");
+      await vi.runAllTimersAsync();
+      expect(await pending).toBe("تمام");
+      // The same model was retried; no other model was needed.
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(new Set(urls.map((u) => u.split("/models/")[1]?.split(":")[0])).size).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls through every media model and uses the transcription model when the rest fail", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).includes("gemini-3.5-transcribe")) {
+        return {
+          ok: true,
+          json: async () => ({ candidates: [{ content: { parts: [{ text: "تم التحويل" }] } }] }),
+        };
+      }
+      return { ok: false, status: 404, text: async () => "not found" };
+    });
+    const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
+    const text = await transcribeAudio(Buffer.from("ogg"), "audio/ogg", null, "gemini-3.8-flash");
+    expect(text).toBe("تم التحويل");
+    const tried = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(tried[tried.length - 1]).toContain("gemini-3.5-transcribe");
+  });
+
+  it("does not retry a non-transient error such as a bad request", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => "bad request",
+    });
+    const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
+    const text = await transcribeAudio(Buffer.from("ogg"), "audio/ogg", null, "gemini-3.8-flash");
+    expect(text).toBeNull();
+    // One attempt per candidate model, never a same-model retry loop.
+    const perModel = new Map<string, number>();
+    for (const c of fetchMock.mock.calls) {
+      const m = String(c[0]).split("/models/")[1]?.split(":")[0] ?? "";
+      perModel.set(m, (perModel.get(m) ?? 0) + 1);
+    }
+    expect([...perModel.values()].every((n) => n === 1)).toBe(true);
+  });
+
   it("transcribes OGG voice notes via Gemini's NATIVE generateContent endpoint", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
