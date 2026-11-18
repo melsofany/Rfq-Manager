@@ -44,7 +44,7 @@ import { mergeSupplierCategories } from "../../shared/category-merge";
 import { findActiveTwin } from "../../shared/category-dedupe";
 import {
   isReviewPlaceholder,
-  moveOrphansToPlaceholder,
+  sweepReviewQueues,
   pruneEmptyReviewPlaceholders,
 } from "../../shared/category-placeholder";
 
@@ -235,106 +235,8 @@ router.post(
   "/categories/parent-assignments/cleanup",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const rows = await db.select().from(supplierCategoriesTable);
-    const live = rows.filter((r) => r.deletedAt == null);
-    const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
-    const liveIds = new Set(nodes.map((n) => n.id));
-
-    const allLinks = await db
-      .select({
-        supplierId: supplierCategoryLinksTable.supplierId,
-        categoryId: supplierCategoryLinksTable.categoryId,
-        supplierName: suppliersTable.name,
-      })
-      .from(supplierCategoryLinksTable)
-      .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
-
-    const links = allLinks.map((l) => ({ supplierId: l.supplierId, categoryId: l.categoryId }));
-
-    // 1) Drop the provable redundant parent links.
-    const redundant = redundantParentLinks(nodes, links);
-    const nameById = new Map(nodes.map((n) => [n.id, n.name]));
-    const removedBySupplier = new Map<number, Set<number>>();
-    for (const l of redundant) {
-      const set = removedBySupplier.get(l.supplierId) ?? new Set<number>();
-      set.add(l.categoryId);
-      removedBySupplier.set(l.supplierId, set);
-    }
-    const survivingNames = new Map<number, string[]>();
-    for (const [supplierId, removed] of removedBySupplier) {
-      const names = links
-        .filter((x) => x.supplierId === supplierId && !removed.has(x.categoryId))
-        .map((x) => nameById.get(x.categoryId))
-        .filter((n): n is string => Boolean(n));
-      survivingNames.set(supplierId, names);
-    }
-
-    if (redundant.length > 0) {
-      await db.transaction(async (tx) => {
-        for (const l of redundant) {
-          await tx
-            .delete(supplierCategoryLinksTable)
-            .where(
-              and(
-                eq(supplierCategoryLinksTable.supplierId, l.supplierId),
-                eq(supplierCategoryLinksTable.categoryId, l.categoryId),
-              ),
-            );
-        }
-        // The free-text mirror on `suppliers.category` is a comma-joined name
-        // list; leaving it stale would make the list show a category the link no
-        // longer holds. Rewrite it from the SURVIVING links.
-        for (const [supplierId, names] of survivingNames) {
-          await tx
-            .update(suppliersTable)
-            .set({ category: names.join(",") })
-            .where(eq(suppliersTable.id, supplierId));
-        }
-        await tx.insert(auditLogTable).values({
-          action: "supplier_category.parent_links_cleaned",
-          entityType: "supplier_category",
-          employeeId: req.session.employeeId,
-          description: `Removed ${redundant.length} redundant parent-category supplier link(s)`,
-          ipAddress: req.ip,
-          userAgent: req.get("user-agent"),
-        });
-      });
-    }
-
-    // 2) Move every supplier who is STILL on a grouping category ALONE into that
-    //    category's «يحتاج للمراجعة» placeholder leaf. Recompute the holders from
-    //    the links that survive step 1, so a supplier just cleaned up is not
-    //    moved as well.
-    const removedKeys = new Set(redundant.map((l) => `${l.supplierId}:${l.categoryId}`));
-    const survivingLinks = links.filter((l) => !removedKeys.has(`${l.supplierId}:${l.categoryId}`));
-    const holders = new Map<number, Array<{ id: number; name: string }>>();
-    for (const l of allLinks) {
-      if (removedKeys.has(`${l.supplierId}:${l.categoryId}`)) continue;
-      const list = holders.get(l.categoryId) ?? [];
-      list.push({ id: l.supplierId, name: l.supplierName });
-      holders.set(l.categoryId, list);
-    }
-    const groups = nonLeafHolders(nodes, holders, liveIds).filter(
-      (g) => !isReviewPlaceholder(g.name),
-    );
-
-    let moved = 0;
-    for (const g of groups) {
-      moved += await moveOrphansToPlaceholder(g.id, g.name, g.holders);
-    }
-
-    // 3) A placeholder that now holds nothing (its suppliers were all re-filed)
-    //    is removed. Runs even when nothing moved, so a placeholder emptied by
-    //    hand disappears on the next run.
-    const pruned = await pruneEmptyReviewPlaceholders();
-
-    res.json({
-      ok: true,
-      removed: redundant.length,
-      moved,
-      pruned,
-      remaining: survivingLinks.length,
-    });
+    const result = await sweepReviewQueues(req.session.employeeId ?? null);
+    res.json({ ok: true, ...result });
   },
 );
 

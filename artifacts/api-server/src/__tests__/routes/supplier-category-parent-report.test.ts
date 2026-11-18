@@ -126,6 +126,12 @@ vi.mock("@workspace/db", () => {
             });
             return Promise.resolve(out);
           },
+          // A plain awaited insert (the audit write) records its row, the same
+          // as the transaction mock does for non-link tables.
+          then: (resolve: any) => {
+            if (t?._ !== "supplierCategoryLinks") state.audits.push(v);
+            return Promise.resolve().then(() => resolve(undefined));
+          },
           onConflictDoNothing: () => {
             const rows = Array.isArray(v) ? v : [v];
             const inserted: any[] = [];

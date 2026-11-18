@@ -3702,9 +3702,10 @@ export async function initDb(): Promise<void> {
   // suppliers would otherwise leave behind. Best-effort: a boot must not fail
   // over a cleanup.
   try {
-    const { pruneEmptyReviewPlaceholders } = await import("./category-placeholder");
-    const pruned = await pruneEmptyReviewPlaceholders();
-    if (pruned > 0) logger.info(`initDb: removed ${pruned} empty review placeholder(s)`);
+    const { sweepReviewQueues } = await import("./category-placeholder");
+    const swept = await sweepReviewQueues();
+    if (swept.removed + swept.moved + swept.pruned > 0)
+      logger.info(`initDb: review sweep ${JSON.stringify(swept)}`);
   } catch (err) {
     logger.warn({ err }, "init-db: review-placeholder prune failed (non-fatal)");
   }
