@@ -528,6 +528,73 @@ describe("init-db migrations", () => {
   });
 });
 
+describe("category de-duplication migration", () => {
+  const src = readFileSync(new URL("../../shared/init-db.ts", import.meta.url), "utf8");
+
+  it("plans from the real rows instead of re-deriving the survivor in SQL", () => {
+    // The first cut let the SQL choose with `min(id)` while the tested planner
+    // chose the most-referenced ACTIVE row — they disagreed, and the repair
+    // consolidated every supplier link onto a RETIRED row, so the trade vanished
+    // from `/suppliers`. One rule, one implementation: the plan is computed in
+    // TS and the SQL is generated from it.
+    expect(src).toContain("planCategoryDedupe(");
+    const callIdx = src.indexOf("categoryDedupeSql(");
+    const call = src.slice(callIdx, src.indexOf("\n", callIdx));
+    expect(call).toContain("plan");
+    // The SQL must not carry its own ranking: that second implementation is what
+    // disagreed with the planner and consolidated onto a retired row. Scope the
+    // check to the de-duplication block — other repairs legitimately use min(id).
+    const block = src.slice(
+      src.indexOf("De-duplicate category names"),
+      src.indexOf("PREVENT the duplicate from coming back"),
+    );
+    expect(block).not.toMatch(/min\(id\)/);
+  });
+
+  it("drops the raw-name UNIQUE constraint BEFORE the repair renames the survivor", () => {
+    // The repair normalises the survivor's spelling, which collides with the
+    // retired twin still holding the canonical spelling. Measured on a real
+    // Postgres: `duplicate key value violates unique constraint
+    // "supplier_categories_name_key"` — the repair could not run while the raw
+    // constraint existed.
+    const dropIdx = src.indexOf("DROP CONSTRAINT IF EXISTS supplier_categories_name_key");
+    const planIdx = src.indexOf("planCategoryDedupe(");
+    const indexIdx = src.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_name_uq");
+    expect(dropIdx).toBeGreaterThan(-1);
+    expect(planIdx).toBeGreaterThan(dropIdx);
+    expect(indexIdx).toBeGreaterThan(planIdx);
+  });
+
+  it("enforces uniqueness on the NORMALISED name so the duplicate cannot return", () => {
+    // Uniqueness on the raw name is exactly what let «معدات فندقيه» and
+    // «معدات  فندقيه» coexist. The index must match `categoryUniqueKey`, and be
+    // partial so a retired row stays restorable.
+    expect(src).toContain("CATEGORY_UNIQUE_EXPR");
+    expect(src).toContain("supplier_categories_name_uq");
+    expect(src).toContain("item_categories_name_uq");
+    const idx = src.slice(src.indexOf("CREATE UNIQUE INDEX IF NOT EXISTS item_categories_name_uq"));
+    expect(idx.slice(0, 200)).toContain("WHERE deleted_at IS NULL");
+  });
+
+  it("keeps the ORPHAN sweep away from RETIRED rows", () => {
+    // The sweep HARD-deletes an unused category; the repair retires duplicates by
+    // SOFT-deleting them, and a retired row is frequently referenced. Without the
+    // guard the sweep would destroy exactly what the repair preserved.
+    const sweep = src.slice(src.indexOf("DELETE FROM item_categories ic"));
+    expect(sweep.slice(0, 300)).toContain("ic.deleted_at IS NULL");
+  });
+
+  it("writes no JS comment inside a SQL literal (the rollback trap)", () => {
+    // A `//` comment inside a SQL template is a syntax error, and statements in
+    // one `client.query` share an implicit transaction — so a sibling failure
+    // rolled a critical migration back silently. Guard the whole file.
+    const literals = src.match(/client\.query\(\s*`[\s\S]*?`/g) ?? [];
+    for (const lit of literals) {
+      expect(lit).not.toMatch(/^\s*\/\//m);
+    }
+  });
+});
+
 describe("historical diagnostic bodies", () => {
   it("rewrites the old diagnostic token instead of leaving it in the inbox", async () => {
     // Rows written by the old fallback carry our own enum as the body

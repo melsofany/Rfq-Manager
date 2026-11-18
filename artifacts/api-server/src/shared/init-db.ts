@@ -2,6 +2,14 @@ import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { logger } from "./logger";
 import { seedKeywords } from "../modules/rfq/classification";
+import {
+  CATEGORY_REFERENCES,
+  CATEGORY_UNIQUE_EXPR,
+  categoryDedupeSql,
+  planCategoryDedupe,
+  refCountExpr,
+  type CategoryRow,
+} from "./category-dedupe";
 
 export async function initDb(): Promise<void> {
   logger.info("initDb: connecting to database...");
@@ -2516,36 +2524,77 @@ export async function initDb(): Promise<void> {
         ON supplier_item_category_links (category_id);
     `);
 
-    // ── Normalise category names (idempotent data repair) ────────────────────
-    // The live catalogue holds names with doubled spaces and stray padding
-    // («معدات  فندقيه», «مضخات مياه   ومعالجه مياة»). The name is the unique
-    // key, so a stray space creates a DUPLICATE category that classifies the
-    // same trade twice. Collapsing runs of whitespace and trimming is a pure
-    // formatting fix — it can never merge two genuinely different names, which
-    // is why it is safe to run automatically (unlike a name-similarity merge,
-    // which the operator reserved for manual approval). Each table is its own
-    // statement; a UNIQUE collision is impossible here because two names that
-    // collapse to the same value would already have violated nothing before —
-    // but a guard below resolves any that do, so the UPDATE never throws.
+    // ── De-duplicate category names (idempotent data repair) ─────────────────
+    // The live defect: a name is the UNIQUE key, so a stray space created a
+    // SECOND row for the same trade — «معدات  فندقيه» beside «معدات فندقيه» — in
+    // `supplier_categories` AND in `item_categories` (the supplier mirror copied
+    // every variant across). Measured live: 8 duplicate groups in each table,
+    // every pair differing ONLY by whitespace, so this is a formatting repair
+    // and NOT the name-similarity merge the operator reserved for confirmation.
+    //
+    // The previous repair never fixed anything: it renamed the spaced row only
+    // when the collapsed name was FREE, and in every real duplicate that name
+    // was already taken — so the guard skipped it and the duplicate survived
+    // every deploy. `categoryDedupeSql` RESOLVES the group instead: every
+    // reference moves onto the most-referenced (usually the ONLY referenced)
+    // row, children follow their parent, and the empties are soft-deleted so
+    // their history survives. Each statement is independent — a sibling failure
+    // must not roll the others back (statements in one `client.query` share an
+    // implicit transaction).
+    //
+    // Prevention is the unique index further down: with it in place a spaced
+    // variant cannot be inserted at all, so this repair runs on a shrinking set.
+    // The RAW-name UNIQUE constraints must go FIRST: the repair below renames the
+    // surviving row to its normalised spelling, and while the raw constraint is
+    // still present that rename collides with the retired twin that keeps the
+    // canonical spelling — measured on a real Postgres as
+    // `duplicate key value violates unique constraint "supplier_categories_name_key"`.
+    // The functional indexes that replace them are created AFTER the repair.
+    await client.query(
+      `ALTER TABLE supplier_categories DROP CONSTRAINT IF EXISTS supplier_categories_name_key;`,
+    );
+    await client.query(
+      `ALTER TABLE item_categories DROP CONSTRAINT IF EXISTS item_categories_name_key;`,
+    );
+
+    for (const [table, refs, parent] of [
+      ["supplier_categories", CATEGORY_REFERENCES.supplier, true],
+      ["item_categories", CATEGORY_REFERENCES.item, true],
+    ] as const) {
+      // The survivor is chosen by the SAME pure ranking the tests exercise, from
+      // the real rows — the SQL is generated from that plan, never re-derived.
+      const { rows } = await client.query(
+        `SELECT id, name, is_active, (${refCountExpr(table, [...refs])}) AS ref_count
+         FROM ${table} cat`,
+      );
+      const plan = planCategoryDedupe(
+        (rows as Array<Record<string, unknown>>).map((r): CategoryRow => ({
+          id: Number(r.id),
+          name: String(r.name),
+          isActive: r.is_active as boolean,
+          refCount: Number(r.ref_count ?? 0),
+        })),
+      );
+      for (const stmt of categoryDedupeSql(table, [...refs], plan, { parentColumn: parent })) {
+        await client.query(stmt);
+      }
+    }
+
+    // ── PREVENT the duplicate from coming back ───────────────────────────────
+    // Uniqueness was on the RAW name, so `معدات فندقيه` and `معدات  فندقيه` were
+    // two rows. The index is now on the NORMALISED name, matching
+    // `categoryUniqueKey` exactly, so the repair above cannot be undone by the
+    // next insert. A partial index (only ACTIVE rows) keeps a soft-deleted row
+    // restorable: restoring it must not be blocked by the row that replaced it.
+    // The old raw-name UNIQUE constraint is dropped, or it would still reject a
+    // legitimate re-spelling of a retired name.
     await client.query(`
-      UPDATE supplier_categories
-      SET name = btrim(regexp_replace(name, '\\s+', ' ', 'g'))
-      WHERE name <> btrim(regexp_replace(name, '\\s+', ' ', 'g'))
-        AND NOT EXISTS (
-          SELECT 1 FROM supplier_categories other
-          WHERE other.id <> supplier_categories.id
-            AND other.name = btrim(regexp_replace(supplier_categories.name, '\\s+', ' ', 'g'))
-        );
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_name_uq
+        ON supplier_categories (${CATEGORY_UNIQUE_EXPR}) WHERE deleted_at IS NULL;
     `);
     await client.query(`
-      UPDATE item_categories
-      SET name = btrim(regexp_replace(name, '\\s+', ' ', 'g'))
-      WHERE name <> btrim(regexp_replace(name, '\\s+', ' ', 'g'))
-        AND NOT EXISTS (
-          SELECT 1 FROM item_categories other
-          WHERE other.id <> item_categories.id
-            AND other.name = btrim(regexp_replace(item_categories.name, '\\s+', ' ', 'g'))
-        );
+      CREATE UNIQUE INDEX IF NOT EXISTS item_categories_name_uq
+        ON item_categories (${CATEGORY_UNIQUE_EXPR}) WHERE deleted_at IS NULL;
     `);
 
     // ── Remove ORPHAN item categories (idempotent, safety-guarded) ───────────
@@ -2574,10 +2623,17 @@ export async function initDb(): Promise<void> {
     // conflict/repair flow fixes) — so no incompatible reference can ever fail
     // this DELETE. Own array-wrapped literal, so a sibling failure cannot roll
     // it back; comments use SQL --, never JS comment.
+    //
+    // `deleted_at IS NULL` is load-bearing: the dedupe above RETIRES a duplicate
+    // by soft-deleting it, and a retired row is frequently referenced (it was a
+    // real category). Without the guard this sweep would HARD-delete exactly the
+    // rows the repair just preserved for restorability — undoing the repair and
+    // destroying the history the operator asked to keep.
     await client.query(`
       DELETE FROM item_categories ic
       WHERE ic.code IS NULL
         AND ic.parent_id IS NULL
+        AND ic.deleted_at IS NULL
         AND NOT EXISTS (
           SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name
         )
