@@ -5,6 +5,7 @@ import { seedKeywords } from "../modules/rfq/classification";
 import {
   CATEGORY_REFERENCES,
   CATEGORY_UNIQUE_EXPR,
+  CATEGORY_UNIQUE_EXPR_WITH_PARENT,
   categoryDedupeSql,
   planCategoryDedupe,
   refCountExpr,
@@ -2564,13 +2565,14 @@ export async function initDb(): Promise<void> {
       // The survivor is chosen by the SAME pure ranking the tests exercise, from
       // the real rows — the SQL is generated from that plan, never re-derived.
       const { rows } = await client.query(
-        `SELECT id, name, is_active, (${refCountExpr(table, [...refs])}) AS ref_count
+        `SELECT id, name, parent_id, is_active, (${refCountExpr(table, [...refs])}) AS ref_count
          FROM ${table} cat`,
       );
       const plan = planCategoryDedupe(
         (rows as Array<Record<string, unknown>>).map((r): CategoryRow => ({
           id: Number(r.id),
           name: String(r.name),
+          parentId: r.parent_id == null ? null : Number(r.parent_id),
           isActive: r.is_active as boolean,
           refCount: Number(r.ref_count ?? 0),
         })),
@@ -2588,13 +2590,21 @@ export async function initDb(): Promise<void> {
     // restorable: restoring it must not be blocked by the row that replaced it.
     // The old raw-name UNIQUE constraint is dropped, or it would still reject a
     // legitimate re-spelling of a retired name.
+    //
+    // Uniqueness is scoped to the PARENT (`COALESCE(parent_id, 0)`), because a
+    // name is unique WITHIN its branch, not across the whole tree: every domain
+    // holds its own «يحتاج للمراجعة» placeholder, and a brand may trade in two
+    // domains. The old GLOBAL index must be dropped first, or it would keep
+    // rejecting the second placeholder.
+    await client.query(`DROP INDEX IF EXISTS supplier_categories_name_uq;`);
+    await client.query(`DROP INDEX IF EXISTS item_categories_name_uq;`);
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_name_uq
-        ON supplier_categories (${CATEGORY_UNIQUE_EXPR}) WHERE deleted_at IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_categories_parent_name_uq
+        ON supplier_categories (${CATEGORY_UNIQUE_EXPR_WITH_PARENT}) WHERE deleted_at IS NULL;
     `);
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS item_categories_name_uq
-        ON item_categories (${CATEGORY_UNIQUE_EXPR}) WHERE deleted_at IS NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS item_categories_parent_name_uq
+        ON item_categories (${CATEGORY_UNIQUE_EXPR_WITH_PARENT}) WHERE deleted_at IS NULL;
     `);
 
     // ── Remove ORPHAN item categories (idempotent, safety-guarded) ───────────
@@ -3677,5 +3687,17 @@ export async function initDb(): Promise<void> {
     // Log loudly: this repair is why a date report works at all, so a failure
     // must not look like "tables already exist".
     logger.error({ err }, "init-db: date repair FAILED — date queries will keep throwing");
+  }
+
+  // A «يحتاج للمراجعة» placeholder is a working state, so one that holds nobody
+  // is removed at boot — the case a crash between creating it and re-filing its
+  // suppliers would otherwise leave behind. Best-effort: a boot must not fail
+  // over a cleanup.
+  try {
+    const { pruneEmptyReviewPlaceholders } = await import("./category-placeholder");
+    const pruned = await pruneEmptyReviewPlaceholders();
+    if (pruned > 0) logger.info(`initDb: removed ${pruned} empty review placeholder(s)`);
+  } catch (err) {
+    logger.warn({ err }, "init-db: review-placeholder prune failed (non-fatal)");
   }
 }

@@ -6,6 +6,8 @@ vi.mock("drizzle-orm", () => ({
   eq: (left: any, right: any) => ({ __op: "eq", left, right }),
   and: (...args: any[]) => ({ __op: "and", args }),
   count: () => ({ __op: "count" }),
+  inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
+  isNotNull: (col: any) => ({ __op: "isNotNull", col }),
   sql: Object.assign(() => ({ __op: "sql" }), { raw: () => ({}) }),
 }));
 
@@ -30,7 +32,8 @@ const state: {
   deleted: Array<{ supplierId: number; categoryId: number }>;
   supplierUpdates: any[];
   audits: any[];
-} = { categories: [], links: [], deleted: [], supplierUpdates: [], audits: [] };
+  nextId: number;
+} = { categories: [], links: [], deleted: [], supplierUpdates: [], audits: [], nextId: 1000 };
 
 function chainable(rows: any): any {
   const api: any = {
@@ -54,6 +57,7 @@ vi.mock("@workspace/db", () => {
       name: "name",
       parentId: "parent_id",
       deletedAt: "deleted_at",
+      isActive: "is_active",
     },
     supplierCategoryLinksTable: {
       _: "supplierCategoryLinks",
@@ -64,47 +68,172 @@ vi.mock("@workspace/db", () => {
     suppliersTable: { _: "suppliers", id: "id", name: "name" },
     auditLogTable: { _: "audit" },
   };
+
+  // The route does REAL work now (it moves suppliers between categories), so the
+  // mock is a tiny in-memory store rather than a row-returner: a mock that
+  // ignores `.where()` cannot tell a scoped query from an unscoped one.
+  const matches = (row: any, cond: any): boolean => {
+    if (!cond) return true;
+    if (cond.__op === "and") return cond.args.every((c: any) => matches(row, c));
+    if (cond.__op === "inArray") {
+      const key =
+        cond.left === "category_id" ? "categoryId" : cond.left === "id" ? "id" : cond.left;
+      return cond.right.includes(row[key]);
+    }
+    if (cond.__op === "eq") {
+      const col = cond.left?.__col ?? cond.left;
+      const key = col === "parent_id" ? "parentId" : col === "is_active" ? "isActive" : col;
+      // A row that does not carry the flag is ACTIVE (the column defaults true).
+      const actual = key === "isActive" ? (row.isActive ?? true) : row[key];
+      return actual === cond.right;
+    }
+    return true;
+  };
+
+  const selectFrom = (table: any) => {
+    const store =
+      table?._ === "supplierCategories"
+        ? state.categories
+        : table?._ === "supplierCategoryLinks"
+          ? state.links
+          : [];
+    const api: any = {};
+    const run = () => store.slice();
+    api.where = (cond: any) => {
+      api.__rows = store.filter((r: any) => matches(r, cond));
+      return api;
+    };
+    api.innerJoin = () => api;
+    api.orderBy = () => api;
+    api.groupBy = () => api;
+    api.limit = () => api;
+    api.then = (r: any) => Promise.resolve(api.__rows ?? run()).then(r);
+    return api;
+  };
+
   return {
     db: {
-      select: vi.fn(() => {
-        const api: any = chainable([]);
-        api.from = (table: any) => {
-          if (table?._ === "supplierCategories") return chainable(state.categories);
-          if (table?._ === "supplierCategoryLinks") return chainable(state.links);
-          return chainable([]);
-        };
-        return api;
-      }),
+      select: vi.fn(() => ({ from: (t: any) => selectFrom(t) })),
       execute: vi.fn(async () => ({ rows: [] })),
-      insert: vi.fn(() => chainable([])),
-      update: vi.fn(() => chainable([])),
-      delete: vi.fn(() => chainable([])),
-      transaction: vi.fn(async (fn: any) => {
-        const tx = {
-          delete: (_t: any) => ({
+      insert: vi.fn((t: any) => ({
+        values: (v: any) => ({
+          returning: () => {
+            const rows = Array.isArray(v) ? v : [v];
+            const out = rows.map((row: any) => {
+              const id = state.nextId++;
+              state.categories.push({ id, deletedAt: null, ...row });
+              return { id, ...row };
+            });
+            return Promise.resolve(out);
+          },
+          onConflictDoNothing: () => {
+            const rows = Array.isArray(v) ? v : [v];
+            const inserted: any[] = [];
+            for (const row of rows) {
+              const clash = state.categories.some(
+                (c: any) => c.name === row.name && (c.parentId ?? null) === (row.parentId ?? null),
+              );
+              if (!clash) {
+                const id = state.nextId++;
+                state.categories.push({ id, deletedAt: null, ...row });
+                inserted.push({ id, ...row });
+              }
+            }
+            return { returning: () => Promise.resolve(inserted) };
+          },
+        }),
+      })),
+      update: vi.fn((t: any) => ({
+        set: (vals: any) => ({
+          where: (cond: any) => {
+            const inArr =
+              cond?.__op === "inArray"
+                ? cond
+                : cond?.__op === "and"
+                  ? cond.args.find((a: any) => a?.__op === "inArray")
+                  : null;
+            if (t?._ === "suppliers") {
+              state.supplierUpdates.push(vals);
+            } else if (cond?.left === "id") {
+              for (const c of state.categories) if (c.id === cond.right) Object.assign(c, vals);
+            } else if (inArr) {
+              for (const c of state.categories)
+                if (inArr.right.includes(c.id)) Object.assign(c, vals);
+            }
+            return Promise.resolve();
+          },
+        }),
+      })),
+      delete: vi.fn((t: any) => ({
+        where: (cond: any) => {
+          if (t?._ === "supplierCategoryLinks") {
+            const c = cond?.__op === "and" ? cond.args : [cond];
+            const sid = c.find((x: any) => x?.left === "supplier_id")?.right;
+            const cid = c.find((x: any) => x?.left === "category_id")?.right;
+            state.deleted.push({ supplierId: sid, categoryId: cid });
+            state.links = state.links.filter(
+              (l: any) => !(l.supplierId === sid && l.categoryId === cid),
+            );
+          }
+          return Promise.resolve();
+        },
+      })),
+      transaction: vi.fn(async (fn: any) =>
+        fn({
+          delete: (t: any) => ({
             where: (cond: any) => {
               const c = cond?.__op === "and" ? cond.args : [cond];
               const sid = c.find((x: any) => x?.left === "supplier_id")?.right;
               const cid = c.find((x: any) => x?.left === "category_id")?.right;
               state.deleted.push({ supplierId: sid, categoryId: cid });
+              state.links = state.links.filter(
+                (l: any) => !(l.supplierId === sid && l.categoryId === cid),
+              );
               return Promise.resolve();
             },
           }),
-          update: (_t: any) => ({
-            set: (vals: any) => {
-              state.supplierUpdates.push(vals);
-              return { where: () => Promise.resolve() };
-            },
+          update: (t: any) => ({
+            set: (vals: any) => ({
+              where: () => {
+                if (t?._ === "suppliers") state.supplierUpdates.push(vals);
+                return Promise.resolve();
+              },
+            }),
           }),
-          insert: (_t: any) => ({
+          insert: (t: any) => ({
             values: (v: any) => {
-              state.audits.push(v);
-              return Promise.resolve();
+              const apply = () => {
+                if (t?._ === "supplierCategoryLinks") {
+                  const rows = Array.isArray(v) ? v : [v];
+                  for (const row of rows) {
+                    const dup = state.links.some(
+                      (l: any) =>
+                        l.supplierId === row.supplierId && l.categoryId === row.categoryId,
+                    );
+                    if (!dup) state.links.push(row);
+                  }
+                  return;
+                }
+                state.audits.push(v);
+              };
+              const api: any = {
+                onConflictDoNothing: () => {
+                  apply();
+                  return api;
+                },
+                then: (r: any) =>
+                  Promise.resolve()
+                    .then(() => {
+                      apply();
+                      return undefined;
+                    })
+                    .then(r),
+              };
+              return api;
             },
           }),
-        };
-        return fn(tx);
-      }),
+        }),
+      ),
     },
     ...tables,
   };
@@ -128,6 +257,7 @@ beforeEach(() => {
   state.deleted.length = 0;
   state.supplierUpdates.length = 0;
   state.audits.length = 0;
+  state.nextId = 1000;
   sessionState.role = "admin";
 });
 
@@ -209,16 +339,39 @@ describe("POST /categories/parent-assignments/cleanup — only the provable case
     ).toBe(true);
   });
 
-  it("does NOT touch a supplier who is on the parent ALONE", async () => {
+  it("MOVES a supplier who is on the parent ALONE into «يحتاج للمراجعة»", async () => {
     state.categories = [
       { id: 1, name: "كهرباء", parentId: null, deletedAt: null },
       { id: 13, name: "بطاريات UPS", parentId: 1, deletedAt: null },
     ];
     state.links = [{ supplierId: 43, categoryId: 1 }];
     const res = await request(testApp).post("/categories/parent-assignments/cleanup");
+    expect(res.status).toBe(200);
+    // nothing redundant, but the orphan IS moved
     expect(res.body.removed).toBe(0);
-    expect(state.deleted).toEqual([]);
-    expect(state.supplierUpdates).toEqual([]);
+    expect(res.body.moved).toBe(1);
+    // the placeholder leaf is created under the SAME parent
+    const placeholder = state.categories.find((c: any) => c.name === "يحتاج للمراجعة");
+    expect(placeholder).toBeTruthy();
+    expect(placeholder.parentId).toBe(1);
+    // the supplier now sits on the placeholder, not on the parent
+    expect(state.links).toEqual([{ supplierId: 43, categoryId: placeholder.id }]);
+    // and the free-text mirror names the placeholder
+    expect(state.supplierUpdates).toEqual([{ category: "يحتاج للمراجعة" }]);
+  });
+
+  it("removes an EMPTY placeholder but keeps one that still holds suppliers", async () => {
+    state.categories = [
+      { id: 1, name: "كهرباء", parentId: null, deletedAt: null },
+      { id: 13, name: "بطاريات UPS", parentId: 1, deletedAt: null },
+      { id: 90, name: "يحتاج للمراجعة", parentId: 1, deletedAt: null },
+    ];
+    // 90 holds nobody ⇒ it is a leftover working state
+    state.links = [{ supplierId: 44, categoryId: 13 }];
+    const res = await request(testApp).post("/categories/parent-assignments/cleanup");
+    expect(res.body.pruned).toBe(1);
+    const gone = state.categories.find((c: any) => c.id === 90);
+    expect(gone.deletedAt).toBeTruthy();
   });
 
   it("403s for a non-manager role", async () => {

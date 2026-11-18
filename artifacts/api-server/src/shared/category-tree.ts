@@ -54,13 +54,17 @@ export function categoryKey(name: string | null | undefined): string {
  * variants and stray spaces count as the same name. `exceptId` skips the row
  * being renamed, so a category can keep its own name.
  */
-export function findCategoryClash<T extends { id: number; name: string }>(
+export function findCategoryClash<T extends { id: number; name: string; parentId?: number | null }>(
   rows: T[],
   candidate: string,
   exceptId?: number,
+  parentId?: number | null,
 ): T | undefined {
   const key = categoryKey(candidate);
-  return rows.find((r) => r.id !== exceptId && categoryKey(r.name) === key);
+  const parent = parentId ?? null;
+  return rows.find(
+    (r) => r.id !== exceptId && (r.parentId ?? null) === parent && categoryKey(r.name) === key,
+  );
 }
 
 /** Collapse a display name to its canonical single-spaced, trimmed form. */

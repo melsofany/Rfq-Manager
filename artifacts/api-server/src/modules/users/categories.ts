@@ -42,6 +42,11 @@ import {
 } from "../../shared/category-tree";
 import { mergeSupplierCategories } from "../../shared/category-merge";
 import { findActiveTwin } from "../../shared/category-dedupe";
+import {
+  isReviewPlaceholder,
+  moveOrphansToPlaceholder,
+  pruneEmptyReviewPlaceholders,
+} from "../../shared/category-placeholder";
 
 const router = Router();
 router.use("/categories", guardFor("/categories"));
@@ -153,7 +158,11 @@ router.get("/categories/parent-assignments", requireAuth, async (_req, res): Pro
     holders.set(l.categoryId, list);
   }
 
-  const groups = nonLeafHolders(nodes, holders, liveIds);
+  // The placeholder is a WORKING STATE, not a category to review — it must not
+  // appear in its own report.
+  const groups = nonLeafHolders(nodes, holders, liveIds).filter(
+    (g) => !isReviewPlaceholder(g.name),
+  );
 
   // The PROVABLE half: a supplier filed under a grouping category AND under one
   // of its descendants. Filtering the tree already reaches him through the
@@ -189,6 +198,19 @@ router.get("/categories/parent-assignments", requireAuth, async (_req, res): Pro
     redundantByCategory.set(r.categoryId, (redundantByCategory.get(r.categoryId) ?? 0) + 1);
   }
 
+  // The «يحتاج للمراجعة» placeholders: the suppliers waiting to be re-filed.
+  // This is the operator's actual to-do list once the cleanup has run.
+  const placeholders = nodes
+    .filter((n) => isReviewPlaceholder(n.name))
+    .map((n) => ({
+      id: n.id,
+      parentId: n.parentId ?? null,
+      parentName: n.parentId != null ? (nameById.get(n.parentId) ?? null) : null,
+      holderCount: (holders.get(n.id) ?? []).length,
+      holders: holders.get(n.id) ?? [],
+    }))
+    .filter((p) => p.holderCount > 0);
+
   res.json({
     totals: {
       categoriesWithSuppliers: groups.length,
@@ -198,6 +220,7 @@ router.get("/categories/parent-assignments", requireAuth, async (_req, res): Pro
     },
     groups: groups.map((g) => ({ ...g, redundantCount: redundantByCategory.get(g.id) ?? 0 })),
     redundant,
+    placeholders,
   });
 });
 
@@ -215,20 +238,21 @@ router.post(
     const rows = await db.select().from(supplierCategoriesTable);
     const live = rows.filter((r) => r.deletedAt == null);
     const nodes = live.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null }));
+    const liveIds = new Set(nodes.map((n) => n.id));
 
-    const links = await db
+    const allLinks = await db
       .select({
         supplierId: supplierCategoryLinksTable.supplierId,
         categoryId: supplierCategoryLinksTable.categoryId,
+        supplierName: suppliersTable.name,
       })
-      .from(supplierCategoryLinksTable);
+      .from(supplierCategoryLinksTable)
+      .innerJoin(suppliersTable, eq(suppliersTable.id, supplierCategoryLinksTable.supplierId));
 
+    const links = allLinks.map((l) => ({ supplierId: l.supplierId, categoryId: l.categoryId }));
+
+    // 1) Drop the provable redundant parent links.
     const redundant = redundantParentLinks(nodes, links);
-    if (redundant.length === 0) {
-      res.json({ ok: true, removed: 0, remaining: 0 });
-      return;
-    }
-
     const nameById = new Map(nodes.map((n) => [n.id, n.name]));
     const removedBySupplier = new Map<number, Set<number>>();
     for (const l of redundant) {
@@ -245,38 +269,72 @@ router.post(
       survivingNames.set(supplierId, names);
     }
 
-    await db.transaction(async (tx) => {
-      for (const l of redundant) {
-        await tx
-          .delete(supplierCategoryLinksTable)
-          .where(
-            and(
-              eq(supplierCategoryLinksTable.supplierId, l.supplierId),
-              eq(supplierCategoryLinksTable.categoryId, l.categoryId),
-            ),
-          );
-      }
-      // The free-text mirror on `suppliers.category` is a comma-joined name
-      // list; leaving it stale would make the list show a category the link no
-      // longer holds. Rewrite it from the SURVIVING links.
-      for (const [supplierId, names] of survivingNames) {
-        await tx
-          .update(suppliersTable)
-          .set({ category: names.join(",") })
-          .where(eq(suppliersTable.id, supplierId));
-      }
-      await tx.insert(auditLogTable).values({
-        action: "supplier_category.parent_links_cleaned",
-        entityType: "supplier_category",
-        employeeId: req.session.employeeId,
-        description: `Removed ${redundant.length} redundant parent-category supplier link(s)`,
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
+    if (redundant.length > 0) {
+      await db.transaction(async (tx) => {
+        for (const l of redundant) {
+          await tx
+            .delete(supplierCategoryLinksTable)
+            .where(
+              and(
+                eq(supplierCategoryLinksTable.supplierId, l.supplierId),
+                eq(supplierCategoryLinksTable.categoryId, l.categoryId),
+              ),
+            );
+        }
+        // The free-text mirror on `suppliers.category` is a comma-joined name
+        // list; leaving it stale would make the list show a category the link no
+        // longer holds. Rewrite it from the SURVIVING links.
+        for (const [supplierId, names] of survivingNames) {
+          await tx
+            .update(suppliersTable)
+            .set({ category: names.join(",") })
+            .where(eq(suppliersTable.id, supplierId));
+        }
+        await tx.insert(auditLogTable).values({
+          action: "supplier_category.parent_links_cleaned",
+          entityType: "supplier_category",
+          employeeId: req.session.employeeId,
+          description: `Removed ${redundant.length} redundant parent-category supplier link(s)`,
+          ipAddress: req.ip,
+          userAgent: req.get("user-agent"),
+        });
       });
-    });
+    }
 
-    const remaining = links.length - redundant.length;
-    res.json({ ok: true, removed: redundant.length, remaining });
+    // 2) Move every supplier who is STILL on a grouping category ALONE into that
+    //    category's «يحتاج للمراجعة» placeholder leaf. Recompute the holders from
+    //    the links that survive step 1, so a supplier just cleaned up is not
+    //    moved as well.
+    const removedKeys = new Set(redundant.map((l) => `${l.supplierId}:${l.categoryId}`));
+    const survivingLinks = links.filter((l) => !removedKeys.has(`${l.supplierId}:${l.categoryId}`));
+    const holders = new Map<number, Array<{ id: number; name: string }>>();
+    for (const l of allLinks) {
+      if (removedKeys.has(`${l.supplierId}:${l.categoryId}`)) continue;
+      const list = holders.get(l.categoryId) ?? [];
+      list.push({ id: l.supplierId, name: l.supplierName });
+      holders.set(l.categoryId, list);
+    }
+    const groups = nonLeafHolders(nodes, holders, liveIds).filter(
+      (g) => !isReviewPlaceholder(g.name),
+    );
+
+    let moved = 0;
+    for (const g of groups) {
+      moved += await moveOrphansToPlaceholder(g.id, g.name, g.holders);
+    }
+
+    // 3) A placeholder that now holds nothing (its suppliers were all re-filed)
+    //    is removed. Runs even when nothing moved, so a placeholder emptied by
+    //    hand disappears on the next run.
+    const pruned = await pruneEmptyReviewPlaceholders();
+
+    res.json({
+      ok: true,
+      removed: redundant.length,
+      moved,
+      pruned,
+      remaining: survivingLinks.length,
+    });
   },
 );
 
@@ -301,7 +359,9 @@ router.post("/categories", requireRole("admin", "manager"), async (req, res): Pr
     res.status(400).json({ error: "التصنيف الأب غير موجود" });
     return;
   }
-  const clash = all.find((c) => categoryKey(c.name) === categoryKey(clean));
+  const clash = all.find(
+    (c) => (c.parentId ?? null) === pId && categoryKey(c.name) === categoryKey(clean),
+  );
   if (clash) {
     res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
     return;
@@ -385,7 +445,11 @@ router.patch(
       res.status(400).json({ error: "لا يمكن أن يصبح التصنيف تابعًا لنفسه أو لأحد أبنائه" });
       return;
     }
-    const clash = all.find((c) => c.id !== id && categoryKey(c.name) === categoryKey(newName));
+    // Uniqueness is per PARENT: the same name may exist under another branch.
+    const clash = all.find(
+      (c) =>
+        c.id !== id && (c.parentId ?? null) === pId && categoryKey(c.name) === categoryKey(newName),
+    );
     if (clash) {
       res.status(409).json({ error: "التصنيف موجود بالفعل", existingId: clash.id });
       return;
@@ -505,7 +569,12 @@ router.post(
     // duplicate while its twin is still active would violate it and surface as
     // an opaque 500. Refuse with the real reason: the two names are one trade,
     // and the operator should merge them instead (which is the confirmed flow).
-    const twin = await findActiveTwin(supplierCategoriesTable, category.name, id);
+    const twin = await findActiveTwin(
+      supplierCategoriesTable,
+      category.name,
+      id,
+      category.parentId ?? null,
+    );
     if (twin) {
       res.status(409).json({
         error: `يوجد تصنيف آخر بنفس الاسم: «${twin.name}» — استخدم «دمج» لضمّه إليه`,

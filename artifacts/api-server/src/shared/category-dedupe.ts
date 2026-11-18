@@ -34,12 +34,28 @@ export function categoryUniqueKey(name: string): string {
   return canonicalCategoryName(name).toLowerCase();
 }
 
+/**
+ * The key a category is unique BY: its parent plus its normalised name.
+ *
+ * Uniqueness is scoped to the PARENT, not the whole table. Two branches may each
+ * hold a category of the same name — a placeholder leaf («يحتاج للمراجعة») under
+ * every domain, or a brand that trades in two domains. A GLOBAL name index made
+ * the second one impossible, which is what blocked the placeholder.
+ */
+export function categoryUniqueKeyWithParent(name: string, parentId: number | null): string {
+  return `${parentId ?? "root"}::${categoryUniqueKey(name)}`;
+}
+
 /** The SQL expression that must match `categoryUniqueKey` exactly. */
 export const CATEGORY_UNIQUE_EXPR = `lower(btrim(regexp_replace(name, '\\s+', ' ', 'g')))`;
+
+/** The SQL expression that must match `categoryUniqueKeyWithParent` exactly. */
+export const CATEGORY_UNIQUE_EXPR_WITH_PARENT = `COALESCE(parent_id, 0), ${CATEGORY_UNIQUE_EXPR}`;
 
 export interface CategoryRow {
   id: number;
   name: string;
+  parentId?: number | null;
   isActive?: boolean | null;
   /** How many rows reference this category (summed across every relation). */
   refCount?: number;
@@ -67,7 +83,7 @@ export interface DuplicateGroup {
 export function planCategoryDedupe(rows: CategoryRow[]): DuplicateGroup[] {
   const groups = new Map<string, CategoryRow[]>();
   for (const row of rows) {
-    const key = categoryUniqueKey(row.name);
+    const key = categoryUniqueKeyWithParent(row.name, row.parentId ?? null);
     const list = groups.get(key) ?? [];
     list.push(row);
     groups.set(key, list);
@@ -174,11 +190,25 @@ export function categoryDedupeSql(
     out.push(`UPDATE ${t} r SET ${c} = g.survivor FROM ${pairs} WHERE r.${c} = g.loser`);
   }
 
-  // 2) Children follow their parent onto the survivor.
+  // 2) Children follow their parent onto the survivor. Two children of the same
+  //    survivor may now share a name (the loser's child and the survivor's own),
+  //    which the per-parent unique index forbids — so a colliding child is
+  //    retired rather than left to break the index. The survivor's own child wins
+  //    (the loser's copy is the redundant one).
   if (options.parentColumn) {
     out.push(
       `UPDATE ${table} c SET parent_id = g.survivor FROM ${pairs} WHERE c.parent_id = g.loser`,
     );
+    //    `k.id < c.id` (not `k.id <> c.id`) is what keeps EXACTLY ONE row: a
+    //    symmetric test retires BOTH colliding children, because each sees the
+    //    other as the duplicate — measured on a real Postgres.
+    const nameExpr = (alias: string) => CATEGORY_UNIQUE_EXPR.replace(/\bname\b/g, `${alias}.name`);
+    out.push(`UPDATE ${table} c SET is_active = false, deleted_at = NOW()
+      WHERE c.parent_id IN (SELECT survivor FROM ${pairs}) AND c.deleted_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM ${table} k WHERE k.id < c.id AND k.deleted_at IS NULL
+            AND k.parent_id = c.parent_id AND ${nameExpr("c")} = ${nameExpr("k")}
+        )`);
   }
 
   // 3) Retire the losers. Soft delete: the row and its history survive.
@@ -219,13 +249,16 @@ export async function findActiveTwin<T extends { id: unknown; name: unknown }>(
   table: T,
   name: string,
   excludeId: number,
+  parentId?: number | null,
 ): Promise<{ id: number; name: string } | null> {
   const { db } = await import("@workspace/db");
   const { sql } = await import("drizzle-orm");
   const key = categoryUniqueKey(name);
+  const parent = parentId ?? null;
   const result = (await db.execute(sql`
     SELECT id, name FROM ${table}
     WHERE lower(btrim(regexp_replace(name, '\\s+', ' ', 'g'))) = ${key}
+      AND COALESCE(parent_id, 0) = ${parent ?? 0}
       AND deleted_at IS NULL
       AND id <> ${excludeId}
     LIMIT 1

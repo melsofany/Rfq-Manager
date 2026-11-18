@@ -292,7 +292,7 @@ router.post("/item-categories", async (req, res): Promise<void> => {
   const sameKey = await db
     .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
     .from(itemCategoriesTable);
-  if (findCategoryClash(sameKey, trimmed)) {
+  if (findCategoryClash(sameKey, trimmed, undefined, parentId ? Number(parentId) : null)) {
     res.status(409).json({ error: "التصنيف موجود بالفعل" });
     return;
   }
@@ -348,6 +348,10 @@ router.patch("/item-categories/:id", async (req, res): Promise<void> => {
     aliases?: string[];
   };
 
+  const [current] = await db
+    .select({ id: itemCategoriesTable.id, parentId: itemCategoriesTable.parentId })
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.id, id));
   const updates: Record<string, unknown> = {};
   if (name !== undefined) {
     if (!name.trim()) {
@@ -355,9 +359,13 @@ router.patch("/item-categories/:id", async (req, res): Promise<void> => {
       return;
     }
     const renamedKey = await db
-      .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+      .select({
+        id: itemCategoriesTable.id,
+        name: itemCategoriesTable.name,
+        parentId: itemCategoriesTable.parentId,
+      })
       .from(itemCategoriesTable);
-    if (findCategoryClash(renamedKey, name.trim(), id)) {
+    if (findCategoryClash(renamedKey, name.trim(), id, current?.parentId ?? null)) {
       res.status(409).json({ error: "التصنيف موجود بالفعل" });
       return;
     }
@@ -516,7 +524,11 @@ router.delete("/item-categories/:id", async (req, res): Promise<void> => {
 router.post("/item-categories/:id/restore", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const [row] = await db
-    .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+    .select({
+      id: itemCategoriesTable.id,
+      name: itemCategoriesTable.name,
+      parentId: itemCategoriesTable.parentId,
+    })
     .from(itemCategoriesTable)
     .where(eq(itemCategoriesTable.id, id));
   if (!row) {
@@ -526,7 +538,7 @@ router.post("/item-categories/:id/restore", async (req, res): Promise<void> => {
   // Same guard as the supplier side: the unique index is on the NORMALISED
   // name, so restoring a retired duplicate whose twin is still active would be
   // rejected by the index and read as a server error. Say what to do instead.
-  const twin = await findActiveTwin(itemCategoriesTable, row.name, id);
+  const twin = await findActiveTwin(itemCategoriesTable, row.name, id, row.parentId ?? null);
   if (twin) {
     res.status(409).json({
       error: `يوجد تصنيف آخر بنفس الاسم: «${twin.name}» — استخدم «دمج» لضمّه إليه`,

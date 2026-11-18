@@ -1074,6 +1074,8 @@ const translations: Record<Lang, Record<string, string>> = {
       "Remove {n} redundant parent-category link(s)? Suppliers filed on the parent ONLY are not touched.",
     "sup.cat.review.cleaned": "Removed {n} link(s).",
     "sup.cat.review.cleanFailed": "The cleanup failed — nothing was changed.",
+    "sup.cat.review.todoTitle": "Waiting to be re-filed (يحتاج للمراجعة)",
+    "sup.cat.review.placeholder": "يحتاج للمراجعة",
     "sup.pick.parentDisabled":
       "A group category cannot hold a supplier — pick one of its sub-categories",
     "sup.cm.showSuppliers": "Suppliers",
@@ -2300,6 +2302,8 @@ const translations: Record<Lang, Record<string, string>> = {
       "حذف {n} رابطًا مكررًا للتصنيف الرئيسي؟ الموردون على التصنيف الرئيسي وحده لن يُمسّوا.",
     "sup.cat.review.cleaned": "تم حذف {n} رابطًا.",
     "sup.cat.review.cleanFailed": "فشل التنظيف — لم يتغيّر شيء.",
+    "sup.cat.review.todoTitle": "بانتظار إعادة الإسناد (يحتاج للمراجعة)",
+    "sup.cat.review.placeholder": "يحتاج للمراجعة",
     "sup.pick.parentDisabled": "تصنيف رئيسي له فروع — اختر أحد تصنيفاته الفرعية",
     "sup.cm.showSuppliers": "الموردون",
     "sup.cm.hideSuppliers": "إخفاء الموردين",

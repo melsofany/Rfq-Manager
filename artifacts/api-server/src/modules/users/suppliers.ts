@@ -28,6 +28,7 @@ import {
   nonLeafCategoryNames,
 } from "../../shared/supplier-category-links";
 import { descendantIds } from "../../shared/category-tree";
+import { pruneEmptyReviewPlaceholders } from "../../shared/category-placeholder";
 import {
   saveSupplierItemCategoryLinks,
   suppliersForItemCategories,
@@ -926,6 +927,9 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
   // Seed the LINK table from the categories just stored.
   try {
     await saveSupplierCategoryLinks(supplier.id, toArray(category));
+    // Re-filing a supplier can empty a «يحتاج للمراجعة» placeholder, which is a
+    // working state and must disappear once it holds nobody.
+    await pruneEmptyReviewPlaceholders();
   } catch (linkErr) {
     console.warn("supplier category link save failed (create)", supplier.id, linkErr);
   }
@@ -1067,6 +1071,7 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   if (updates.category !== undefined) {
     try {
       await saveSupplierCategoryLinks(id, toArray(String(updates.category)));
+      await pruneEmptyReviewPlaceholders();
     } catch (linkErr) {
       console.warn("supplier category link save failed (patch)", id, linkErr);
     }

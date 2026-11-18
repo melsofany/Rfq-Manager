@@ -32,6 +32,13 @@ interface ParentAssignments {
     onlyOnParent: number;
   };
   groups: ParentAssignmentGroup[];
+  placeholders: Array<{
+    id: number;
+    parentId: number | null;
+    parentName: string | null;
+    holderCount: number;
+    holders: Array<{ id: number; name: string }>;
+  }>;
 }
 
 /**
@@ -108,6 +115,29 @@ function ParentAssignmentReview({
                 : t("sup.cat.review.cleaned", { n: result })}
             </span>
           )}
+        </div>
+      )}
+      {data.placeholders.length > 0 && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-100/50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40">
+          <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+            {t("sup.cat.review.todoTitle")}
+          </p>
+          <ul className="mt-1 space-y-1">
+            {data.placeholders.map((p) => (
+              <li key={p.id} className="text-xs text-amber-900 dark:text-amber-200">
+                <span className="font-semibold">{p.parentName ?? "—"}</span>
+                {" / "}
+                <span className="italic">{t("sup.cat.review.placeholder")}</span>
+                <span className="text-amber-700 dark:text-amber-400">
+                  {" "}
+                  — {t("sup.cat.review.holders", { n: p.holderCount })}
+                </span>
+                <span className="block ps-3 text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                  {p.holders.map((h) => h.name).join("، ")}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       <ul className="mt-2 space-y-1.5">
