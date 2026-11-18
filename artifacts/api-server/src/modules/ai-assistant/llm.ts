@@ -1002,6 +1002,16 @@ async function extractWithGemini(
   return null;
 }
 
+/** Statuses Gemini returns when the model is busy or rate-limited; worth retrying. */
+const TRANSIENT_GEMINI_STATUS = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * Waits between attempts on the SAME model when Gemini is overloaded. Two retries
+ * (1.5s, then 3s) ride out a short "high demand" spike before the next model in
+ * the fallback chain is tried.
+ */
+export const GEMINI_RETRY_DELAYS_MS = [1500, 3000];
+
 async function extractWithGeminiModel(
   buffer: Buffer,
   mimeType: string,
@@ -1009,45 +1019,62 @@ async function extractWithGeminiModel(
   baseUrl: string | null | undefined,
   model: string,
 ): Promise<string | null> {
-  try {
-    const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "").replace(/\/openai$/, "");
-    const res = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": AI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [
+  const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "").replace(/\/openai$/, "");
+  const url = `${base}/models/${encodeURIComponent(model)}:generateContent`;
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
           {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: mimeType || "application/octet-stream",
-                  data: buffer.toString("base64"),
-                },
-              },
-            ],
+            inline_data: {
+              mime_type: mimeType || "application/octet-stream",
+              data: buffer.toString("base64"),
+            },
           },
         ],
-      }),
-    });
-    if (!res.ok) {
-      logger.warn(
-        { status: res.status, body: (await res.text()).slice(0, 300) },
-        "AI assistant: Gemini transcription failed",
-      );
+      },
+    ],
+  });
+  for (let attempt = 0; ; attempt++) {
+    const retriesLeft = attempt < GEMINI_RETRY_DELAYS_MS.length;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": AI_API_KEY,
+        },
+        body,
+      });
+      if (!res.ok) {
+        if (TRANSIENT_GEMINI_STATUS.has(res.status) && retriesLeft) {
+          logger.info(
+            { status: res.status, model, attempt },
+            "AI assistant: Gemini busy, retrying transcription",
+          );
+          await new Promise((r) => setTimeout(r, GEMINI_RETRY_DELAYS_MS[attempt]));
+          continue;
+        }
+        logger.warn(
+          { status: res.status, model, body: (await res.text()).slice(0, 300) },
+          "AI assistant: Gemini transcription failed",
+        );
+        return null;
+      }
+      const json = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+      return text.trim() || null;
+    } catch (err) {
+      if (retriesLeft) {
+        await new Promise((r) => setTimeout(r, GEMINI_RETRY_DELAYS_MS[attempt]));
+        continue;
+      }
+      logger.warn({ err, model }, "AI assistant: Gemini transcription error");
       return null;
     }
-    const json = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-    return text.trim() || null;
-  } catch (err) {
-    logger.warn({ err }, "AI assistant: Gemini transcription error");
-    return null;
   }
 }
 
