@@ -39,6 +39,8 @@ export interface PoItemRow {
   unitPrice: string;
   supplierId: string;
   taxIncluded: boolean;
+  /** Delivery date agreed with the supplier for this line (YYYY-MM-DD), or ''. */
+  promisedDeliveryDate: string;
   /** Supplier quote price this line was filled from (before VAT adjustment). */
   quotedPrice?: string | null;
   /** Whether that supplier quote already included VAT. */

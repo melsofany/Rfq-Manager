@@ -27,4 +27,9 @@ export interface PurchaseOrderItem {
   /** @nullable */
   referencePrice?: number | null;
   taxIncluded?: boolean;
+  /**
+     * تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه
+     * @nullable
+     */
+  promisedDeliveryDate?: string | null;
 }
