@@ -66,7 +66,7 @@ interface ReviewDetail {
 
 /** The declared fields worth matching, each against the document that proves it. */
 const MATCH_FIELDS: Array<{ key: keyof ReviewApplication; slot: string; labelKey: string }> = [
-  { key: "name", slot: "commercial_register", labelKey: "rev.bankAccountHolder" },
+  { key: "name", slot: "commercial_register", labelKey: "rev.companyName" },
   { key: "commercialRegister", slot: "commercial_register", labelKey: "rev.commercialRegister" },
   { key: "taxRegistration", slot: "tax_card", labelKey: "rev.taxRegistration" },
   { key: "bankName", slot: "bank_letter", labelKey: "rev.bankName" },
