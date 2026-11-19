@@ -1,0 +1,16 @@
+{
+  "name": "نظام قرطبة للتوريدات",
+  "short_name": "Cortoba",
+  "description": "نظام قرطبة للتوريدات لإدارة طلبات عروض الأسعار وأوامر الشراء والموردين والعملاء والمخازن والعمليات الميدانية.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#783237",
+  "theme_color": "#783237",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
