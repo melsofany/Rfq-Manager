@@ -357,6 +357,90 @@ paths:
               schema:
                 $ref: "#/components/schemas/SupplierScore"
 
+  /suppliers/{id}/purchases:
+    get:
+      operationId: getSupplierPurchases
+      tags: [suppliers]
+      summary: Totals of purchased lines for a supplier (net and gross of VAT)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPurchases"
+
+  /suppliers/{id}/po-lines:
+    get:
+      operationId: listSupplierPoLines
+      tags: [suppliers]
+      summary: Recent PO lines bought from a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: PO lines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierPoLine"
+
+  /suppliers/{id}/notes:
+    get:
+      operationId: listSupplierNotes
+      tags: [suppliers]
+      summary: Notes recorded against a supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierNote"
+    post:
+      operationId: createSupplierNote
+      tags: [suppliers]
+      summary: Record a note against a supplier, optionally on one of its PO lines
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupplierNoteBody"
+      responses:
+        "200":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierNote"
+
   # CUSTOMERS
   /customers:
     get:
@@ -2717,6 +2801,79 @@ components:
               supplier:
                 $ref: "#/components/schemas/Supplier"
 
+    SupplierPurchases:
+      type: object
+      required: [poCount, lineCount, totalNet, totalGross]
+      properties:
+        poCount:
+          type: integer
+        lineCount:
+          type: integer
+          description: "عدد بنود أوامر الشراء غير الملغاة لهذا المورد"
+        totalNet:
+          type: number
+          description: "إجمالي المشتريات قبل الضريبة"
+        totalGross:
+          type: number
+          description: "إجمالي المشتريات بعد الضريبة (14%)"
+    SupplierPoLine:
+      type: object
+      required: [id, poId, description, taxIncluded]
+      properties:
+        id:
+          type: integer
+        poId:
+          type: integer
+        internalPoNo:
+          type: ["string", "null"]
+        description:
+          type: string
+        qty:
+          type: ["number", "null"]
+        price:
+          type: ["number", "null"]
+        taxIncluded:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    SupplierNote:
+      type: object
+      required: [id, supplierId, reason, createdAt]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        poItemId:
+          type: ["integer", "null"]
+        poId:
+          type: ["integer", "null"]
+        internalPoNo:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        reason:
+          type: string
+          enum: [wrong_price, unrequested_item, wrong_qty, late_delivery, quality, other]
+        text:
+          type: ["string", "null"]
+        createdByEmployeeId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+    CreateSupplierNoteBody:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [wrong_price, unrequested_item, wrong_qty, late_delivery, quality, other]
+        poItemId:
+          type: ["integer", "null"]
+        text:
+          type: ["string", "null"]
     SupplierScore:
       type: object
       required: [supplierId]
@@ -2742,6 +2899,21 @@ components:
         commitmentScore:
           type: ["number", "null"]
           description: "نسبة الاستجابة (0-100)"
+        otifScore:
+          type: ["number", "null"]
+          description: "التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد"
+        otifLines:
+          type: integer
+          description: "عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF)"
+        otifHits:
+          type: integer
+          description: "عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF"
+        avgPriceEscalation:
+          type: ["number", "null"]
+          description: "متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)"
+        escalationScore:
+          type: ["number", "null"]
+          description: "درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط"
         responseSpeedScore:
           type: ["number", "null"]
           description: "سرعة الرد (0-100)"

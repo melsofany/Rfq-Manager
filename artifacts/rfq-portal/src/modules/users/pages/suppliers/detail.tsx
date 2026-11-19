@@ -1,5 +1,6 @@
 import { orderCategoryTree } from "@/lib/category-tree";
 import { TradeCategoryPicker } from "./TradeCategoryPicker";
+import { SupplierNotesCard, SupplierPurchasesCard } from "../../components/SupplierNotesCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
@@ -1073,6 +1074,8 @@ export default function SupplierDetailPage() {
                   { label: "Win Rate", value: score.winScore },
                   { label: "Receipt Quality", value: score.receiptQualityScore },
                   { label: "Delivery Time", value: score.deliveryScore },
+                  { label: "On Time In Full (OTIF)", value: score.otifScore },
+                  { label: "Price Stability", value: score.escalationScore },
                 ].map((m) =>
                   m.value !== null && m.value !== undefined ? (
                     <ScoreBar key={m.label} label={m.label} value={m.value ?? 0} />
@@ -1093,6 +1096,12 @@ export default function SupplierDetailPage() {
                       {score.responseRate !== null && score.responseRate !== undefined
                         ? `${score.responseRate}%`
                         : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">OTIF Lines</p>
+                    <p className="font-medium text-foreground">
+                      {score.otifHits ?? 0} / {score.otifLines ?? 0}
                     </p>
                   </div>
                   <div>
@@ -1125,6 +1134,9 @@ export default function SupplierDetailPage() {
             )}
           </div>
         </div>
+
+        <SupplierPurchasesCard supplierId={supplierId} />
+        <SupplierNotesCard supplierId={supplierId} />
 
         {/* ── طلبات التسعير ──────────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">

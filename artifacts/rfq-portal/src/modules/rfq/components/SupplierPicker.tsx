@@ -8,6 +8,7 @@ import {
   Search,
   RefreshCw,
   Users,
+  X,
 } from "lucide-react";
 import type { Supplier, SupplierCategory } from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,10 @@ function buildTree(
 }
 
 // ── المكوّن ───────────────────────────────────────────────────────────────────
+// اليمين: قائمة أقسام مفتوحة، كل قسم هو تصنيف مختار من الشجرة ويعرض موردين هذا
+// التصنيف فقط. الأقسام تُضاف أسفل بعضها بالترتيب الذي فُتحت به، ويمكن طي كل قسم
+// أو إغلاقه. الاختيار مرتبط بالمورد نفسه، فالمورد الذي يظهر في أكثر من قسم
+// يكون محدداً أو غير محدد في كل الأقسام معاً.
 
 type Props = {
   categories: SupplierCategory[];
@@ -149,8 +154,9 @@ export function SupplierPicker({
   onChange,
   alreadySentIds,
 }: Props) {
-  const [focusKey, setFocusKey] = useState<string>(ALL_KEY);
+  const [sectionKeys, setSectionKeys] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
   const tree = useMemo(() => buildTree(categories, suppliers), [categories, suppliers]);
@@ -160,19 +166,24 @@ export function SupplierPicker({
     return m;
   }, [suppliers]);
 
-  const focused = tree.flat.get(focusKey) ?? tree.all;
   const q = search.trim().toLowerCase();
-  const visibleMembers = focused.members
-    .map((id) => supplierById.get(id))
-    .filter((s): s is Supplier => !!s)
-    .filter((s) => {
-      if (!q) return true;
-      return (
-        s.name.toLowerCase().includes(q) ||
-        (s.contactPerson ?? "").toLowerCase().includes(q) ||
-        (s.email ?? "").toLowerCase().includes(q)
-      );
-    });
+  const matches = (s: Supplier) => {
+    if (!q) return true;
+    return (
+      s.name.toLowerCase().includes(q) ||
+      (s.contactPerson ?? "").toLowerCase().includes(q) ||
+      (s.email ?? "").toLowerCase().includes(q)
+    );
+  };
+
+  const sections = sectionKeys
+    .map((key) => tree.flat.get(key))
+    .filter((node): node is TreeNode => !!node)
+    .map((node) => {
+      const all = node.members.map((id) => supplierById.get(id)).filter((s): s is Supplier => !!s);
+      return { node, all, shown: all.filter(matches) };
+    })
+    .filter((sec) => !q || sec.shown.length > 0);
 
   const toggleMembers = (memberIds: number[]) => {
     const next = new Set(selectedIds);
@@ -200,20 +211,54 @@ export function SupplierPicker({
     });
   };
 
-  const visibleIds = visibleMembers.map((s) => s.id);
-  const visibleState = triOf(visibleIds, selectedIds);
+  const toggleSectionCollapsed = (key: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // الضغط على اسم تصنيف: يفتحه (ويضيفه أسفل الأقسام الأخرى) إن لم يكن مفتوحاً،
+  // ويطويه إن كان مفتوحاً ومعروضاً، ويفتحه من جديد إن كان مطوياً.
+  const activateNode = (key: string) => {
+    const isOpen = sectionKeys.includes(key);
+    if (isOpen && !collapsedSections.has(key)) {
+      toggleSectionCollapsed(key);
+      return;
+    }
+    setSectionKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    setCollapsedSections((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
+
+  const closeSection = (key: string) => {
+    setSectionKeys((prev) => prev.filter((k) => k !== key));
+    setCollapsedSections((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  };
+
   const selectedCount = Array.from(selectedIds).filter((id) => supplierById.has(id)).length;
 
   const renderNode = (node: TreeNode) => {
     const state = triOf(node.members, selectedIds);
-    const isFocused = focusKey === node.key;
+    const isOpen = sectionKeys.includes(node.key);
     const hasChildren = node.children.length > 0;
-    const isOpen = !collapsed.has(node.key);
+    const isChildrenOpen = !collapsed.has(node.key);
     return (
       <div key={node.key}>
         <div
           className={`flex items-center gap-1.5 rounded-md pe-2 py-1.5 text-sm transition-colors ${
-            isFocused ? "bg-primary/10" : "hover:bg-muted/50"
+            isOpen ? "bg-primary/10" : "hover:bg-muted/50"
           }`}
           style={{ paddingInlineStart: `${node.depth * 16 + 4}px` }}
         >
@@ -222,9 +267,9 @@ export function SupplierPicker({
               type="button"
               onClick={() => toggleCollapsed(node.key)}
               className="text-muted-foreground hover:text-foreground p-0.5"
-              aria-label={isOpen ? "طي" : "توسيع"}
+              aria-label={isChildrenOpen ? "طي التصنيفات الفرعية" : "توسيع التصنيفات الفرعية"}
             >
-              {isOpen ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}
+              {isChildrenOpen ? <ChevronDown size={14} /> : <ChevronLeft size={14} />}
             </button>
           ) : (
             <span className="w-[18px] shrink-0" />
@@ -240,7 +285,7 @@ export function SupplierPicker({
           </button>
           <button
             type="button"
-            onClick={() => setFocusKey(node.key)}
+            onClick={() => activateNode(node.key)}
             className={`flex-1 min-w-0 text-start truncate ${
               node.depth === 0 ? "font-medium text-foreground" : "text-foreground/90"
             }`}
@@ -251,30 +296,61 @@ export function SupplierPicker({
             {node.members.length}
           </span>
         </div>
-        {hasChildren && isOpen && node.children.map(renderNode)}
+        {hasChildren && isChildrenOpen && node.children.map(renderNode)}
       </div>
+    );
+  };
+
+  const renderRow = (s: Supplier) => {
+    const checked = selectedIds.has(s.id);
+    const sentBefore = alreadySentIds.has(s.id);
+    return (
+      <button
+        key={s.id}
+        type="button"
+        onClick={() => toggleOne(s.id)}
+        className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 text-start transition-colors ${
+          checked ? (sentBefore ? "bg-amber-50/60" : "bg-primary/5") : "hover:bg-muted/30"
+        }`}
+      >
+        <TriBox state={checked ? "all" : "none"} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-foreground text-sm truncate">{s.name}</span>
+            {sentBefore && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                <RefreshCw size={9} />
+                أُرسل مسبقاً
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground truncate">
+            {[s.contactPerson, s.email ?? "بدون إيميل"].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+      </button>
     );
   };
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,300px)_1fr]">
       {/* ── شجرة التصنيفات ── */}
-      <div className="bg-card border border-border rounded-lg p-2 space-y-0.5 lg:max-h-[480px] lg:overflow-y-auto">
+      <div className="bg-card border border-border rounded-lg p-2 space-y-0.5 lg:max-h-[520px] lg:overflow-y-auto">
         <div className="px-2 pt-1 pb-2 text-xs text-muted-foreground">
-          اختر تصنيفاً رئيسياً أو فرعياً لتحديد موردييه، واضغط اسمه لعرض موردييه
+          اضغط اسم تصنيف لإضافة موردييه أسفل القائمة، واضغط مرة أخرى لطيه
         </div>
         {renderNode(tree.all)}
         {tree.roots.map(renderNode)}
         {tree.unclassified.members.length > 0 && renderNode(tree.unclassified)}
       </div>
 
-      {/* ── قائمة الموردين للتصنيف المحدد ── */}
+      {/* ── الأقسام المفتوحة ── */}
       <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col min-w-0">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <Users size={15} className="text-muted-foreground shrink-0" />
-            <span className="font-medium text-sm truncate">{focused.label}</span>
-            <span className="text-xs text-muted-foreground">({focused.members.length})</span>
+            <span className="font-medium text-sm">الموردون</span>
+            <span className="text-xs text-muted-foreground">({sectionKeys.length} تصنيف)</span>
           </div>
           <div className="relative">
             <Search
@@ -290,53 +366,62 @@ export function SupplierPicker({
           </div>
         </div>
 
-        {visibleMembers.length > 0 && (
-          <button
-            type="button"
-            onClick={() => toggleMembers(visibleIds)}
-            className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/30 text-sm text-start hover:bg-muted/50"
-          >
-            <TriBox state={visibleState} />
-            <span className="text-foreground">
-              {visibleState === "all" ? "إلغاء تحديد" : "تحديد"} الكل المعروض ({visibleIds.length})
-            </span>
-          </button>
-        )}
-
-        <div className="flex-1 overflow-y-auto lg:max-h-[420px]">
-          {visibleMembers.length === 0 ? (
+        <div className="flex-1 overflow-y-auto lg:max-h-[440px] p-3 space-y-3">
+          {sectionKeys.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {focused.members.length === 0 ? "لا يوجد موردون في هذا التصنيف" : "لا توجد نتائج"}
+              اختر تصنيفاً من القائمة لعرض موردييه هنا
             </p>
+          ) : sections.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">لا توجد نتائج</p>
           ) : (
-            visibleMembers.map((s) => {
-              const checked = selectedIds.has(s.id);
-              const sentBefore = alreadySentIds.has(s.id);
+            sections.map(({ node, all, shown }) => {
+              const memberIds = shown.map((s) => s.id);
+              const state = triOf(memberIds, selectedIds);
+              const sectionCollapsed = collapsedSections.has(node.key);
               return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => toggleOne(s.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 text-start transition-colors ${
-                    checked ? (sentBefore ? "bg-amber-50/60" : "bg-primary/5") : "hover:bg-muted/30"
-                  }`}
-                >
-                  <TriBox state={checked ? "all" : "none"} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-foreground text-sm truncate">{s.name}</span>
-                      {sentBefore && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
-                          <RefreshCw size={9} />
-                          أُرسل مسبقاً
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {[s.contactPerson, s.email ?? "بدون إيميل"].filter(Boolean).join(" · ")}
-                    </p>
+                <div key={node.key} className="border border-border rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30 border-b border-border">
+                    <button
+                      type="button"
+                      onClick={() => toggleSectionCollapsed(node.key)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={sectionCollapsed ? `توسيع ${node.label}` : `طي ${node.label}`}
+                    >
+                      {sectionCollapsed ? <ChevronLeft size={15} /> : <ChevronDown size={15} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleMembers(memberIds)}
+                      disabled={memberIds.length === 0}
+                      className="p-0.5 disabled:opacity-40"
+                      aria-label={`تحديد الكل في ${node.label}`}
+                    >
+                      <TriBox state={state} />
+                    </button>
+                    <span className="font-medium text-sm text-foreground truncate flex-1 min-w-0">
+                      {node.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {q ? `${shown.length} / ${all.length}` : all.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => closeSection(node.key)}
+                      className="p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label={`إغلاق ${node.label}`}
+                    >
+                      <X size={14} />
+                    </button>
                   </div>
-                </button>
+                  {!sectionCollapsed &&
+                    (all.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        لا يوجد موردون في هذا التصنيف
+                      </p>
+                    ) : (
+                      shown.map(renderRow)
+                    ))}
+                </div>
               );
             })
           )}

@@ -428,6 +428,11 @@ export const ListSupplierScoresResponseItem = zod.object({
   "sampleSize": zod.number().optional().describe('عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة'),
   "standing": zod.enum(['preferred', 'watch', 'restricted', 'not_rated']).optional().describe('حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)'),
   "commitmentScore": zod.number().nullish().describe('نسبة الاستجابة (0-100)'),
+  "otifScore": zod.number().nullish().describe('التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد'),
+  "otifLines": zod.number().optional().describe('عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF)'),
+  "otifHits": zod.number().optional().describe('عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF'),
+  "avgPriceEscalation": zod.number().nullish().describe('متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)'),
+  "escalationScore": zod.number().nullish().describe('درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط'),
   "responseSpeedScore": zod.number().nullish().describe('سرعة الرد (0-100)'),
   "priceScore": zod.number().nullish().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
   "winScore": zod.number().nullish().describe('نسبة الفوز — من العروض إلى أوامر الشراء (0-100)'),
@@ -462,6 +467,11 @@ export const GetSupplierScoreResponse = zod.object({
   "sampleSize": zod.number().optional().describe('عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة'),
   "standing": zod.enum(['preferred', 'watch', 'restricted', 'not_rated']).optional().describe('حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)'),
   "commitmentScore": zod.number().nullish().describe('نسبة الاستجابة (0-100)'),
+  "otifScore": zod.number().nullish().describe('التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد'),
+  "otifLines": zod.number().optional().describe('عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF)'),
+  "otifHits": zod.number().optional().describe('عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF'),
+  "avgPriceEscalation": zod.number().nullish().describe('متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)'),
+  "escalationScore": zod.number().nullish().describe('درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط'),
   "responseSpeedScore": zod.number().nullish().describe('سرعة الرد (0-100)'),
   "priceScore": zod.number().nullish().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
   "winScore": zod.number().nullish().describe('نسبة الفوز — من العروض إلى أوامر الشراء (0-100)'),
@@ -477,6 +487,90 @@ export const GetSupplierScoreResponse = zod.object({
   "rejectedQty": zod.number().optional().describe('إجمالي الكمية المرفوضة من المورد'),
   "avgDeliveryDays": zod.number().nullish().describe('متوسط مدة التوريد بالأيام'),
   "avgPriceDelta": zod.number().nullish().describe('متوسط انحراف السعر عن متوسط السوق (%)')
+})
+
+
+/**
+ * @summary Totals of purchased lines for a supplier (net and gross of VAT)
+ */
+export const GetSupplierPurchasesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierPurchasesResponse = zod.object({
+  "poCount": zod.number(),
+  "lineCount": zod.number().describe('عدد بنود أوامر الشراء غير الملغاة لهذا المورد'),
+  "totalNet": zod.number().describe('إجمالي المشتريات قبل الضريبة'),
+  "totalGross": zod.number().describe('إجمالي المشتريات بعد الضريبة (14%)')
+})
+
+
+/**
+ * @summary Recent PO lines bought from a supplier
+ */
+export const ListSupplierPoLinesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierPoLinesResponseItem = zod.object({
+  "id": zod.number(),
+  "poId": zod.number(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string(),
+  "qty": zod.number().nullish(),
+  "price": zod.number().nullish(),
+  "taxIncluded": zod.boolean(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const ListSupplierPoLinesResponse = zod.array(ListSupplierPoLinesResponseItem)
+
+
+/**
+ * @summary Notes recorded against a supplier
+ */
+export const ListSupplierNotesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierNotesResponseItem = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "poItemId": zod.number().nullish(),
+  "poId": zod.number().nullish(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "text": zod.string().nullish(),
+  "createdByEmployeeId": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListSupplierNotesResponse = zod.array(ListSupplierNotesResponseItem)
+
+
+/**
+ * @summary Record a note against a supplier, optionally on one of its PO lines
+ */
+export const CreateSupplierNoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateSupplierNoteBody = zod.object({
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "poItemId": zod.number().nullish(),
+  "text": zod.string().nullish()
+})
+
+export const CreateSupplierNoteResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "poItemId": zod.number().nullish(),
+  "poId": zod.number().nullish(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "text": zod.string().nullish(),
+  "createdByEmployeeId": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
 })
 
 
@@ -2184,6 +2278,11 @@ export const GetDashboardStatsResponse = zod.object({
   "sampleSize": zod.number().optional().describe('عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة'),
   "standing": zod.enum(['preferred', 'watch', 'restricted', 'not_rated']).optional().describe('حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)'),
   "commitmentScore": zod.number().nullish().describe('نسبة الاستجابة (0-100)'),
+  "otifScore": zod.number().nullish().describe('التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد'),
+  "otifLines": zod.number().optional().describe('عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF)'),
+  "otifHits": zod.number().optional().describe('عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF'),
+  "avgPriceEscalation": zod.number().nullish().describe('متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)'),
+  "escalationScore": zod.number().nullish().describe('درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط'),
   "responseSpeedScore": zod.number().nullish().describe('سرعة الرد (0-100)'),
   "priceScore": zod.number().nullish().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
   "winScore": zod.number().nullish().describe('نسبة الفوز — من العروض إلى أوامر الشراء (0-100)'),

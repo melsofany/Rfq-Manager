@@ -1,6 +1,8 @@
 import { guardFor } from "../../shared/permissions";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { standingOf } from "../../shared/supplier-standing";
+import { otifScoreOf } from "../../shared/supplier-otif";
+import { parseSupplierNoteInput } from "../../shared/supplier-notes";
 import {
   db,
   suppliersTable,
@@ -9,6 +11,7 @@ import {
   offerItemsTable,
   purchaseOrderItemsTable,
   purchaseOrdersTable,
+  supplierNotesTable,
   poItemReceiptsTable,
   customerPoItemsTable,
   customerPosTable,
@@ -107,6 +110,36 @@ const AUTO_DEACTIVATE_AFTER = 10;
 // Every component score is null when the underlying data is missing — no
 // fabricated defaults. The total is a weighted average over only the available
 // components, and null when there is no data at all.
+// ─── OTIF (on time in full) ────────────────────────────────────────────────
+// Per supplier, over PO lines that carry a promised delivery date and are not
+// cancelled. A line counts when it is due (received at least once, or the
+// promised date has passed) and is "hit" when it is received in full
+// (total_received_qty >= qty) and its last receipt falls on or before the
+// promised date. Lines without a date are excluded from the sample.
+function OTIF_SQL(supplierIds: number[]) {
+  return sql`
+    SELECT poi.supplier_id AS supplier_id,
+           COUNT(*) AS lines,
+           COUNT(*) FILTER (
+             WHERE COALESCE(poi.total_received_qty::numeric, 0) >= poi.qty::numeric
+               AND rc.last_received IS NOT NULL
+               AND rc.last_received <= poi.promised_delivery_date::date
+           ) AS hits
+    FROM purchase_order_items poi
+    LEFT JOIN (
+      SELECT po_item_id, MAX(received_at)::date AS last_received
+      FROM po_item_receipts
+      GROUP BY po_item_id
+    ) rc ON rc.po_item_id = poi.id
+    WHERE poi.supplier_id IN ${supplierIds}
+      AND poi.line_status <> 'cancelled'
+      AND poi.promised_delivery_date IS NOT NULL
+      AND poi.qty::numeric > 0
+      AND (rc.last_received IS NOT NULL OR poi.promised_delivery_date::date < CURRENT_DATE)
+    GROUP BY poi.supplier_id
+  `;
+}
+
 // ─── Pure score derivation ─────────────────────────────────────────────────
 // The ONE place the weighting lives. Both the single-supplier endpoint and the
 // batched list endpoint call this, so they can never report different scores
@@ -123,6 +156,8 @@ function deriveScore(m: {
   rejectedQty: number;
   avgDeliveryDays: number | null;
   avgPriceEscalation: number | null;
+  otifLines: number;
+  otifHits: number;
 }) {
   const responseRate =
     m.totalRfqsReceived > 0
@@ -179,7 +214,12 @@ function deriveScore(m: {
     );
   }
 
+  // OTIF: share of due PO lines delivered in full AND on or before the promised date.
+  // Lines without a promised date are excluded from the sample (otifLines).
+  const otifScore = otifScoreOf(m.otifLines, m.otifHits);
+
   const components = [
+    { score: otifScore, weight: 0.35 },
     { score: escalationScore, weight: 0.2 },
     { score: commitmentScore, weight: 0.25 },
     { score: responseSpeedScore, weight: 0.15 },
@@ -221,6 +261,9 @@ function deriveScore(m: {
     deliveryScore,
     avgPriceEscalation: m.avgPriceEscalation,
     escalationScore,
+    otifScore,
+    otifLines: m.otifLines,
+    otifHits: m.otifHits,
     totalScore,
     rating,
     sampleSize,
@@ -248,6 +291,7 @@ async function computeAllSupplierScores(
     priceRes,
     deliveryRes,
     escalationRes,
+    otifRes,
   ] = await Promise.all([
     db
       .select({ supplierId: sentLogTable.supplierId, cnt: count() })
@@ -332,6 +376,7 @@ async function computeAllSupplierScores(
           AND oi.price::numeric > 0
         GROUP BY poi.supplier_id
       `),
+    db.execute(sql`${OTIF_SQL(supplierIds)}`),
   ]);
 
   const sentBy = new Map<number, number>();
@@ -375,8 +420,13 @@ async function computeAllSupplierScores(
     if (Number.isFinite(e)) escalationBy.set(Number(r.supplier_id), Math.round(e * 10) / 10);
   }
 
+  const otifBy = new Map<number, { lines: number; hits: number }>();
+  for (const r of otifRes.rows as { supplier_id: number; lines: string; hits: string }[])
+    otifBy.set(Number(r.supplier_id), { lines: Number(r.lines), hits: Number(r.hits) });
+
   for (const id of supplierIds) {
     const receipt = receiptBy.get(id) ?? { accepted: 0, rejected: 0 };
+    const otif = otifBy.get(id) ?? { lines: 0, hits: 0 };
     out.set(
       id,
       deriveScore({
@@ -390,6 +440,8 @@ async function computeAllSupplierScores(
         rejectedQty: receipt.rejected,
         avgDeliveryDays: deliveryBy.get(id) ?? null,
         avgPriceEscalation: escalationBy.get(id) ?? null,
+        otifLines: otif.lines,
+        otifHits: otif.hits,
       }),
     );
   }
@@ -510,6 +562,9 @@ async function computeSupplierScore(supplierId: number) {
     ? Math.round(rawEscalation * 10) / 10
     : null;
 
+  const otifResult = await db.execute(sql`${OTIF_SQL([supplierId])}`);
+  const otifRow = otifResult.rows[0] as { lines: string; hits: string } | undefined;
+
   return deriveScore({
     totalRfqsReceived,
     totalOffersSubmitted,
@@ -521,6 +576,8 @@ async function computeSupplierScore(supplierId: number) {
     rejectedQty,
     avgDeliveryDays,
     avgPriceEscalation,
+    otifLines: Number(otifRow?.lines ?? 0),
+    otifHits: Number(otifRow?.hits ?? 0),
   });
 }
 
@@ -919,6 +976,8 @@ router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => 
         acceptedQty: 0,
         rejectedQty: 0,
         avgDeliveryDays: null,
+        otifLines: 0,
+        otifHits: 0,
       })),
   }));
 
@@ -1441,6 +1500,148 @@ router.get("/suppliers/:id/score", requireAuth, async (req, res): Promise<void> 
     supplierName: supplier.name,
     ...score,
   });
+});
+
+// ─── Supplier notes & purchase totals ──────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function parseSupplierId(raw: string | string[] | undefined): number {
+  return parseInt(Array.isArray(raw) ? raw[0] : (raw ?? ""), 10);
+}
+
+// Totals across this supplier's non-cancelled PO lines. Net = price before VAT,
+// gross = price including VAT. A line priced tax-inclusive is divided by 1.14 for net.
+router.get("/suppliers/:id/purchases", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const result = await db.execute(sql`
+    SELECT COUNT(DISTINCT poi.po_id)::int AS po_count,
+           COUNT(*)::int AS line_count,
+           COALESCE(SUM(poi.qty::numeric * CASE WHEN poi.tax_included
+             THEN poi.reference_price::numeric / ${1 + VAT_RATE}::numeric
+             ELSE poi.reference_price::numeric END), 0) AS total_net,
+           COALESCE(SUM(poi.qty::numeric * CASE WHEN poi.tax_included
+             THEN poi.reference_price::numeric
+             ELSE poi.reference_price::numeric * ${1 + VAT_RATE}::numeric END), 0) AS total_gross
+    FROM purchase_order_items poi
+    WHERE poi.supplier_id = ${supplierId}
+      AND poi.line_status <> 'cancelled'
+      AND poi.qty IS NOT NULL
+      AND poi.reference_price IS NOT NULL
+  `);
+  const r = (result.rows[0] ?? {}) as Record<string, string | number | null>;
+  res.json({
+    poCount: Number(r.po_count ?? 0),
+    lineCount: Number(r.line_count ?? 0),
+    totalNet: round2(Number(r.total_net ?? 0)),
+    totalGross: round2(Number(r.total_gross ?? 0)),
+  });
+});
+
+// Recent PO lines of this supplier, for choosing the line a note is about.
+router.get("/suppliers/:id/po-lines", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const rows = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      poId: purchaseOrderItemsTable.poId,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      description: purchaseOrderItemsTable.description,
+      qty: purchaseOrderItemsTable.qty,
+      price: purchaseOrderItemsTable.referencePrice,
+      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+      createdAt: purchaseOrderItemsTable.createdAt,
+    })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(
+      and(
+        eq(purchaseOrderItemsTable.supplierId, supplierId),
+        ne(purchaseOrderItemsTable.lineStatus, "cancelled"),
+      ),
+    )
+    .orderBy(sql`${purchaseOrderItemsTable.createdAt} DESC`)
+    .limit(300);
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      poId: r.poId,
+      internalPoNo: r.internalPoNo ?? null,
+      description: r.description,
+      qty: r.qty != null ? Number(r.qty) : null,
+      price: r.price != null ? Number(r.price) : null,
+      taxIncluded: r.taxIncluded,
+      createdAt: r.createdAt,
+    })),
+  );
+});
+
+router.get("/suppliers/:id/notes", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const rows = await db
+    .select({
+      id: supplierNotesTable.id,
+      poItemId: supplierNotesTable.poItemId,
+      reason: supplierNotesTable.reason,
+      text: supplierNotesTable.text,
+      createdByEmployeeId: supplierNotesTable.createdByEmployeeId,
+      createdAt: supplierNotesTable.createdAt,
+      poId: purchaseOrderItemsTable.poId,
+      description: purchaseOrderItemsTable.description,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+    })
+    .from(supplierNotesTable)
+    .leftJoin(purchaseOrderItemsTable, eq(supplierNotesTable.poItemId, purchaseOrderItemsTable.id))
+    .leftJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(eq(supplierNotesTable.supplierId, supplierId))
+    .orderBy(sql`${supplierNotesTable.createdAt} DESC`);
+  res.json(rows);
+});
+
+router.post("/suppliers/:id/notes", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const [supplier] = await db
+    .select({ id: suppliersTable.id })
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, supplierId));
+  if (!supplier) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const parsed = parseSupplierNoteInput(req.body);
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { reason, poItemId, text } = parsed.value;
+
+  if (poItemId !== null) {
+    const [line] = await db
+      .select({ id: purchaseOrderItemsTable.id })
+      .from(purchaseOrderItemsTable)
+      .where(
+        and(
+          eq(purchaseOrderItemsTable.id, poItemId),
+          eq(purchaseOrderItemsTable.supplierId, supplierId),
+        ),
+      );
+    if (!line) {
+      res.status(400).json({ error: "line does not belong to this supplier" });
+      return;
+    }
+  }
+
+  const employeeId =
+    (req as Request & { session?: { employeeId?: number } }).session?.employeeId ?? null;
+
+  const [created] = await db
+    .insert(supplierNotesTable)
+    .values({ supplierId, poItemId, reason, text, createdByEmployeeId: employeeId })
+    .returning();
+  res.json(created);
 });
 
 export default router;
