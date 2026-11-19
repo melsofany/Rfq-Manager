@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -48,6 +48,15 @@ export const suppliersTable = pgTable("suppliers", {
   greetedPhone: text("greeted_phone"),
   greetedEmail: text("greeted_email"),
   greetedAt: timestamp("greeted_at", { withTimezone: true }),
+  // What the supplier trades in, captured by the supplier portal's public form.
+  // «البنود» and «العلامات التجارية» are free text the category catalogue cannot
+  // hold, and they are the applicant's own words — the reviewer checks them
+  // against the uploaded invoices.
+  suppliedItems: jsonb("supplied_items").$type<string[]>().notNull().default([]),
+  brandNames: jsonb("brand_names").$type<string[]>().notNull().default([]),
+  // Which portal application produced this supplier — the trace from a supplier
+  // row back to the form and its uploaded documents.
+  portalApplicationId: integer("portal_application_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

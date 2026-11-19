@@ -534,6 +534,24 @@ export async function initDb(): Promise<void> {
       ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES supplier_categories(id) ON DELETE SET NULL;
     `);
 
+    // What the supplier trades in, captured by the supplier portal's public form.
+    // «البنود» and «العلامات التجارية» are free text the category catalogue
+    // cannot hold, and they are the applicant's own words — the reviewer checks
+    // them against the uploaded invoices. Kept as JSON arrays so a supplier with
+    // 40 items does not need 40 columns. Their own statement so a failure here
+    // cannot roll back the columns above.
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS supplied_items JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `);
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS brand_names JSONB NOT NULL DEFAULT '[]'::jsonb;
+    `);
+    // Which portal application produced this supplier — the trace from a
+    // supplier row back to the form and its uploaded documents.
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS portal_application_id INTEGER;
+    `);
+
     // Employees allowed to READ a company mailbox in the app (read-only grant).
     await client.query(`
       CREATE TABLE IF NOT EXISTS mailbox_access (
