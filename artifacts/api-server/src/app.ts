@@ -130,6 +130,12 @@ if (process.env.NODE_ENV === "production") {
   const frontendDist = path.resolve(process.cwd(), "artifacts/rfq-portal/dist/public");
   if (existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
+    // Meta crawls the privacy policy URL registered on the app to review the
+    // business. It is a JS-only SPA shell otherwise, so the crawler saw no
+    // policy text at all. This route serves a static, readable page instead.
+    app.get(["/privacy", "/privacy-policy"], (_req, res) => {
+      res.sendFile(path.join(frontendDist, "privacy.html"));
+    });
     app.get(/.*/, (_req, res) => {
       res.sendFile(path.join(frontendDist, "index.html"));
     });
