@@ -3684,7 +3684,12 @@ router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> 
     // "assignment history", which is how the original bug hid.
     if (isForeignKeyViolation(err)) {
       res.status(409).json({
-        error: "لا يمكن حذف الطلب لوجود سجلات مرتبطة به — ألغِ بنوده بدلًا من الحذف",
+        // A constraint this route did not foresee, so the specific remedy is
+        // UNKNOWN. Do not claim «ألغِ بنوده» — cancelling items clears only the
+        // frozen achievement, and asserting a step that may not work is exactly
+        // how the operator was misdirected on /customer-rfq/5647.
+        error:
+          "لا يمكن حذف الطلب لوجود سجلات مرتبطة به لم يتمكّن النظام من تحديدها — راجع الطلبات المرتبطة (أوامر الشراء، طلبات الموردين، الفواتير) أولًا",
       });
       return;
     }

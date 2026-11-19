@@ -1889,6 +1889,10 @@ describe("DELETE /api/customer-rfq/:id", () => {
     });
     const res = await request(testApp).delete("/api/customer-rfq/42");
     expect(res.status).toBe(409);
+    // The specific blocker is UNKNOWN here, so the message must not claim the
+    // remedy that only clears the frozen achievement.
+    expect(res.body.error).not.toContain("ألغِ بنوده");
+    expect(res.body.error).toContain("راجع الطلبات المرتبطة");
   });
 });
 
