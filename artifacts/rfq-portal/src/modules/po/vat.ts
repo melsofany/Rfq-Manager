@@ -44,3 +44,32 @@ export function applyTaxToggle<T extends VatAwareLine>(line: T, taxIncluded: boo
     unitPrice: taxIncluded ? addVat(line.quotedPrice as string) : (line.quotedPrice as string),
   };
 }
+
+/**
+ * Whether a price the buyer typed on a tax-marked line needs confirming.
+ * It does when the line is an adjusted one (VAT-exclusive quote, tax ticked) and
+ * the typed amount differs from the automatic quoted+14% value.
+ */
+export function needsVatConfirm<T extends VatAwareLine>(line: T, typed: string): boolean {
+  const n = parseFloat(typed);
+  if (!line.taxIncluded || !adjustsForVat(line) || !Number.isFinite(n) || n <= 0) return false;
+  // Compare against the amount the line currently shows for its quote (quoted + 14%).
+  return parseFloat(addVat(line.quotedPrice as string)) !== n;
+}
+
+/**
+ * Apply the buyer's answer to the confirmation.
+ * - exclusive: the typed amount is VAT-exclusive, so it becomes the new base and 14% is added.
+ * - not exclusive: the typed amount is already VAT-inclusive and is kept as typed; the line
+ *   is then treated as inclusive so no further automatic VAT is applied.
+ */
+export function applyManualPrice<T extends VatAwareLine>(
+  line: T,
+  typed: string,
+  exclusive: boolean,
+): T {
+  if (exclusive) {
+    return { ...line, unitPrice: addVat(typed), quotedPrice: typed, quotedTaxIncluded: false };
+  }
+  return { ...line, unitPrice: typed, quotedPrice: typed, quotedTaxIncluded: true };
+}

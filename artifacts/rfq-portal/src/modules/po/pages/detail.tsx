@@ -1,5 +1,5 @@
 import { DocumentChain } from "@/components/DocumentChain";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,7 +41,8 @@ import {
   type RfqOption,
   type PoItemRow,
 } from "../components/fields";
-import { applyTaxToggle } from "../vat";
+import { applyTaxToggle, applyManualPrice, needsVatConfirm } from "../vat";
+import { VatPriceConfirm } from "../components/VatPriceConfirm";
 
 interface PoDetail {
   id: number;
@@ -287,6 +288,23 @@ export default function PurchaseOrderDetailPage() {
 
   const updateEditDeliveryDate = (rowId: string, promisedDeliveryDate: string) =>
     setEditItems((prev) => prev.map((i) => (i.id === rowId ? { ...i, promisedDeliveryDate } : i)));
+  // Price typed on a tax-marked line awaiting the buyer's VAT answer. A ref guards
+  // the answer so the dialog's own close event cannot apply a second answer.
+  const vatRef = useRef<{ id: string; typed: string } | null>(null);
+  const [vatRequest, setVatRequest] = useState<{ id: string; typed: string } | null>(null);
+  const askVat = (id: string, typed: string) => {
+    vatRef.current = { id, typed };
+    setVatRequest({ id, typed });
+  };
+  const answerVat = (exclusive: boolean) => {
+    const req = vatRef.current;
+    if (!req) return;
+    vatRef.current = null;
+    setVatRequest(null);
+    setEditItems((prev) =>
+      prev.map((i) => (i.id === req.id ? applyManualPrice(i, req.typed, exclusive) : i)),
+    );
+  };
 
   const updateEditTaxIncluded = (rowId: string, taxIncluded: boolean) =>
     setEditItems((prev) => prev.map((i) => (i.id === rowId ? applyTaxToggle(i, taxIncluded) : i)));
@@ -658,6 +676,7 @@ export default function PurchaseOrderDetailPage() {
 
   return (
     <Layout>
+      <VatPriceConfirm typed={vatRequest?.typed ?? null} onAnswer={answerVat} />
       <div className="p-4 sm:p-6 max-w-5xl space-y-5">
         {/* Back + title */}
         <div className="flex items-center gap-3">
@@ -1303,6 +1322,10 @@ export default function PurchaseOrderDetailPage() {
                             step="any"
                             value={item.unitPrice}
                             onChange={(e) => updateEditField(item.id, "unitPrice", e.target.value)}
+                            onBlur={() => {
+                              if (needsVatConfirm(item, item.unitPrice))
+                                askVat(item.id, item.unitPrice);
+                            }}
                             className="h-7 w-20 text-xs rounded border border-border bg-background px-1.5 text-right outline-none focus:ring-1 focus:ring-ring"
                           />
                         </div>

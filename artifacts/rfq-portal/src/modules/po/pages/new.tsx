@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, ChevronDown, Loader2, Trash2 } from "lucide-react";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
-import { applyTaxToggle } from "../vat";
+import { applyTaxToggle, applyManualPrice, needsVatConfirm } from "../vat";
+import { VatPriceConfirm } from "../components/VatPriceConfirm";
 import {
   SupplierCombobox,
   RepresentativeNameInput,
@@ -323,6 +324,24 @@ export default function NewPurchaseOrderPage() {
     });
   };
 
+  // Price typed on a tax-marked line awaiting the buyer's VAT answer. A ref guards
+  // the answer so the dialog's own close event cannot apply a second answer.
+  const vatRef = useRef<{ id: string; typed: string } | null>(null);
+  const [vatRequest, setVatRequest] = useState<{ id: string; typed: string } | null>(null);
+  const askVat = (id: string, typed: string) => {
+    vatRef.current = { id, typed };
+    setVatRequest({ id, typed });
+  };
+  const answerVat = (exclusive: boolean) => {
+    const req = vatRef.current;
+    if (!req) return;
+    vatRef.current = null;
+    setVatRequest(null);
+    setItems((prev) =>
+      prev.map((i) => (i.id === req.id ? applyManualPrice(i, req.typed, exclusive) : i)),
+    );
+  };
+
   const updateUnitPrice = (id: string, unitPrice: string) =>
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, unitPrice } : i)));
 
@@ -443,6 +462,7 @@ export default function NewPurchaseOrderPage() {
 
   return (
     <Layout>
+      <VatPriceConfirm typed={vatRequest?.typed ?? null} onAnswer={answerVat} />
       <div className="p-4 sm:p-6 max-w-6xl space-y-6">
         <div className="flex items-center gap-3">
           <Link href="/purchase-orders">
@@ -578,6 +598,10 @@ export default function NewPurchaseOrderPage() {
                                 step="0.01"
                                 value={row.unitPrice}
                                 onChange={(e) => updateUnitPrice(row.id, e.target.value)}
+                                onBlur={() => {
+                                  if (needsVatConfirm(row, row.unitPrice))
+                                    askVat(row.id, row.unitPrice);
+                                }}
                                 disabled={!selectedIds.has(row.id)}
                                 placeholder={row.supplierId ? "No offer found" : "—"}
                                 className="h-7 text-xs w-28 disabled:opacity-50"
