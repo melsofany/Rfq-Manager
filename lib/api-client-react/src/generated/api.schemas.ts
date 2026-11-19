@@ -798,6 +798,81 @@ export interface BulkImportSuppliersResult {
   details?: BulkImportSuppliersResultDetailsItem[];
 }
 
+export interface SupplierPurchases {
+  poCount: number;
+  /** عدد بنود أوامر الشراء غير الملغاة لهذا المورد */
+  lineCount: number;
+  /** إجمالي المشتريات قبل الضريبة */
+  totalNet: number;
+  /** إجمالي المشتريات بعد الضريبة (14%) */
+  totalGross: number;
+}
+
+export interface SupplierPoLine {
+  id: number;
+  poId: number;
+  /** @nullable */
+  internalPoNo?: string | null;
+  description: string;
+  /** @nullable */
+  qty?: number | null;
+  /** @nullable */
+  price?: number | null;
+  taxIncluded: boolean;
+  createdAt?: string;
+}
+
+export type SupplierNoteReason = typeof SupplierNoteReason[keyof typeof SupplierNoteReason];
+
+
+export const SupplierNoteReason = {
+  wrong_price: 'wrong_price',
+  unrequested_item: 'unrequested_item',
+  wrong_qty: 'wrong_qty',
+  late_delivery: 'late_delivery',
+  quality: 'quality',
+  other: 'other',
+} as const;
+
+export interface SupplierNote {
+  id: number;
+  supplierId: number;
+  /** @nullable */
+  poItemId?: number | null;
+  /** @nullable */
+  poId?: number | null;
+  /** @nullable */
+  internalPoNo?: string | null;
+  /** @nullable */
+  description?: string | null;
+  reason: SupplierNoteReason;
+  /** @nullable */
+  text?: string | null;
+  /** @nullable */
+  createdByEmployeeId?: number | null;
+  createdAt: string;
+}
+
+export type CreateSupplierNoteBodyReason = typeof CreateSupplierNoteBodyReason[keyof typeof CreateSupplierNoteBodyReason];
+
+
+export const CreateSupplierNoteBodyReason = {
+  wrong_price: 'wrong_price',
+  unrequested_item: 'unrequested_item',
+  wrong_qty: 'wrong_qty',
+  late_delivery: 'late_delivery',
+  quality: 'quality',
+  other: 'other',
+} as const;
+
+export interface CreateSupplierNoteBody {
+  reason: CreateSupplierNoteBodyReason;
+  /** @nullable */
+  poItemId?: number | null;
+  /** @nullable */
+  text?: string | null;
+}
+
 /**
  * حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)
  */

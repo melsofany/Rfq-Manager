@@ -17,6 +17,7 @@ export * from "./whatsapp_media";
 export * from "./purchase_orders";
 export * from "./work_order_assignments";
 export * from "./receipts_deliveries";
+export * from "./supplier_notes";
 export * from "./erp_integrations";
 export * from "./attachments";
 export * from "./tax_settings";

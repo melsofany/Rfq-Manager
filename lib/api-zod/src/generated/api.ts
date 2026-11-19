@@ -491,6 +491,90 @@ export const GetSupplierScoreResponse = zod.object({
 
 
 /**
+ * @summary Totals of purchased lines for a supplier (net and gross of VAT)
+ */
+export const GetSupplierPurchasesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierPurchasesResponse = zod.object({
+  "poCount": zod.number(),
+  "lineCount": zod.number().describe('عدد بنود أوامر الشراء غير الملغاة لهذا المورد'),
+  "totalNet": zod.number().describe('إجمالي المشتريات قبل الضريبة'),
+  "totalGross": zod.number().describe('إجمالي المشتريات بعد الضريبة (14%)')
+})
+
+
+/**
+ * @summary Recent PO lines bought from a supplier
+ */
+export const ListSupplierPoLinesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierPoLinesResponseItem = zod.object({
+  "id": zod.number(),
+  "poId": zod.number(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string(),
+  "qty": zod.number().nullish(),
+  "price": zod.number().nullish(),
+  "taxIncluded": zod.boolean(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const ListSupplierPoLinesResponse = zod.array(ListSupplierPoLinesResponseItem)
+
+
+/**
+ * @summary Notes recorded against a supplier
+ */
+export const ListSupplierNotesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListSupplierNotesResponseItem = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "poItemId": zod.number().nullish(),
+  "poId": zod.number().nullish(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "text": zod.string().nullish(),
+  "createdByEmployeeId": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListSupplierNotesResponse = zod.array(ListSupplierNotesResponseItem)
+
+
+/**
+ * @summary Record a note against a supplier, optionally on one of its PO lines
+ */
+export const CreateSupplierNoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateSupplierNoteBody = zod.object({
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "poItemId": zod.number().nullish(),
+  "text": zod.string().nullish()
+})
+
+export const CreateSupplierNoteResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "poItemId": zod.number().nullish(),
+  "poId": zod.number().nullish(),
+  "internalPoNo": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "reason": zod.enum(['wrong_price', 'unrequested_item', 'wrong_qty', 'late_delivery', 'quality', 'other']),
+  "text": zod.string().nullish(),
+  "createdByEmployeeId": zod.number().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List customers with optional search
  */
 export const ListCustomersQueryParams = zod.object({
