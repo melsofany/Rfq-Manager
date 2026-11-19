@@ -32,6 +32,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, canPriceCustomerRfq, EDIT_PERM } from "@/lib/permissions";
 import { toast } from "sonner";
 import { useCustomerRfqNoAvailability } from "../hooks/use-customer-rfq-no-availability";
+import { ActionErrorBlock } from "../components/ActionErrorBlock";
 
 interface ItemRow {
   id?: number;
@@ -93,6 +94,11 @@ export default function CustomerRfqDetailPage() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // A delete refusal carries the reason AND its remedy; showing only the reason
+  // left the operator cancelling items that never cleared the blocker.
+  const [deleteBlockers, setDeleteBlockers] = useState<
+    Array<{ code: string; reason: string; action: string; where?: string }>
+  >([]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -183,6 +189,11 @@ export default function CustomerRfqDetailPage() {
       },
       onError: (err: unknown) => {
         setError(getApiErrorMessage(err, "فشل حذف الطلب"));
+        // The server sends the remedy with each reason; surface it instead of
+        // the bare reason, so the operator is told the step that actually works.
+        const data = (err as { data?: { blockers?: unknown } })?.data;
+        const blockers = Array.isArray(data?.blockers) ? data.blockers : [];
+        setDeleteBlockers(blockers as typeof deleteBlockers);
         setConfirmDelete(false);
       },
     },
@@ -875,10 +886,7 @@ export default function CustomerRfqDetailPage() {
             )}
 
             {error && (
-              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
-                <AlertCircle size={14} />
-                <span>{error}</span>
-              </div>
+              <ActionErrorBlock error={error} blockers={deleteBlockers} testId="delete-error" />
             )}
 
             <div className="flex gap-3 justify-end">
