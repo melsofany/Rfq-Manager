@@ -50,6 +50,23 @@ describe("browser tab icon", () => {
     }
   });
 
+  it("draws the wordmark in the brand brown, not the mark's gradient", () => {
+    // The lockup is TWO colours: the symbol carries the red→yellow gradient and
+    // the wordmark «قرطبة» is a solid brown. Filling both paths with the
+    // gradient turns the wordmark orange — a colour the brand never uses for it.
+    //
+    // Android writes colours as #AARRGGBB, SVG as #RRGGBB. Copying the string
+    // verbatim into the SVG yields `#FF8D343A`, which SVG reads as an ORANGE at
+    // 23% alpha, so the wordmark renders orange while the source file plainly
+    // says brown. Strip the alpha pair.
+    const svg = readFileSync(resolve(publicDir, "favicon.svg"), "utf8");
+    const paths = [...svg.matchAll(/<path[^>]*\sfill="([^"]+)"[^>]*\sd="([^"]+)"/g)];
+    const solid = paths.filter((m) => !m[1].startsWith("url(")).map((m) => m[1].toUpperCase());
+    expect(solid).toContain("#8D343A");
+    // and no 8-digit (AARRGGBB) value leaked into the SVG
+    expect(svg).not.toMatch(/#[0-9A-Fa-f]{8}\b/);
+  });
+
   it("is the full lockup (mark + wordmark), not the bare mark", () => {
     // The brand has two vectors: `ic_cortoba_mark` is the symbol alone, and
     // `ic_cortoba_logo` is the lockup the company actually uses everywhere
