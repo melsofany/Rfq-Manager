@@ -1776,7 +1776,7 @@ describe("DELETE /api/customer-rfq/:id", () => {
     footprintRow = { ...footprintRow, attribution: true };
     const res = await request(testApp).delete("/api/customer-rfq/42");
     expect(res.status).toBe(409);
-    expect(res.body.footprint).toContain("تاريخ إنجاز مُثبَّت");
+    expect(res.body.footprint).toContain("تاريخ إنجاز مُثبَّت لبند");
   });
 
   // The refusal tells the operator to «cancel its items». Cancelling only sets
@@ -1811,6 +1811,67 @@ describe("DELETE /api/customer-rfq/:id", () => {
     expect(res.body.footprint).toHaveLength(5);
   });
 
+  // The refusal used to append ONE instruction — «ألغِ بنوده» — to every reason.
+  // Cancelling an item does not clear a customer PO, a supplier RFQ or an
+  // invoice, and the RESTRICT constraint refuses the delete however many items
+  // are cancelled. The operator did exactly what the message asked and was
+  // refused again (the live report on /customer-rfq/5647).
+  it("gives each blocker its OWN remedy instead of one «cancel its items» for all", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, customer_po: true, supplier_rfq: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+
+    const blockers = res.body.blockers as Array<{
+      code: string;
+      reason: string;
+      action: string;
+      where?: string;
+    }>;
+    expect(blockers.map((b) => b.code)).toEqual(["customer_po", "supplier_rfq"]);
+
+    // A customer PO is cleared by deleting the ORDER, not by cancelling items.
+    const po = blockers.find((b) => b.code === "customer_po")!;
+    expect(po.action).toContain("أمر شراء العميل");
+    expect(po.action).not.toContain("ألغِ بنوده");
+
+    // A supplier RFQ likewise.
+    expect(blockers.find((b) => b.code === "supplier_rfq")!.action).toContain(
+      "طلب التسعير المُرسل",
+    );
+
+    // The old blanket instruction must be gone from the refusal entirely.
+    expect(res.body.error).not.toContain("ألغِ بنوده");
+  });
+
+  // Clearing the ASSIGNMENT does not clear the frozen achievement — it is stamped
+  // at the first customer PO. Saying «cancel the assignment» sent the operator to
+  // a step that cannot work; the message must say so.
+  it("tells the operator that unassigning alone does NOT clear the frozen achievement", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, attribution: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    const attribution = (res.body.blockers as Array<{ code: string; action: string }>).find(
+      (b) => b.code === "attribution",
+    )!;
+    expect(attribution.action).toContain("إلغاء الإسناد وحده لا يكفي");
+    expect(attribution.action).toContain("ألغِ البنود المنجزة");
+  });
+
+  // The remedy has to be reachable: the operator needs the screen it lives on.
+  it("names the screen where each remedy is performed", async () => {
+    detailRow = insertedRfq;
+    footprintRow = { ...footprintRow, customer_po: true, sales_invoice: true };
+    const res = await request(testApp).delete("/api/customer-rfq/42");
+    expect(res.status).toBe(409);
+    const blockers = res.body.blockers as Array<{ code: string; where?: string }>;
+    expect(blockers.find((b) => b.code === "customer_po")?.where).toContain("أوامر شراء العملاء");
+    expect(blockers.find((b) => b.code === "sales_invoice")?.where).toContain("فواتير البيع");
+    // The flat `actions` list is what a client without the structured field shows.
+    expect(res.body.actions[0]).toContain("احذف أمر شراء العميل");
+  });
+
   // A foreign-key refusal the route did not foresee is still a conflict; any
   // OTHER failure must not be reported as "linked records" — that masking is
   // what hid this bug.
@@ -1828,6 +1889,10 @@ describe("DELETE /api/customer-rfq/:id", () => {
     });
     const res = await request(testApp).delete("/api/customer-rfq/42");
     expect(res.status).toBe(409);
+    // The specific blocker is UNKNOWN here, so the message must not claim the
+    // remedy that only clears the frozen achievement.
+    expect(res.body.error).not.toContain("ألغِ بنوده");
+    expect(res.body.error).toContain("راجع الطلبات المرتبطة");
   });
 });
 

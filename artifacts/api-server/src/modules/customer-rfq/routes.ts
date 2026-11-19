@@ -3526,6 +3526,34 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
  * blocker.
  */
 export async function loadRfqFootprint(id: number): Promise<string[]> {
+  return (await loadRfqFootprintDetailed(id)).map((r) => r.reason);
+}
+
+/**
+ * A footprint reason WITH the action that actually clears it.
+ *
+ * The refusal used to append ONE instruction — «ألغِ بنوده بدلًا من الحذف» — to
+ * every reason. That is only true for the frozen achievement: cancelling an item
+ * does not touch a customer PO, a supplier RFQ or an invoice, and the RESTRICT
+ * constraint refuses the delete however many items are cancelled. The operator
+ * read «cancel its items», cancelled them, and was refused again — the recorded
+ * live report (`/customer-rfq/5647`).
+ *
+ * Each reason therefore carries its own remedy and the screen it lives on, so the
+ * message names a step the operator can actually take.
+ */
+export interface RfqFootprintReason {
+  /** The stored key, so a client can branch on it instead of parsing Arabic. */
+  code: string;
+  /** What is in the way. */
+  reason: string;
+  /** What to do about it, in the operator's words. */
+  action: string;
+  /** Where to do it, when it has a screen. */
+  where?: string;
+}
+
+export async function loadRfqFootprintDetailed(id: number): Promise<RfqFootprintReason[]> {
   const result = await db.execute(sql`
     SELECT
       EXISTS (
@@ -3550,14 +3578,56 @@ export async function loadRfqFootprint(id: number): Promise<string[]> {
       ) AS attribution
   `);
   const row = (result as { rows?: Array<Record<string, unknown>> }).rows?.[0] ?? {};
-  const labels: Array<[string, string]> = [
-    ["customer_po", "أمر شراء عميل مرتبط"],
-    ["supplier_rfq", "طلب تسعير مُرسل لموردين"],
-    ["supplier_rfq_items", "بنود مرتبطة بطلب تسعير مورد"],
-    ["sales_invoice", "فاتورة بيع مرتبطة"],
-    ["attribution", "تاريخ إنجاز مُثبَّت"],
+  const reasons: Array<[string, RfqFootprintReason]> = [
+    [
+      "customer_po",
+      {
+        code: "customer_po",
+        reason: "أمر شراء عميل مرتبط",
+        action: "احذف أمر شراء العميل المرتبط أولًا",
+        where: "أوامر شراء العملاء",
+      },
+    ],
+    [
+      "supplier_rfq",
+      {
+        code: "supplier_rfq",
+        reason: "طلب تسعير مُرسل لموردين",
+        action: "احذف طلب التسعير المُرسل للموردين أولًا",
+        where: "طلبات التسعير",
+      },
+    ],
+    [
+      "supplier_rfq_items",
+      {
+        code: "supplier_rfq_items",
+        reason: "بنود مرتبطة بطلب تسعير مورد",
+        action: "أزِل ارتباط بنود الموردين بهذا الطلب أولًا",
+      },
+    ],
+    [
+      "sales_invoice",
+      {
+        code: "sales_invoice",
+        reason: "فاتورة بيع مرتبطة",
+        action: "ألغِ فاتورة البيع المرتبطة أولًا",
+        where: "الحسابات ← فواتير البيع",
+      },
+    ],
+    [
+      "attribution",
+      {
+        code: "attribution",
+        reason: "تاريخ إنجاز مُثبَّت لبند",
+        // The ONLY reason an item action clears. Say so precisely: clearing the
+        // assignment does NOT clear it — the frozen achievement is stamped at the
+        // first customer PO and survives unassignment.
+        action:
+          "ألغِ البنود المنجزة (إلغاء الإسناد وحده لا يكفي — الإنجاز مُثبَّت عند أول أمر شراء)",
+      },
+    ],
   ];
-  return labels.filter(([key]) => row[key] === true).map(([, label]) => label);
+  return reasons.filter(([key]) => row[key] === true).map(([, value]) => value);
 }
 
 // DELETE /customer-rfq/:id
@@ -3569,11 +3639,15 @@ router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
   // A request with real downstream work is protected; cancel its items instead.
-  const footprint = await loadRfqFootprint(id);
+  // The refusal names each blocker WITH its own remedy — a single «ألغِ بنوده»
+  // does not clear a customer PO, a supplier RFQ or an invoice.
+  const footprint = await loadRfqFootprintDetailed(id);
   if (footprint.length > 0) {
     res.status(409).json({
-      error: `لا يمكن حذف الطلب لوجود ${footprint.join("، ")} — ألغِ بنوده بدلًا من الحذف`,
-      footprint,
+      error: `لا يمكن حذف الطلب لوجود ${footprint.map((f) => f.reason).join("، ")}`,
+      footprint: footprint.map((f) => f.reason),
+      blockers: footprint,
+      actions: footprint.map((f) => (f.where ? `${f.action} (${f.where})` : f.action)),
     });
     return;
   }
@@ -3610,7 +3684,12 @@ router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> 
     // "assignment history", which is how the original bug hid.
     if (isForeignKeyViolation(err)) {
       res.status(409).json({
-        error: "لا يمكن حذف الطلب لوجود سجلات مرتبطة به — ألغِ بنوده بدلًا من الحذف",
+        // A constraint this route did not foresee, so the specific remedy is
+        // UNKNOWN. Do not claim «ألغِ بنوده» — cancelling items clears only the
+        // frozen achievement, and asserting a step that may not work is exactly
+        // how the operator was misdirected on /customer-rfq/5647.
+        error:
+          "لا يمكن حذف الطلب لوجود سجلات مرتبطة به لم يتمكّن النظام من تحديدها — راجع الطلبات المرتبطة (أوامر الشراء، طلبات الموردين، الفواتير) أولًا",
       });
       return;
     }
