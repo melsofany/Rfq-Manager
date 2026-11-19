@@ -37,6 +37,13 @@ import { resolvePublicBaseUrl } from "../../shared/base-url";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 import { ensureAssignmentsForRfqSafe } from "./assignment";
 import { guardFor } from "../../shared/permissions";
+import {
+  customerNoMatchSql,
+  normalizeRfqNumber,
+  pickExistingRfq,
+  planReuseItems,
+  reuseUpdate,
+} from "../../shared/rfq-identity";
 
 const router = Router();
 
@@ -268,13 +275,149 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const internalRfqNo = await generateInternalRfqNo();
+  const normalizedNo = normalizeRfqNumber(customerRfqNo);
   // Resolve the customer RFQ header so the link is a real key, not only text.
   const [matchedCustomerRfq] = await db
     .select({ id: customerRfqsTable.id })
     .from(customerRfqsTable)
     .where(eq(customerRfqsTable.customerRfqNo, customerRfqNo))
     .limit(1);
+
+  // ── Reuse instead of duplicating ─────────────────────────────────────────
+  // The same customer request is routinely sent again — to a missed supplier,
+  // or with a longer closing date once the first lapsed. Creating a second
+  // `rfq` row splits the offers across two rows, so the comparison, analysis
+  // and KPIs each see a fragment (measured: 29 duplicated numbers, one of them
+  // with 5 rows and 55 sends). Match on the NORMALIZED number so the cosmetic
+  // variants in real data (padding, letter case) are recognised as one request.
+  const sameNumber = await db
+    .select({
+      id: rfqTable.id,
+      internalRfqNo: rfqTable.internalRfqNo,
+      customerRfqNo: rfqTable.customerRfqNo,
+      status: rfqTable.status,
+      expiresAt: rfqTable.expiresAt,
+      createdAt: rfqTable.createdAt,
+    })
+    .from(rfqTable)
+    .where(customerNoMatchSql(rfqTable.customerRfqNo, normalizedNo));
+
+  // Count items per candidate in ONE query so the ranking can prefer the row
+  // that actually carries the request.
+  let existingRfq: (typeof sameNumber)[number] | null = null;
+  if (sameNumber.length > 0) {
+    const counts = await db
+      .select({ rfqId: rfqItemsTable.rfqId, n: count() })
+      .from(rfqItemsTable)
+      .where(
+        inArray(
+          rfqItemsTable.rfqId,
+          sameNumber.map((r) => r.id),
+        ),
+      )
+      .groupBy(rfqItemsTable.rfqId);
+    const countMap = new Map(counts.map((c) => [c.rfqId, Number(c.n)]));
+    // Offers are the WORK. Reusing the row that already holds them is the whole
+    // point — picking a newer sibling with fewer offers would split the
+    // comparison further, which is the defect being repaired.
+    const offerCounts = await db
+      .select({ rfqId: offersTable.rfqId, n: count() })
+      .from(offersTable)
+      .where(
+        inArray(
+          offersTable.rfqId,
+          sameNumber.map((r) => r.id),
+        ),
+      )
+      .groupBy(offersTable.rfqId);
+    const offerMap = new Map(offerCounts.map((c) => [c.rfqId, Number(c.n)]));
+    existingRfq = pickExistingRfq(
+      sameNumber.map((r) => ({
+        ...r,
+        itemCount: countMap.get(r.id) ?? 0,
+        offerCount: offerMap.get(r.id) ?? 0,
+      })),
+    );
+  }
+
+  if (existingRfq) {
+    const validItems = (items ?? []).filter((it) => it.description?.trim());
+    const storedItems = await db
+      .select()
+      .from(rfqItemsTable)
+      .where(eq(rfqItemsTable.rfqId, existingRfq.id));
+    // Only the lines the row does not already carry are inserted — a re-send of
+    // the same items must not double every quantity in the analysis.
+    const { toInsert, addedCount, existingCount } = planReuseItems(storedItems, validItems);
+
+    if (toInsert.length > 0) {
+      await db.insert(rfqItemsTable).values(
+        toInsert.map((it) => ({
+          rfqId: existingRfq.id,
+          lineItem: it.lineItem || null,
+          partNo: it.partNo || null,
+          description: it.description.trim(),
+          uom: it.uom || null,
+          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+          referencePrice:
+            it.referencePrice != null && it.referencePrice !== ""
+              ? String(it.referencePrice)
+              : null,
+          customerRfqItemId: it.customerRfqItemId || null,
+        })),
+      );
+      await ensureAssignmentsForRfqSafe(existingRfq.id);
+    }
+
+    // Extend the closing window when the caller asks for a LATER one, and
+    // revive a terminal RFQ so it can take offers again. An earlier date is
+    // never applied — that would cut a live request nobody asked to cut.
+    const patch = reuseUpdate(existingRfq, {
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+    });
+    if (Object.keys(patch).length > 0) {
+      await db.update(rfqTable).set(patch).where(eq(rfqTable.id, existingRfq.id));
+    }
+
+    await db.insert(auditLogTable).values({
+      action: "rfq.reused",
+      entityType: "rfq",
+      entityId: existingRfq.id,
+      employeeId: req.session.employeeId,
+      description: `Reused RFQ ${existingRfq.internalRfqNo} for customer RFQ ${customerRfqNo} (added ${addedCount} item(s), ${existingCount} already present)`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    const [fresh] = await db.select().from(rfqTable).where(eq(rfqTable.id, existingRfq.id));
+    req.log.info(
+      { rfqId: existingRfq.id, customerRfqNo, added: addedCount, reused: true },
+      "RFQ create: REUSED existing RFQ for the same customer request",
+    );
+    res.status(200).json({
+      id: fresh.id,
+      internalRfqNo: fresh.internalRfqNo,
+      customerRfqNo: fresh.customerRfqNo,
+      customerRfqDate: fresh.customerRfqDate,
+      requiredResponseDate: fresh.requiredResponseDate,
+      status: fresh.status,
+      employeeId: fresh.employeeId,
+      employeeName: null,
+      notes: fresh.notes,
+      expiresAt: fresh.expiresAt?.toISOString() ?? null,
+      itemCount: existingCount + addedCount,
+      supplierCount: 0,
+      offerCount: 0,
+      createdAt: fresh.createdAt.toISOString(),
+      updatedAt: fresh.updatedAt.toISOString(),
+      // Lets the portal say «أُضيف إلى الطلب القائم» instead of «تم الإنشاء».
+      reused: true,
+      addedItemCount: addedCount,
+    });
+    return;
+  }
+
+  const internalRfqNo = await generateInternalRfqNo();
   const [rfq] = await db
     .insert(rfqTable)
     .values({
@@ -341,6 +484,87 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
     offerCount: 0,
     createdAt: rfq.createdAt.toISOString(),
     updatedAt: rfq.updatedAt.toISOString(),
+  });
+});
+
+/**
+ * GET /api/rfq/existing/:customerRfqNo — is there already an RFQ for this
+ * customer request? The portal asks this BEFORE creating, so the operator is
+ * told «الطلب موجود» and sent to the row that already holds the work instead
+ * of silently creating a second one.
+ */
+router.get("/rfq/existing/:customerRfqNo", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.customerRfqNo)
+    ? req.params.customerRfqNo[0]
+    : req.params.customerRfqNo;
+  const customerRfqNo = decodeURIComponent(raw);
+  const normalizedNo = normalizeRfqNumber(customerRfqNo);
+  if (!normalizedNo) {
+    res.status(400).json({ error: "customerRfqNo required" });
+    return;
+  }
+
+  const rows = await db
+    .select({
+      id: rfqTable.id,
+      internalRfqNo: rfqTable.internalRfqNo,
+      customerRfqNo: rfqTable.customerRfqNo,
+      status: rfqTable.status,
+      expiresAt: rfqTable.expiresAt,
+      createdAt: rfqTable.createdAt,
+    })
+    .from(rfqTable)
+    .where(customerNoMatchSql(rfqTable.customerRfqNo, normalizedNo));
+
+  if (rows.length === 0) {
+    res.json({ exists: false, rfq: null, duplicates: 0 });
+    return;
+  }
+
+  const counts = await db
+    .select({ rfqId: rfqItemsTable.rfqId, n: count() })
+    .from(rfqItemsTable)
+    .where(
+      inArray(
+        rfqItemsTable.rfqId,
+        rows.map((r) => r.id),
+      ),
+    )
+    .groupBy(rfqItemsTable.rfqId);
+  const countMap = new Map(counts.map((c) => [c.rfqId, Number(c.n)]));
+  const offerCounts = await db
+    .select({ rfqId: offersTable.rfqId, n: count() })
+    .from(offersTable)
+    .where(
+      inArray(
+        offersTable.rfqId,
+        rows.map((r) => r.id),
+      ),
+    )
+    .groupBy(offersTable.rfqId);
+  const offerMap = new Map(offerCounts.map((c) => [c.rfqId, Number(c.n)]));
+  const ranked = rows.map((r) => ({
+    ...r,
+    itemCount: countMap.get(r.id) ?? 0,
+    offerCount: offerMap.get(r.id) ?? 0,
+  }));
+  const best = pickExistingRfq(ranked);
+
+  res.json({
+    exists: true,
+    // `duplicates` lets the portal warn about the historical split explicitly.
+    duplicates: rows.length,
+    rfq: best
+      ? {
+          id: best.id,
+          internalRfqNo: best.internalRfqNo,
+          customerRfqNo: best.customerRfqNo,
+          status: best.status,
+          expiresAt: best.expiresAt?.toISOString() ?? null,
+          itemCount: best.itemCount ?? 0,
+          createdAt: best.createdAt?.toISOString() ?? null,
+        }
+      : null,
   });
 });
 
