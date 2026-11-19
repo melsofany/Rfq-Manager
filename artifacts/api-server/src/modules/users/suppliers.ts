@@ -97,6 +97,10 @@ function serializeSupplier(s: typeof suppliersTable.$inferSelect) {
 }
 
 // إلغاء تفعيل المورد تلقائيًا عند بلوغ هذا العدد من الإرسالات دون أي رد
+// نسبة ضريبة القيمة المضافة (14%): لتوحيد أسعار العروض وأوامر الشراء بدون ضريبة
+const VAT_RATE = 0.14;
+
+// إلغاء تفعيل المورد تلقائيًا عند بلوغ هذا العدد من الإرسالات دون أي رد
 const AUTO_DEACTIVATE_AFTER = 10;
 
 // ─── حساب تقييم المورد ─────────────────────────────────────────────────────
@@ -118,6 +122,7 @@ function deriveScore(m: {
   acceptedQty: number;
   rejectedQty: number;
   avgDeliveryDays: number | null;
+  avgPriceEscalation: number | null;
 }) {
   const responseRate =
     m.totalRfqsReceived > 0
@@ -164,7 +169,18 @@ function deriveScore(m: {
     else deliveryScore = 35;
   }
 
+  // Price rise from the quote to the PO (VAT-normalised average): no rise scores
+  // 100, every 1% rise costs 5 points, floored at 0.
+  let escalationScore: number | null = null;
+  if (m.avgPriceEscalation !== null) {
+    escalationScore = Math.max(
+      0,
+      Math.min(100, Math.round(100 - Math.max(0, m.avgPriceEscalation) * 5)),
+    );
+  }
+
   const components = [
+    { score: escalationScore, weight: 0.2 },
     { score: commitmentScore, weight: 0.25 },
     { score: responseSpeedScore, weight: 0.15 },
     { score: priceScore, weight: 0.2 },
@@ -203,6 +219,8 @@ function deriveScore(m: {
     receiptQualityScore,
     avgDeliveryDays: m.avgDeliveryDays,
     deliveryScore,
+    avgPriceEscalation: m.avgPriceEscalation,
+    escalationScore,
     totalScore,
     rating,
     sampleSize,
@@ -229,6 +247,7 @@ async function computeAllSupplierScores(
     responseRes,
     priceRes,
     deliveryRes,
+    escalationRes,
   ] = await Promise.all([
     db
       .select({ supplierId: sentLogTable.supplierId, cnt: count() })
@@ -297,6 +316,22 @@ async function computeAllSupplierScores(
         WHERE poi.supplier_id IN ${supplierIds}
         GROUP BY poi.supplier_id
       `),
+    db.execute(sql`
+        SELECT poi.supplier_id AS supplier_id,
+               AVG(
+                 (poi.reference_price::numeric / CASE WHEN poi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END
+                  - oi.price::numeric / CASE WHEN oi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END)
+                 / (oi.price::numeric / CASE WHEN oi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END)
+                 * 100
+               ) AS avg_escalation
+        FROM purchase_order_items poi
+        JOIN offer_items oi ON poi.offer_item_id = oi.id
+        WHERE poi.supplier_id IN ${supplierIds}
+          AND poi.line_status <> 'cancelled'
+          AND poi.reference_price::numeric > 0
+          AND oi.price::numeric > 0
+        GROUP BY poi.supplier_id
+      `),
   ]);
 
   const sentBy = new Map<number, number>();
@@ -334,6 +369,12 @@ async function computeAllSupplierScores(
       deliveryBy.set(Number(r.supplier_id), Math.round(parseFloat(r.avg_days)));
   }
 
+  const escalationBy = new Map<number, number>();
+  for (const r of escalationRes.rows as { supplier_id: number; avg_escalation: string | null }[]) {
+    const e = r.avg_escalation != null ? parseFloat(r.avg_escalation) : NaN;
+    if (Number.isFinite(e)) escalationBy.set(Number(r.supplier_id), Math.round(e * 10) / 10);
+  }
+
   for (const id of supplierIds) {
     const receipt = receiptBy.get(id) ?? { accepted: 0, rejected: 0 };
     out.set(
@@ -348,6 +389,7 @@ async function computeAllSupplierScores(
         acceptedQty: receipt.accepted,
         rejectedQty: receipt.rejected,
         avgDeliveryDays: deliveryBy.get(id) ?? null,
+        avgPriceEscalation: escalationBy.get(id) ?? null,
       }),
     );
   }
@@ -445,6 +487,29 @@ async function computeSupplierScore(supplierId: number) {
   const avgDeliveryDays =
     receiptCount > 0 && deliveryRow?.avg ? Math.round(parseFloat(String(deliveryRow.avg))) : null;
 
+  const escalationRows = await db.execute(sql`
+      SELECT AVG(
+               (poi.reference_price::numeric / CASE WHEN poi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END
+                - oi.price::numeric / CASE WHEN oi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END)
+               / (oi.price::numeric / CASE WHEN oi.tax_included THEN ${1 + VAT_RATE}::numeric ELSE 1 END)
+               * 100
+             ) AS avg_escalation
+      FROM purchase_order_items poi
+      JOIN offer_items oi ON poi.offer_item_id = oi.id
+      WHERE poi.supplier_id = ${supplierId}
+        AND poi.line_status <> 'cancelled'
+        AND poi.reference_price::numeric > 0
+        AND oi.price::numeric > 0
+    `);
+  const rawEscalation = escalationRows.rows[0]
+    ? parseFloat(
+        String((escalationRows.rows[0] as { avg_escalation: string | null }).avg_escalation ?? ""),
+      )
+    : NaN;
+  const avgPriceEscalation = Number.isFinite(rawEscalation)
+    ? Math.round(rawEscalation * 10) / 10
+    : null;
+
   return deriveScore({
     totalRfqsReceived,
     totalOffersSubmitted,
@@ -455,6 +520,7 @@ async function computeSupplierScore(supplierId: number) {
     acceptedQty,
     rejectedQty,
     avgDeliveryDays,
+    avgPriceEscalation,
   });
 }
 
@@ -848,6 +914,7 @@ router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => 
         avgResponseHours: null,
         totalItemsOffered: 0,
         avgPriceDelta: null,
+        avgPriceEscalation: null,
         wins: 0,
         acceptedQty: 0,
         rejectedQty: 0,
