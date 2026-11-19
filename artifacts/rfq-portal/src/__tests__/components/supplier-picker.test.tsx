@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { SupplierPicker } from "@/modules/rfq/components/SupplierPicker";
 
 const categories = [
@@ -103,5 +103,59 @@ describe("SupplierPicker", () => {
     renderPicker([]);
     fireEvent.click(screen.getByText("بدون تصنيف"));
     expect(screen.getByText("مورد د")).toBeTruthy();
+  });
+
+  it("clicking a category shows only its suppliers on the right", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    expect(screen.getByText("مورد أ")).toBeTruthy();
+    expect(screen.queryByText("مورد ب")).toBeNull();
+    expect(screen.queryByText("مورد ج")).toBeNull();
+  });
+
+  it("a second category stacks below the first, and both stay visible", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    fireEvent.click(screen.getByRole("button", { name: "مواسير" }));
+    expect(screen.getByText("مورد أ")).toBeTruthy();
+    expect(screen.getByText("مورد ب")).toBeTruthy();
+    const headers = screen
+      .getAllByRole("button", { name: /^إغلاق / })
+      .map((b) => b.getAttribute("aria-label"));
+    expect(headers).toEqual(["إغلاق كابلات", "إغلاق مواسير"]);
+  });
+
+  it("select-all inside a section selects only that section's suppliers", () => {
+    const onChange = renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    fireEvent.click(screen.getByRole("button", { name: "تحديد الكل في كابلات" }));
+    const next = onChange.mock.calls[0][0] as Set<number>;
+    expect([...next].sort()).toEqual([10, 14]);
+  });
+
+  it("collapsing a section hides its suppliers and keeps the header", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    fireEvent.click(screen.getByRole("button", { name: "طي كابلات" }));
+    expect(screen.queryByText("مورد أ")).toBeNull();
+    expect(screen.getByRole("button", { name: "توسيع كابلات" })).toBeTruthy();
+  });
+
+  it("closing a section removes it from the right panel", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    fireEvent.click(screen.getByRole("button", { name: "إغلاق كابلات" }));
+    expect(screen.queryByText("مورد أ")).toBeNull();
+    expect(screen.getByText("اختر تصنيفاً من القائمة لعرض موردييه هنا")).toBeTruthy();
+  });
+
+  it("search filters the suppliers inside every open section", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كابلات" }));
+    fireEvent.click(screen.getByRole("button", { name: "أدوات" }));
+    fireEvent.change(screen.getByPlaceholderText("بحث..."), { target: { value: "مورد ج" } });
+    expect(screen.getByText("مورد ج")).toBeTruthy();
+    expect(screen.queryByText("مورد أ")).toBeNull();
+    expect(screen.queryByRole("button", { name: "إغلاق كابلات" })).toBeNull();
   });
 });
