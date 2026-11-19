@@ -158,4 +158,53 @@ describe("SupplierPicker", () => {
     expect(screen.queryByText("مورد أ")).toBeNull();
     expect(screen.queryByRole("button", { name: "إغلاق كابلات" })).toBeNull();
   });
+
+  it("opening a main category does not list its subcategories' suppliers", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كهرباء" }));
+    expect(screen.queryByText("مورد أ")).toBeNull();
+    expect(screen.queryByText("مورد ب")).toBeNull();
+    expect(screen.queryByText("مورد هـ")).toBeNull();
+    expect(
+      screen.getByText(
+        "لا يوجد موردون مرتبطون بهذا التصنيف مباشرة، اختر تصنيفاً فرعياً من القائمة",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a subcategory opened after its main shows only its own suppliers", () => {
+    renderPicker([]);
+    fireEvent.click(screen.getByRole("button", { name: "كهرباء" }));
+    fireEvent.click(screen.getByRole("button", { name: "مواسير" }));
+    expect(screen.getByText("مورد ب")).toBeTruthy();
+    expect(screen.queryByText("مورد أ")).toBeNull();
+    expect(screen.queryByText("مورد هـ")).toBeNull();
+  });
+
+  it("a supplier tagged with the main category directly is listed under it", () => {
+    const direct = [
+      ...suppliers,
+      {
+        id: 15,
+        name: "مورد كهرباء مباشر",
+        category: "كهرباء",
+        isActive: true,
+        contactPerson: null,
+        email: null,
+        supplierId: null,
+      },
+    ] as never[];
+    render(
+      <SupplierPicker
+        categories={categories as never[]}
+        suppliers={direct}
+        selectedIds={new Set()}
+        onChange={vi.fn()}
+        alreadySentIds={new Set()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "كهرباء" }));
+    expect(screen.getByText("مورد كهرباء مباشر")).toBeTruthy();
+    expect(screen.queryByText("مورد أ")).toBeNull();
+  });
 });

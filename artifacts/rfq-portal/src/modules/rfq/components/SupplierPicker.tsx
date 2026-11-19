@@ -48,7 +48,10 @@ type TreeNode = {
   key: string;
   label: string;
   depth: number;
+  // كل الموردين في الفرع (التصنيف + أبناؤه): يُستخدم لتحديد الشجرة كلها
   members: number[];
+  // الموردون المرتبطون بهذا التصنيف نفسه فقط: يُعرضون في القسم على اليمين
+  direct: number[];
   children: TreeNode[];
 };
 
@@ -95,11 +98,15 @@ function buildTree(
     const members = active
       .filter((s) => (catsOf.get(s.id) ?? []).some((n) => names.has(n)))
       .map((s) => s.id);
+    const direct = active
+      .filter((s) => (catsOf.get(s.id) ?? []).includes(cat.name))
+      .map((s) => s.id);
     const node: TreeNode = {
       key: `c${cat.id}`,
       label: cat.name,
       depth,
       members,
+      direct,
       children,
     };
     flat.set(node.key, node);
@@ -117,6 +124,7 @@ function buildTree(
     label: "بدون تصنيف",
     depth: 0,
     members: unclassifiedMembers,
+    direct: unclassifiedMembers,
     children: [],
   };
   flat.set(NONE_KEY, unclassified);
@@ -126,6 +134,7 @@ function buildTree(
     label: "كل الموردين",
     depth: 0,
     members: active.map((s) => s.id),
+    direct: active.map((s) => s.id),
     children: [],
   };
   flat.set(ALL_KEY, all);
@@ -180,7 +189,7 @@ export function SupplierPicker({
     .map((key) => tree.flat.get(key))
     .filter((node): node is TreeNode => !!node)
     .map((node) => {
-      const all = node.members.map((id) => supplierById.get(id)).filter((s): s is Supplier => !!s);
+      const all = node.direct.map((id) => supplierById.get(id)).filter((s): s is Supplier => !!s);
       return { node, all, shown: all.filter(matches) };
     })
     .filter((sec) => !q || sec.shown.length > 0);
@@ -416,7 +425,9 @@ export function SupplierPicker({
                   {!sectionCollapsed &&
                     (all.length === 0 ? (
                       <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-                        لا يوجد موردون في هذا التصنيف
+                        {node.children.length > 0
+                          ? "لا يوجد موردون مرتبطون بهذا التصنيف مباشرة، اختر تصنيفاً فرعياً من القائمة"
+                          : "لا يوجد موردون في هذا التصنيف"}
                       </p>
                     ) : (
                       shown.map(renderRow)
