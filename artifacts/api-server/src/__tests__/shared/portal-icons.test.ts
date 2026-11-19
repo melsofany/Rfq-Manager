@@ -50,6 +50,21 @@ describe("browser tab icon", () => {
     }
   });
 
+  it("is the full lockup (mark + wordmark), not the bare mark", () => {
+    // The brand has two vectors: `ic_cortoba_mark` is the symbol alone, and
+    // `ic_cortoba_logo` is the lockup the company actually uses everywhere
+    // (in-app logo, opengraph, Android). Shipping the bare symbol on a
+    // coloured plate is a DIFFERENT design, not a different size — it was
+    // shipped once and looked like the wrong artwork. The lockup carries two
+    // paths (symbol + wordmark) and ~53k of path data; the bare mark is one
+    // path and ~26k. Count both, so neither a placeholder nor the wrong
+    // artwork can pass.
+    const svg = readFileSync(resolve(publicDir, "favicon.svg"), "utf8");
+    const paths = [...svg.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map((m) => m[1]);
+    expect(paths.length).toBe(2);
+    expect(paths.join("").length).toBeGreaterThan(40_000);
+  });
+
   it("links an icon at every size the browser may pick", () => {
     expect(indexHtml).toMatch(/rel="icon"[^>]*href="\/favicon\.ico"/);
     expect(indexHtml).toMatch(/rel="icon"[^>]*href="\/favicon\.svg"/);
