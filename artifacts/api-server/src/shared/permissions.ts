@@ -200,6 +200,14 @@ const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "acco
 /** Page guards per API prefix: reads need any of `read`, writes any of `write`. */
 export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> = {
   "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
+  // Supplier portal applications. Reading the queue needs the same page access
+  // as the supplier list; approving creates a supplier, so it needs the write
+  // key — an employee who may only VIEW suppliers must not be able to approve
+  // one.
+  "/supplier-review": {
+    read: ["suppliers", "rfq", "purchase-orders"],
+    write: ["suppliers:edit"],
+  },
   "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
   "/customers": {
     read: ["customers", "customer-rfq", "customer-po", "dashboard"],

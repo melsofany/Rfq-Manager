@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Users, Upload, Tag } from "lucide-react";
+import { Users, Upload, Tag, Inbox } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 import ImportSuppliersTab from "./import-tab";
 import { CategoriesTab } from "./CategoriesTab";
 import { SuppliersListTab } from "./list/SuppliersListTab";
+import { SupplierReviewTab } from "./ReviewTab";
 
-type Tab = "list" | "import" | "categories";
+type Tab = "list" | "review" | "import" | "categories";
 
 function TabButton({
   active,
@@ -51,6 +52,9 @@ export default function SuppliersPage() {
   // The API gates the writes on admin/manager. The categories tab is visible to
   // everyone; its manager-only controls are hidden for a plain viewer.
   const canManage = employee?.role === "admin" || employee?.role === "manager";
+  // Reviewing ends in CREATING a supplier, so it follows the same gate as the
+  // supplier write actions rather than being visible to every viewer.
+  const canReview = canManage;
 
   return (
     <Layout>
@@ -63,6 +67,15 @@ export default function SuppliersPage() {
               icon={<Users size={14} />}
             >
               {t("sup.tab.list")}
+            </TabButton>
+          )}
+          {canReview && (
+            <TabButton
+              active={activeTab === "review"}
+              onClick={() => setActiveTab("review")}
+              icon={<Inbox size={14} />}
+            >
+              {t("sup.tab.review")}
             </TabButton>
           )}
           {allowedTabs.includes("import") && (
@@ -87,6 +100,7 @@ export default function SuppliersPage() {
       {activeTab === "list" && (
         <SuppliersListTab onOpenCategories={() => setActiveTab("categories")} />
       )}
+      {activeTab === "review" && <SupplierReviewTab />}
       {activeTab === "import" && <ImportSuppliersTab />}
       {activeTab === "categories" && <CategoriesTab canManage={canManage} />}
     </Layout>
