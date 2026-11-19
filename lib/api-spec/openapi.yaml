@@ -2742,6 +2742,21 @@ components:
         commitmentScore:
           type: ["number", "null"]
           description: "نسبة الاستجابة (0-100)"
+        otifScore:
+          type: ["number", "null"]
+          description: "التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد"
+        otifLines:
+          type: integer
+          description: "عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF)"
+        otifHits:
+          type: integer
+          description: "عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF"
+        avgPriceEscalation:
+          type: ["number", "null"]
+          description: "متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)"
+        escalationScore:
+          type: ["number", "null"]
+          description: "درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط"
         responseSpeedScore:
           type: ["number", "null"]
           description: "سرعة الرد (0-100)"
