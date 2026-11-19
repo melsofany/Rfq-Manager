@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
+import { ExistingRfqBanner, type ExistingRfq } from "@/modules/rfq/components/ExistingRfqBanner";
 
 interface ItemRow {
   lineItem: string;
@@ -184,6 +185,49 @@ export default function NewRfqPage() {
       },
     },
   });
+
+  // ── Duplicate guard (live) ────────────────────────────────────────────────
+  // The same customer request is routinely sent again — to a missed supplier,
+  // or with a longer closing date once the first lapsed. Creating a second RFQ
+  // splits the offers across two rows, so the comparison and analysis each see
+  // a fragment (measured: 29 duplicated numbers, one with 5 rows). Warn as soon
+  // as a known number is typed, and offer the row that already holds the work.
+  const [existingRfq, setExistingRfq] = useState<ExistingRfq | null>(null);
+
+  useEffect(() => {
+    const trimmed = customerRfqNo.trim();
+    if (!trimmed) {
+      setExistingRfq(null);
+      return;
+    }
+    // Debounced: the operator types a number character by character, and each
+    // keystroke would otherwise fire a request.
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/rfq/existing/${encodeURIComponent(trimmed)}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setExistingRfq(
+          data.exists && data.rfq
+            ? {
+                id: data.rfq.id,
+                internalRfqNo: data.rfq.internalRfqNo,
+                status: data.rfq.status,
+                itemCount: data.rfq.itemCount ?? 0,
+                duplicates: data.duplicates ?? 1,
+              }
+            : null,
+        );
+      } catch {
+        // A failed probe must never block the form — the server still reuses
+        // the existing RFQ on submit, so this is only an early warning.
+        setExistingRfq(null);
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [customerRfqNo]);
 
   const handleLookup = async () => {
     if (!lookupQuery) return;
@@ -489,6 +533,11 @@ export default function NewRfqPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Existing RFQ for this customer request — warn before creating a duplicate */}
+          {existingRfq && (
+            <ExistingRfqBanner existing={existingRfq} customerRfqNo={customerRfqNo} />
+          )}
+
           {/* RFQ Info */}
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
             <h2 className="font-semibold text-sm text-foreground">RFQ Details</h2>
@@ -650,7 +699,11 @@ export default function NewRfqPage() {
               </a>
             </Link>
             <Button type="submit" disabled={createMutation.isPending || !customerRfqNo}>
-              {createMutation.isPending ? "Creating..." : "Create RFQ"}
+              {createMutation.isPending
+                ? "جارٍ الحفظ..."
+                : existingRfq
+                  ? "أضف إلى الطلب القائم"
+                  : "Create RFQ"}
             </Button>
           </div>
         </form>
