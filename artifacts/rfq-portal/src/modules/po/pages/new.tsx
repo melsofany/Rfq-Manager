@@ -277,6 +277,7 @@ export default function NewPurchaseOrderPage() {
           unitPrice: item.referencePrice != null ? String(item.referencePrice) : "",
           supplierId: "",
           taxIncluded: false,
+          promisedDeliveryDate: "",
           rfqNumber: "",
         }));
         setItems(mapped);
@@ -324,6 +325,9 @@ export default function NewPurchaseOrderPage() {
 
   const updateUnitPrice = (id: string, unitPrice: string) =>
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, unitPrice } : i)));
+
+  const updateDeliveryDate = (id: string, promisedDeliveryDate: string) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, promisedDeliveryDate } : i)));
 
   const updateTaxIncluded = (id: string, taxIncluded: boolean) =>
     setItems((prev) => prev.map((i) => (i.id === id ? applyTaxToggle(i, taxIncluded) : i)));
@@ -427,6 +431,7 @@ export default function NewPurchaseOrderPage() {
           referencePrice: i.unitPrice ? parseFloat(i.unitPrice) : undefined,
           supplierId: i.supplierId ? parseInt(i.supplierId, 10) : undefined,
           taxIncluded: i.taxIncluded,
+          promisedDeliveryDate: i.promisedDeliveryDate || null,
           rfqNumber: i.rfqNumber.trim() || undefined,
         })),
       },
@@ -511,6 +516,9 @@ export default function NewPurchaseOrderPage() {
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[120px]">
                           Unit price
                         </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          تاريخ التسليم
+                        </th>
                         <th
                           className="px-2 py-2.5 text-muted-foreground text-xs font-medium text-center"
                           title="السعر شامل ضريبة القيمة المضافة 14%"
@@ -575,6 +583,15 @@ export default function NewPurchaseOrderPage() {
                                 className="h-7 text-xs w-28 disabled:opacity-50"
                               />
                             )}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              type="date"
+                              value={row.promisedDeliveryDate}
+                              onChange={(e) => updateDeliveryDate(row.id, e.target.value)}
+                              disabled={!selectedIds.has(row.id)}
+                              className="h-7 text-xs w-36 rounded border border-border bg-background px-1.5 disabled:opacity-50"
+                            />
                           </td>
                           {/* Tax included checkbox */}
                           <td className="px-2 py-1.5 text-center">

@@ -265,6 +265,8 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       referencePrice?: string | number | null;
       supplierId?: number | null;
       taxIncluded?: boolean;
+      /** Agreed delivery date for this line, YYYY-MM-DD. */
+      promisedDeliveryDate?: string | null;
       /** RFQ number typed for this line (internal or customer number). Internal only. */
       rfqNumber?: string | null;
       /** Explicit RFQ line id, when the PO is created from an RFQ screen. */
@@ -279,6 +281,13 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
   const validItems = (items ?? []).filter((it) => it.description?.trim());
   if (validItems.length === 0) {
     res.status(400).json({ error: "At least one item is required" });
+    return;
+  }
+  const badPromisedDate = validItems.find(
+    (it) => it.promisedDeliveryDate && !/^\d{4}-\d{2}-\d{2}$/.test(it.promisedDeliveryDate),
+  );
+  if (badPromisedDate) {
+    res.status(400).json({ error: "promisedDeliveryDate must be YYYY-MM-DD" });
     return;
   }
 
@@ -365,6 +374,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
                 : null,
             supplierId: it.supplierId ?? null,
             taxIncluded: it.taxIncluded ?? false,
+            promisedDeliveryDate: it.promisedDeliveryDate || null,
           })),
         )
         .returning({ id: purchaseOrderItemsTable.id });
@@ -851,6 +861,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       uom: r.item.uom,
       unitPrice: r.item.referencePrice,
       taxIncluded: r.item.taxIncluded ?? false,
+      promisedDeliveryDate: r.item.promisedDeliveryDate ?? null,
     }));
 
     // Generate PDF once per supplier
@@ -1458,6 +1469,7 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
         uom: r.item.uom,
         unitPrice: r.item.referencePrice,
         taxIncluded: r.item.taxIncluded ?? false,
+        promisedDeliveryDate: r.item.promisedDeliveryDate ?? null,
       })),
     });
   } catch (err) {
@@ -1567,6 +1579,8 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
       referencePrice?: string | number | null;
       supplierId?: number | null;
       taxIncluded?: boolean;
+      /** Agreed delivery date for this line, YYYY-MM-DD. */
+      promisedDeliveryDate?: string | null;
     }>;
   };
 
@@ -1592,6 +1606,13 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
   const validItems = (items ?? []).filter((it) => it.description?.trim());
   if (validItems.length === 0) {
     res.status(400).json({ error: "At least one item is required" });
+    return;
+  }
+  const badPromisedDate = validItems.find(
+    (it) => it.promisedDeliveryDate && !/^\d{4}-\d{2}-\d{2}$/.test(it.promisedDeliveryDate),
+  );
+  if (badPromisedDate) {
+    res.status(400).json({ error: "promisedDeliveryDate must be YYYY-MM-DD" });
     return;
   }
 
@@ -1652,6 +1673,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
               : null,
           supplierId: it.supplierId ?? null,
           taxIncluded: it.taxIncluded ?? false,
+          promisedDeliveryDate: it.promisedDeliveryDate || null,
         })),
       );
 
@@ -2006,6 +2028,7 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
         qty: r.item.qty ? parseFloat(r.item.qty) : null,
         referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
         taxIncluded: r.item.taxIncluded ?? false,
+        promisedDeliveryDate: r.item.promisedDeliveryDate ?? null,
         totalReceivedQty: r.item.totalReceivedQty ? parseFloat(r.item.totalReceivedQty) : null,
         totalAcceptedQty: r.item.totalAcceptedQty ? parseFloat(r.item.totalAcceptedQty) : null,
         totalRejectedQty: r.item.totalRejectedQty ? parseFloat(r.item.totalRejectedQty) : null,

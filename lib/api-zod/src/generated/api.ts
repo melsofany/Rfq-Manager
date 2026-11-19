@@ -1752,6 +1752,7 @@ export const CreatePurchaseOrderBody = zod.object({
   "referencePrice": zod.number().nullish(),
   "supplierId": zod.number().nullish(),
   "taxIncluded": zod.boolean().default(createPurchaseOrderBodyItemsItemTaxIncludedDefault),
+  "promisedDeliveryDate": zod.string().nullish().describe('تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه'),
   "rfqNumber": zod.string().nullish().describe('Internal or customer RFQ number for this line. Internal only; never sent to suppliers.'),
   "rfqItemId": zod.number().nullish().describe('Explicit RFQ line id when known. Takes precedence over rfqNumber.')
 })).min(1)
@@ -1836,6 +1837,7 @@ export const UpdatePurchaseOrderBody = zod.object({
   "referencePrice": zod.number().nullish(),
   "supplierId": zod.number().nullish(),
   "taxIncluded": zod.boolean().default(updatePurchaseOrderBodyItemsItemTaxIncludedDefault),
+  "promisedDeliveryDate": zod.string().nullish().describe('تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه'),
   "rfqNumber": zod.string().nullish().describe('Internal or customer RFQ number for this line. Internal only; never sent to suppliers.'),
   "rfqItemId": zod.number().nullish().describe('Explicit RFQ line id when known. Takes precedence over rfqNumber.')
 })).min(1)
@@ -1898,7 +1900,8 @@ export const ListPurchaseOrderItemsResponseItem = zod.object({
   "uom": zod.string().nullish(),
   "qty": zod.number().nullish(),
   "referencePrice": zod.number().nullish(),
-  "taxIncluded": zod.boolean().optional()
+  "taxIncluded": zod.boolean().optional(),
+  "promisedDeliveryDate": zod.string().nullish().describe('تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه')
 })
 export const ListPurchaseOrderItemsResponse = zod.array(ListPurchaseOrderItemsResponseItem)
 

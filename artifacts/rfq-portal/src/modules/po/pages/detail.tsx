@@ -76,6 +76,7 @@ interface PoItem {
   qty: number | null;
   referencePrice: number | null;
   taxIncluded: boolean;
+  promisedDeliveryDate?: string | null;
   lineStatus?: string;
 }
 
@@ -245,6 +246,7 @@ export default function PurchaseOrderDetailPage() {
         unitPrice: it.referencePrice != null ? String(it.referencePrice) : "",
         supplierId: it.supplierId != null ? String(it.supplierId) : "",
         taxIncluded: it.taxIncluded ?? false,
+        promisedDeliveryDate: it.promisedDeliveryDate ?? "",
         rfqNumber: "",
       })),
     );
@@ -274,6 +276,7 @@ export default function PurchaseOrderDetailPage() {
         unitPrice: "",
         supplierId: "",
         taxIncluded: false,
+        promisedDeliveryDate: "",
         rfqNumber: "",
       },
     ]);
@@ -281,6 +284,9 @@ export default function PurchaseOrderDetailPage() {
 
   const removeEditItem = (rowId: string) =>
     setEditItems((prev) => prev.filter((i) => i.id !== rowId));
+
+  const updateEditDeliveryDate = (rowId: string, promisedDeliveryDate: string) =>
+    setEditItems((prev) => prev.map((i) => (i.id === rowId ? { ...i, promisedDeliveryDate } : i)));
 
   const updateEditTaxIncluded = (rowId: string, taxIncluded: boolean) =>
     setEditItems((prev) => prev.map((i) => (i.id === rowId ? applyTaxToggle(i, taxIncluded) : i)));
@@ -358,6 +364,7 @@ export default function PurchaseOrderDetailPage() {
             referencePrice: i.unitPrice ? parseFloat(i.unitPrice) : null,
             supplierId: i.supplierId ? parseInt(i.supplierId, 10) : null,
             taxIncluded: i.taxIncluded,
+            promisedDeliveryDate: i.promisedDeliveryDate || null,
           })),
         }),
       });
@@ -1233,6 +1240,9 @@ export default function PurchaseOrderDetailPage() {
                     <th className="px-2 py-2 text-muted-foreground font-medium text-right w-24">
                       سعر الوحدة
                     </th>
+                    <th className="px-2 py-2 text-muted-foreground font-medium text-center min-w-[140px]">
+                      تاريخ التسليم
+                    </th>
                     <th className="px-2 py-2 text-muted-foreground font-medium text-center w-16">
                       ضريبة
                     </th>
@@ -1296,6 +1306,14 @@ export default function PurchaseOrderDetailPage() {
                             className="h-7 w-20 text-xs rounded border border-border bg-background px-1.5 text-right outline-none focus:ring-1 focus:ring-ring"
                           />
                         </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          type="date"
+                          value={item.promisedDeliveryDate ?? ""}
+                          onChange={(e) => updateEditDeliveryDate(item.id, e.target.value)}
+                          className="h-7 text-xs w-36 rounded border border-border bg-background px-1.5"
+                        />
                       </td>
                       <td className="px-2 py-2 text-center">
                         <input

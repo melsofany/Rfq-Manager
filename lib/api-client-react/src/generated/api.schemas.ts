@@ -1081,6 +1081,11 @@ export interface PurchaseOrderItemInput {
   supplierId?: number | null;
   taxIncluded?: boolean;
   /**
+     * تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه
+     * @nullable
+     */
+  promisedDeliveryDate?: string | null;
+  /**
      * Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
      * @nullable
      */
@@ -1149,6 +1154,11 @@ export interface PurchaseOrderItem {
   /** @nullable */
   referencePrice?: number | null;
   taxIncluded?: boolean;
+  /**
+     * تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه
+     * @nullable
+     */
+  promisedDeliveryDate?: string | null;
 }
 
 export interface SheetPoItem {

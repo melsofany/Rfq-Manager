@@ -3071,6 +3071,9 @@ components:
         taxIncluded:
           type: boolean
           default: false
+        promisedDeliveryDate:
+          type: ["string", "null"]
+          description: "تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه"
         rfqNumber:
           type: ["string", "null"]
           description: Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
@@ -3132,6 +3135,9 @@ components:
           type: ["number", "null"]
         taxIncluded:
           type: boolean
+        promisedDeliveryDate:
+          type: ["string", "null"]
+          description: "تاريخ التسليم المتفق عليه لهذا البند (YYYY-MM-DD)، null إن لم يُتفق عليه"
 
     SheetPoItem:
       type: object

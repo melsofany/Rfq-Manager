@@ -680,6 +680,8 @@ export async function initDb(): Promise<void> {
       ALTER TABLE purchase_order_items
         ADD COLUMN IF NOT EXISTS customer_po_item_id INTEGER REFERENCES customer_po_items(id) ON DELETE SET NULL;
       ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS promised_delivery_date TEXT;
+      ALTER TABLE purchase_order_items
         ADD COLUMN IF NOT EXISTS total_received_qty NUMERIC(15,4);
       ALTER TABLE purchase_order_items
         ADD COLUMN IF NOT EXISTS total_accepted_qty NUMERIC(15,4);
