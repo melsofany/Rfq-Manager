@@ -2641,11 +2641,71 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
   let phoneInfo: Record<string, unknown> = {};
   try {
     const r = await Whatsapp.$$apiFetch$$(
-      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}?fields=display_phone_number,verified_name,quality_rating,status,platform_type`,
+      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}?fields=display_phone_number,verified_name,quality_rating,status,platform_type,name_status,code_verification_status,messaging_limit_tier`,
     );
     phoneInfo = (await r.json()) as Record<string, unknown>;
   } catch (e) {
     phoneInfo = { error: String(e) };
+  }
+
+  // Account-level verification state. This lives on the BUSINESS PORTFOLIO, not
+  // the phone or the WABA, so it is invisible to the checks above — which is how
+  // "the business is unverified" came to be misread as "sending is blocked".
+  interface BusinessDiagnostics {
+    id?: string;
+    name?: string;
+    account_review_status?: string;
+    business_verification_status?: string;
+    ownership_type?: string;
+    ownerBusiness?: { id?: string; name?: string } | null;
+    portfolio?: Record<string, unknown>;
+    warning?: string;
+    error?: string;
+  }
+  let businessInfo: BusinessDiagnostics = {
+    warning: "WHATSAPP_BUSINESS_ACCOUNT_ID not set",
+  };
+  let templateCategories: Record<string, number> = {};
+  if (WABA_ID) {
+    try {
+      const r = await Whatsapp.$$apiFetch$$(
+        `https://graph.facebook.com/${WA_API_VERSION}/${WABA_ID}?fields=id,name,account_review_status,business_verification_status,ownership_type`,
+      );
+      const waba = (await r.json()) as {
+        id?: string;
+        name?: string;
+        account_review_status?: string;
+        business_verification_status?: string;
+        ownership_type?: string;
+        error?: unknown;
+      };
+      businessInfo = {
+        id: waba.id,
+        name: waba.name,
+        account_review_status: waba.account_review_status,
+        business_verification_status: waba.business_verification_status,
+        ownership_type: waba.ownership_type,
+      };
+      if (waba.error) businessInfo.error = JSON.stringify(waba.error);
+
+      const ownerRes = await Whatsapp.$$apiFetch$$(
+        `https://graph.facebook.com/${WA_API_VERSION}/${WABA_ID}?fields=owner_business_info`,
+      );
+      const owner = (await ownerRes.json()) as {
+        owner_business_info?: { id?: string; name?: string };
+      };
+      const ownerId = owner.owner_business_info?.id;
+      businessInfo.ownerBusiness = owner.owner_business_info ?? null;
+
+      if (ownerId) {
+        const bRes = await Whatsapp.$$apiFetch$$(
+          `https://graph.facebook.com/${WA_API_VERSION}/${ownerId}?fields=id,name,verification_status,created_time`,
+        );
+        businessInfo.portfolio = (await bRes.json()) as Record<string, unknown>;
+      }
+    } catch (e) {
+      businessInfo = { error: String(e) };
+    }
   }
 
   let templates: Record<string, unknown> = {};
@@ -2667,8 +2727,18 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
       const ourTemplates = all.filter(
         (t) => TEMPLATE_NAMES.includes(t.name) || t.language === TEMPLATE_LANG,
       );
+      // Category tally: proves at a glance whether any AUTHENTICATION template
+      // exists. This project uses none — verification gates that category, so a
+      // tally of zero is the fact that keeps "unverified" from reading as
+      // "blocked".
+      templateCategories = all.reduce<Record<string, number>>((acc, t) => {
+        const key = (t.category || "UNKNOWN").toUpperCase();
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
       templates = {
         total: all.length,
+        by_category: templateCategories,
         our_templates: ourTemplates,
         all_names: all.map((t) => ({ name: t.name, status: t.status, lang: t.language })),
       };
@@ -2697,7 +2767,33 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
       "whatsapp-api-js v6 (open-source, official Meta Cloud API wrapper — github.com/Secreto31126/whatsapp-api-js)",
   };
 
-  res.json({ configured: true, phone: phoneInfo, templates, creds });
+  res.json({
+    configured: true,
+    phone: phoneInfo,
+    business: businessInfo,
+    templates,
+    // Plain-language reading of the facts above, so nobody has to infer whether
+    // an unverified business blocks the channel. Sending works on UTILITY and
+    // MARKETING templates regardless; AUTHENTICATION is the category Meta gates
+    // behind verification, and this project defines none.
+    sendingImpact: {
+      // Derived, never hardcoded. `null` means the status could not be read —
+      // reporting that as "blocked" would be the same class of false claim as
+      // reporting an unread mailbox as empty.
+      blocked:
+        businessInfo.account_review_status == null
+          ? null
+          : businessInfo.account_review_status !== "APPROVED",
+      accountReviewStatus: businessInfo.account_review_status ?? "UNKNOWN",
+      businessVerificationStatus: businessInfo.business_verification_status ?? "UNKNOWN",
+      authenticationTemplatesInUse: (templateCategories.AUTHENTICATION ?? 0) > 0,
+      summary:
+        (templateCategories.AUTHENTICATION ?? 0) > 0
+          ? "يوجد قوالب تحقق (AUTHENTICATION) — هذه الفئة تتطلب توثيق النشاط التجاري."
+          : "لا توجد قوالب تحقق (AUTHENTICATION) في الحساب. قوالب UTILITY/MARKETING تعمل بدون توثيق النشاط التجاري، لذلك الإرسال غير متوقف.",
+    },
+    creds,
+  });
 });
 
 export default router;
