@@ -1191,6 +1191,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "supD.vatRegHint": "If unchecked: the full amount is expensed with no input VAT (unregistered)",
     "supD.loading": "Loading…",
     "supD.noScore": "No score data yet",
+    "supD.standing.preferred": "Preferred",
+    "supD.standing.watch": "Watch",
+    "supD.standing.restricted": "Restricted",
+    "supD.standing.not_rated": "Not rated yet",
+    "supD.offersEvaluated": "Offers evaluated",
 
     "supImp.warnLandlineOnly":
       "Landline — will not be imported (WhatsApp does not support landlines)",
@@ -2417,6 +2422,11 @@ const translations: Record<Lang, Record<string, string>> = {
     "supD.vatRegHint": "عند الإلغاء: كامل المبلغ مصروف بدون ضريبة مدخلات (غير مسجَّل)",
     "supD.loading": "جارٍ التحميل...",
     "supD.noScore": "لا توجد بيانات تقييم بعد",
+    "supD.standing.preferred": "مفضّل",
+    "supD.standing.watch": "تحت المراقبة",
+    "supD.standing.restricted": "مقيّد",
+    "supD.standing.not_rated": "غير مقيّم بعد",
+    "supD.offersEvaluated": "عدد العروض المُقيَّمة",
 
     "supImp.warnLandlineOnly": "رقم أرضي — لن يُستورد (واتساب لا يدعم الأرضي)",
     "supImp.warnLandlineDropped": "تم رفض {n} رقم أرضي والاحتفاظ بالمحمول فقط",

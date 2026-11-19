@@ -2731,6 +2731,13 @@ components:
         rating:
           type: ["number", "null"]
           description: "التقييم بالنجوم (0-5)"
+        sampleSize:
+          type: integer
+          description: "عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة"
+        standing:
+          type: string
+          enum: [preferred, watch, restricted, not_rated]
+          description: "حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)"
         # مكونات التقييم — كل منها قابل أن يكون null عندما لا تتوفر بياناته
         commitmentScore:
           type: ["number", "null"]

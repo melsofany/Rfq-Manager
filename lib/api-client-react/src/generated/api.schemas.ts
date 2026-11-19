@@ -798,6 +798,19 @@ export interface BulkImportSuppliersResult {
   details?: BulkImportSuppliersResultDetailsItem[];
 }
 
+/**
+ * حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى)
+ */
+export type SupplierScoreStanding = typeof SupplierScoreStanding[keyof typeof SupplierScoreStanding];
+
+
+export const SupplierScoreStanding = {
+  preferred: 'preferred',
+  watch: 'watch',
+  restricted: 'restricted',
+  not_rated: 'not_rated',
+} as const;
+
 export interface SupplierScore {
   supplierId: number;
   supplierName?: string;
@@ -811,6 +824,10 @@ export interface SupplierScore {
      * @nullable
      */
   rating?: number | null;
+  /** عدد العروض المقدمة من المورد، وهو الأساس الذي تُحسب منه الحالة */
+  sampleSize?: number;
+  /** حالة المورد: مفضّل، تحت المراقبة، مقيّد، أو غير مقيّم (عينة أقل من الحد الأدنى) */
+  standing?: SupplierScoreStanding;
   /**
      * نسبة الاستجابة (0-100)
      * @nullable

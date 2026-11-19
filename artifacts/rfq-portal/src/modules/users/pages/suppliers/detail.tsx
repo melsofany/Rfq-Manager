@@ -56,6 +56,13 @@ type SupplierWithItemCategories = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+const STANDING_STYLE: Record<string, string> = {
+  preferred: "text-green-700 bg-green-50 border-green-200 dark:bg-green-950/30 dark:text-green-400",
+  watch: "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400",
+  restricted: "text-red-700 bg-red-50 border-red-200 dark:bg-red-950/30 dark:text-red-400",
+  not_rated: "text-muted-foreground bg-muted border-border",
+};
+
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1">
@@ -1040,19 +1047,23 @@ export default function SupplierDetailPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-sm text-foreground">Supplier Scorecard</h2>
               {score && score.totalScore !== null && score.totalScore !== undefined && (
-                <div
-                  className={`text-2xl font-bold ${
-                    score.totalScore >= 70
-                      ? "text-green-600"
-                      : score.totalScore >= 50
-                        ? "text-amber-600"
-                        : "text-red-600"
-                  }`}
-                >
-                  {score.totalScore}
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-medium px-2 py-0.5 rounded border ${
+                      STANDING_STYLE[score.standing ?? "not_rated"]
+                    }`}
+                  >
+                    {t(`supD.standing.${score.standing ?? "not_rated"}`)}
+                  </span>
+                  <div className="text-2xl font-bold text-foreground">{score.totalScore}</div>
                 </div>
               )}
             </div>
+            {score && (
+              <p className="text-xs text-muted-foreground">
+                {t("supD.offersEvaluated")}: {score.sampleSize ?? 0}
+              </p>
+            )}
             {score ? (
               <div className="space-y-3">
                 {[
