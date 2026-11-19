@@ -29,6 +29,7 @@ import type {
   CategoryInput,
   ChangePurchaseOrderRepresentative200,
   ChangePurchaseOrderRepresentativeBody,
+  CreateSupplierNoteBody,
   Customer,
   CustomerInput,
   CustomerPo,
@@ -93,6 +94,9 @@ import type {
   Supplier,
   SupplierCategory,
   SupplierInput,
+  SupplierNote,
+  SupplierPoLine,
+  SupplierPurchases,
   SupplierScore,
   SupplierUpdate,
   SyncIntegration200
@@ -1461,6 +1465,309 @@ export function useGetSupplierScore<TData = Awaited<ReturnType<typeof getSupplie
 
 
 
+
+export const getGetSupplierPurchasesUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/purchases`
+}
+
+/**
+ * @summary Totals of purchased lines for a supplier (net and gross of VAT)
+ */
+export const getSupplierPurchases = async (id: number, options?: RequestInit): Promise<SupplierPurchases> => {
+
+  return customFetch<SupplierPurchases>(getGetSupplierPurchasesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierPurchasesQueryKey = (id: number,) => {
+    return [
+    `/api/suppliers/${id}/purchases`
+    ] as const;
+    }
+
+
+export const getGetSupplierPurchasesQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierPurchases>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPurchases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierPurchasesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierPurchases>>> = ({ signal }) => getSupplierPurchases(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierPurchases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierPurchasesQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierPurchases>>>
+export type GetSupplierPurchasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Totals of purchased lines for a supplier (net and gross of VAT)
+ */
+
+export function useGetSupplierPurchases<TData = Awaited<ReturnType<typeof getSupplierPurchases>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierPurchases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierPurchasesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSupplierPoLinesUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/po-lines`
+}
+
+/**
+ * @summary Recent PO lines bought from a supplier
+ */
+export const listSupplierPoLines = async (id: number, options?: RequestInit): Promise<SupplierPoLine[]> => {
+
+  return customFetch<SupplierPoLine[]>(getListSupplierPoLinesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierPoLinesQueryKey = (id: number,) => {
+    return [
+    `/api/suppliers/${id}/po-lines`
+    ] as const;
+    }
+
+
+export const getListSupplierPoLinesQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierPoLines>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPoLines>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierPoLinesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierPoLines>>> = ({ signal }) => listSupplierPoLines(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierPoLines>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierPoLinesQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierPoLines>>>
+export type ListSupplierPoLinesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Recent PO lines bought from a supplier
+ */
+
+export function useListSupplierPoLines<TData = Awaited<ReturnType<typeof listSupplierPoLines>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierPoLines>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierPoLinesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListSupplierNotesUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/notes`
+}
+
+/**
+ * @summary Notes recorded against a supplier
+ */
+export const listSupplierNotes = async (id: number, options?: RequestInit): Promise<SupplierNote[]> => {
+
+  return customFetch<SupplierNote[]>(getListSupplierNotesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierNotesQueryKey = (id: number,) => {
+    return [
+    `/api/suppliers/${id}/notes`
+    ] as const;
+    }
+
+
+export const getListSupplierNotesQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierNotes>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierNotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierNotesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierNotes>>> = ({ signal }) => listSupplierNotes(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierNotes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierNotesQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierNotes>>>
+export type ListSupplierNotesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Notes recorded against a supplier
+ */
+
+export function useListSupplierNotes<TData = Awaited<ReturnType<typeof listSupplierNotes>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierNotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierNotesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateSupplierNoteUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/notes`
+}
+
+/**
+ * @summary Record a note against a supplier, optionally on one of its PO lines
+ */
+export const createSupplierNote = async (id: number,
+    createSupplierNoteBody: CreateSupplierNoteBody, options?: RequestInit): Promise<SupplierNote> => {
+
+  return customFetch<SupplierNote>(getCreateSupplierNoteUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createSupplierNoteBody)
+  }
+);}
+
+
+
+
+
+export const getCreateSupplierNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierNote>>, TError,{id: number;data: BodyType<CreateSupplierNoteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSupplierNote>>, TError,{id: number;data: BodyType<CreateSupplierNoteBody>}, TContext> => {
+
+const mutationKey = ['createSupplierNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSupplierNote>>, {id: number;data: BodyType<CreateSupplierNoteBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createSupplierNote(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSupplierNoteMutationResult = NonNullable<Awaited<ReturnType<typeof createSupplierNote>>>
+    export type CreateSupplierNoteMutationBody = BodyType<CreateSupplierNoteBody>
+    export type CreateSupplierNoteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record a note against a supplier, optionally on one of its PO lines
+ */
+export const useCreateSupplierNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSupplierNote>>, TError,{id: number;data: BodyType<CreateSupplierNoteBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSupplierNote>>,
+        TError,
+        {id: number;data: BodyType<CreateSupplierNoteBody>},
+        TContext
+      > => {
+      return useMutation(getCreateSupplierNoteMutationOptions(options));
+    }
 
 export const getListCustomersUrl = (params?: ListCustomersParams,) => {
   const normalizedParams = new URLSearchParams();

@@ -1,7 +1,8 @@
 import { guardFor } from "../../shared/permissions";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { standingOf } from "../../shared/supplier-standing";
 import { otifScoreOf } from "../../shared/supplier-otif";
+import { parseSupplierNoteInput } from "../../shared/supplier-notes";
 import {
   db,
   suppliersTable,
@@ -10,6 +11,7 @@ import {
   offerItemsTable,
   purchaseOrderItemsTable,
   purchaseOrdersTable,
+  supplierNotesTable,
   poItemReceiptsTable,
   customerPoItemsTable,
   customerPosTable,
@@ -1498,6 +1500,148 @@ router.get("/suppliers/:id/score", requireAuth, async (req, res): Promise<void> 
     supplierName: supplier.name,
     ...score,
   });
+});
+
+// ─── Supplier notes & purchase totals ──────────────────────────────────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function parseSupplierId(raw: string | string[] | undefined): number {
+  return parseInt(Array.isArray(raw) ? raw[0] : (raw ?? ""), 10);
+}
+
+// Totals across this supplier's non-cancelled PO lines. Net = price before VAT,
+// gross = price including VAT. A line priced tax-inclusive is divided by 1.14 for net.
+router.get("/suppliers/:id/purchases", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const result = await db.execute(sql`
+    SELECT COUNT(DISTINCT poi.po_id)::int AS po_count,
+           COUNT(*)::int AS line_count,
+           COALESCE(SUM(poi.qty::numeric * CASE WHEN poi.tax_included
+             THEN poi.reference_price::numeric / ${1 + VAT_RATE}::numeric
+             ELSE poi.reference_price::numeric END), 0) AS total_net,
+           COALESCE(SUM(poi.qty::numeric * CASE WHEN poi.tax_included
+             THEN poi.reference_price::numeric
+             ELSE poi.reference_price::numeric * ${1 + VAT_RATE}::numeric END), 0) AS total_gross
+    FROM purchase_order_items poi
+    WHERE poi.supplier_id = ${supplierId}
+      AND poi.line_status <> 'cancelled'
+      AND poi.qty IS NOT NULL
+      AND poi.reference_price IS NOT NULL
+  `);
+  const r = (result.rows[0] ?? {}) as Record<string, string | number | null>;
+  res.json({
+    poCount: Number(r.po_count ?? 0),
+    lineCount: Number(r.line_count ?? 0),
+    totalNet: round2(Number(r.total_net ?? 0)),
+    totalGross: round2(Number(r.total_gross ?? 0)),
+  });
+});
+
+// Recent PO lines of this supplier, for choosing the line a note is about.
+router.get("/suppliers/:id/po-lines", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const rows = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      poId: purchaseOrderItemsTable.poId,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      description: purchaseOrderItemsTable.description,
+      qty: purchaseOrderItemsTable.qty,
+      price: purchaseOrderItemsTable.referencePrice,
+      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+      createdAt: purchaseOrderItemsTable.createdAt,
+    })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(
+      and(
+        eq(purchaseOrderItemsTable.supplierId, supplierId),
+        ne(purchaseOrderItemsTable.lineStatus, "cancelled"),
+      ),
+    )
+    .orderBy(sql`${purchaseOrderItemsTable.createdAt} DESC`)
+    .limit(300);
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      poId: r.poId,
+      internalPoNo: r.internalPoNo ?? null,
+      description: r.description,
+      qty: r.qty != null ? Number(r.qty) : null,
+      price: r.price != null ? Number(r.price) : null,
+      taxIncluded: r.taxIncluded,
+      createdAt: r.createdAt,
+    })),
+  );
+});
+
+router.get("/suppliers/:id/notes", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const rows = await db
+    .select({
+      id: supplierNotesTable.id,
+      poItemId: supplierNotesTable.poItemId,
+      reason: supplierNotesTable.reason,
+      text: supplierNotesTable.text,
+      createdByEmployeeId: supplierNotesTable.createdByEmployeeId,
+      createdAt: supplierNotesTable.createdAt,
+      poId: purchaseOrderItemsTable.poId,
+      description: purchaseOrderItemsTable.description,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+    })
+    .from(supplierNotesTable)
+    .leftJoin(purchaseOrderItemsTable, eq(supplierNotesTable.poItemId, purchaseOrderItemsTable.id))
+    .leftJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(eq(supplierNotesTable.supplierId, supplierId))
+    .orderBy(sql`${supplierNotesTable.createdAt} DESC`);
+  res.json(rows);
+});
+
+router.post("/suppliers/:id/notes", requireAuth, async (req, res): Promise<void> => {
+  const supplierId = parseSupplierId(req.params.id);
+  const [supplier] = await db
+    .select({ id: suppliersTable.id })
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, supplierId));
+  if (!supplier) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const parsed = parseSupplierNoteInput(req.body);
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { reason, poItemId, text } = parsed.value;
+
+  if (poItemId !== null) {
+    const [line] = await db
+      .select({ id: purchaseOrderItemsTable.id })
+      .from(purchaseOrderItemsTable)
+      .where(
+        and(
+          eq(purchaseOrderItemsTable.id, poItemId),
+          eq(purchaseOrderItemsTable.supplierId, supplierId),
+        ),
+      );
+    if (!line) {
+      res.status(400).json({ error: "line does not belong to this supplier" });
+      return;
+    }
+  }
+
+  const employeeId =
+    (req as Request & { session?: { employeeId?: number } }).session?.employeeId ?? null;
+
+  const [created] = await db
+    .insert(supplierNotesTable)
+    .values({ supplierId, poItemId, reason, text, createdByEmployeeId: employeeId })
+    .returning();
+  res.json(created);
 });
 
 export default router;

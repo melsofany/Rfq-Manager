@@ -1,5 +1,6 @@
 import { orderCategoryTree } from "@/lib/category-tree";
 import { TradeCategoryPicker } from "./TradeCategoryPicker";
+import { SupplierNotesCard, SupplierPurchasesCard } from "../../components/SupplierNotesCard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
@@ -1133,6 +1134,9 @@ export default function SupplierDetailPage() {
             )}
           </div>
         </div>
+
+        <SupplierPurchasesCard supplierId={supplierId} />
+        <SupplierNotesCard supplierId={supplierId} />
 
         {/* ── طلبات التسعير ──────────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">

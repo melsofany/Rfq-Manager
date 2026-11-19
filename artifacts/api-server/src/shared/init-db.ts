@@ -3648,6 +3648,20 @@ export async function initDb(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS supplier_bot_sessions_phone_uq
         ON supplier_bot_sessions (phone);
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_notes (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+        po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL,
+        reason TEXT NOT NULL,
+        text TEXT,
+        created_by_employee_id INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS supplier_notes_supplier_idx ON supplier_notes (supplier_id);
+    `);
 
     logger.info("initDb: WhatsApp supplier bot schema ready");
   } catch (err) {
