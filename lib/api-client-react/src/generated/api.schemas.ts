@@ -834,6 +834,25 @@ export interface SupplierScore {
      */
   commitmentScore?: number | null;
   /**
+     * التسليم في الموعد وبالكمية (OTIF) بالنسبة المئوية (0-100)، null إن لم توجد بنود بتاريخ وعد
+     * @nullable
+     */
+  otifScore?: number | null;
+  /** عدد بنود أوامر الشراء المستحقة التي لها تاريخ وعد (عينة OTIF) */
+  otifLines?: number;
+  /** عدد البنود التي سُلّمت كاملة وفي الموعد من عينة OTIF */
+  otifHits?: number;
+  /**
+     * متوسط ارتفاع السعر من عرض السعر إلى أمر الشراء بالنسبة المئوية (بعد توحيد الضريبة)
+     * @nullable
+     */
+  avgPriceEscalation?: number | null;
+  /**
+     * درجة ثبات السعر (0-100): لا ارتفاع = 100، وكل 1% ارتفاع يخصم 5 نقاط
+     * @nullable
+     */
+  escalationScore?: number | null;
+  /**
      * سرعة الرد (0-100)
      * @nullable
      */

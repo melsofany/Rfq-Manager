@@ -1,6 +1,7 @@
 import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { standingOf } from "../../shared/supplier-standing";
+import { otifScoreOf } from "../../shared/supplier-otif";
 import {
   db,
   suppliersTable,
@@ -107,6 +108,36 @@ const AUTO_DEACTIVATE_AFTER = 10;
 // Every component score is null when the underlying data is missing — no
 // fabricated defaults. The total is a weighted average over only the available
 // components, and null when there is no data at all.
+// ─── OTIF (on time in full) ────────────────────────────────────────────────
+// Per supplier, over PO lines that carry a promised delivery date and are not
+// cancelled. A line counts when it is due (received at least once, or the
+// promised date has passed) and is "hit" when it is received in full
+// (total_received_qty >= qty) and its last receipt falls on or before the
+// promised date. Lines without a date are excluded from the sample.
+function OTIF_SQL(supplierIds: number[]) {
+  return sql`
+    SELECT poi.supplier_id AS supplier_id,
+           COUNT(*) AS lines,
+           COUNT(*) FILTER (
+             WHERE COALESCE(poi.total_received_qty::numeric, 0) >= poi.qty::numeric
+               AND rc.last_received IS NOT NULL
+               AND rc.last_received <= poi.promised_delivery_date::date
+           ) AS hits
+    FROM purchase_order_items poi
+    LEFT JOIN (
+      SELECT po_item_id, MAX(received_at)::date AS last_received
+      FROM po_item_receipts
+      GROUP BY po_item_id
+    ) rc ON rc.po_item_id = poi.id
+    WHERE poi.supplier_id IN ${supplierIds}
+      AND poi.line_status <> 'cancelled'
+      AND poi.promised_delivery_date IS NOT NULL
+      AND poi.qty::numeric > 0
+      AND (rc.last_received IS NOT NULL OR poi.promised_delivery_date::date < CURRENT_DATE)
+    GROUP BY poi.supplier_id
+  `;
+}
+
 // ─── Pure score derivation ─────────────────────────────────────────────────
 // The ONE place the weighting lives. Both the single-supplier endpoint and the
 // batched list endpoint call this, so they can never report different scores
@@ -123,6 +154,8 @@ function deriveScore(m: {
   rejectedQty: number;
   avgDeliveryDays: number | null;
   avgPriceEscalation: number | null;
+  otifLines: number;
+  otifHits: number;
 }) {
   const responseRate =
     m.totalRfqsReceived > 0
@@ -179,7 +212,12 @@ function deriveScore(m: {
     );
   }
 
+  // OTIF: share of due PO lines delivered in full AND on or before the promised date.
+  // Lines without a promised date are excluded from the sample (otifLines).
+  const otifScore = otifScoreOf(m.otifLines, m.otifHits);
+
   const components = [
+    { score: otifScore, weight: 0.35 },
     { score: escalationScore, weight: 0.2 },
     { score: commitmentScore, weight: 0.25 },
     { score: responseSpeedScore, weight: 0.15 },
@@ -221,6 +259,9 @@ function deriveScore(m: {
     deliveryScore,
     avgPriceEscalation: m.avgPriceEscalation,
     escalationScore,
+    otifScore,
+    otifLines: m.otifLines,
+    otifHits: m.otifHits,
     totalScore,
     rating,
     sampleSize,
@@ -248,6 +289,7 @@ async function computeAllSupplierScores(
     priceRes,
     deliveryRes,
     escalationRes,
+    otifRes,
   ] = await Promise.all([
     db
       .select({ supplierId: sentLogTable.supplierId, cnt: count() })
@@ -332,6 +374,7 @@ async function computeAllSupplierScores(
           AND oi.price::numeric > 0
         GROUP BY poi.supplier_id
       `),
+    db.execute(sql`${OTIF_SQL(supplierIds)}`),
   ]);
 
   const sentBy = new Map<number, number>();
@@ -375,8 +418,13 @@ async function computeAllSupplierScores(
     if (Number.isFinite(e)) escalationBy.set(Number(r.supplier_id), Math.round(e * 10) / 10);
   }
 
+  const otifBy = new Map<number, { lines: number; hits: number }>();
+  for (const r of otifRes.rows as { supplier_id: number; lines: string; hits: string }[])
+    otifBy.set(Number(r.supplier_id), { lines: Number(r.lines), hits: Number(r.hits) });
+
   for (const id of supplierIds) {
     const receipt = receiptBy.get(id) ?? { accepted: 0, rejected: 0 };
+    const otif = otifBy.get(id) ?? { lines: 0, hits: 0 };
     out.set(
       id,
       deriveScore({
@@ -390,6 +438,8 @@ async function computeAllSupplierScores(
         rejectedQty: receipt.rejected,
         avgDeliveryDays: deliveryBy.get(id) ?? null,
         avgPriceEscalation: escalationBy.get(id) ?? null,
+        otifLines: otif.lines,
+        otifHits: otif.hits,
       }),
     );
   }
@@ -510,6 +560,9 @@ async function computeSupplierScore(supplierId: number) {
     ? Math.round(rawEscalation * 10) / 10
     : null;
 
+  const otifResult = await db.execute(sql`${OTIF_SQL([supplierId])}`);
+  const otifRow = otifResult.rows[0] as { lines: string; hits: string } | undefined;
+
   return deriveScore({
     totalRfqsReceived,
     totalOffersSubmitted,
@@ -521,6 +574,8 @@ async function computeSupplierScore(supplierId: number) {
     rejectedQty,
     avgDeliveryDays,
     avgPriceEscalation,
+    otifLines: Number(otifRow?.lines ?? 0),
+    otifHits: Number(otifRow?.hits ?? 0),
   });
 }
 
@@ -919,6 +974,8 @@ router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => 
         acceptedQty: 0,
         rejectedQty: 0,
         avgDeliveryDays: null,
+        otifLines: 0,
+        otifHits: 0,
       })),
   }));
 
