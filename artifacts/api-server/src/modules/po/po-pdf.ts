@@ -99,6 +99,9 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
         autoFirstPage: true,
         compress: false,
+        // Buffered so the footer ("Page X of Y") can be written on every page
+        // once the total is known.
+        bufferPages: true,
       });
 
       const chunks: Buffer[] = [];
@@ -123,6 +126,16 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       const LGREY = "#eef2f7";
 
       const poDate = formatDate(opts.poDate);
+
+      // Page geometry. Rows are measured before they are drawn and a new page is
+      // started explicitly when one does not fit; PDFKit's automatic page breaks
+      // are never relied on (see rfq-pdf.ts for the failure this prevents: a row
+      // split across pages, one page per few lines).
+      const PAGE_H = doc.page.height;
+      const CONT_HDR_H = 34;
+      const BOTTOM_RESERVE = 70;
+      const CONTENT_BOTTOM = PAGE_H - BOTTOM_RESERVE;
+      const FOOTER_Y = PAGE_H - 58;
 
       // ════════════════════════════════════════════════════════════════
       // HEADER
@@ -313,20 +326,49 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       const ROW_PAD_V = 6;
       const FONT_SIZE = 9;
 
-      // Header row
-      doc.rect(M, y, CW, ROW_H).fill(BLUE);
-      colLbls.forEach((lbl, i) => {
+      function drawTableHeader(at: number): number {
+        doc.rect(M, at, CW, ROW_H).fill(BLUE);
+        colLbls.forEach((lbl, i) => {
+          doc
+            .font("Amiri")
+            .fontSize(FONT_SIZE - 0.5)
+            .fillColor("#ffffff")
+            .text(lbl, colX(i) + 2, at + 6, {
+              width: colWArr[i] - 4,
+              align: "center",
+              lineBreak: false,
+            });
+        });
+        return at + ROW_H;
+      }
+
+      // Slim header for pages after the first: keeps the PO number visible.
+      function drawContinuationHeader(): number {
+        doc.rect(0, 0, PAGE_W, CONT_HDR_H).fill(BLUE);
+        doc.rect(0, CONT_HDR_H - 2, PAGE_W, 2).fill(GOLD);
         doc
           .font("Amiri")
-          .fontSize(FONT_SIZE - 0.5)
+          .fontSize(11)
           .fillColor("#ffffff")
-          .text(lbl, colX(i) + 2, y + 6, {
-            width: colWArr[i] - 4,
-            align: "center",
-            lineBreak: false,
-          });
-      });
-      y += ROW_H;
+          .text(rtl("أمر شراء — تابع"), M, 11, { width: CW, align: "right", lineBreak: false });
+        doc
+          .font("Amiri")
+          .fontSize(8)
+          .fillColor("#aaccee")
+          .text(`PO: ${opts.poNo}`, M, 12, { width: CW, align: "left", lineBreak: false });
+        return CONT_HDR_H + 10;
+      }
+
+      // Start a new page when `height` would not fit above the footer band.
+      function ensureSpace(height: number): void {
+        if (y + height <= CONTENT_BOTTOM) return;
+        doc.addPage();
+        y = drawContinuationHeader();
+        y = drawTableHeader(y);
+      }
+
+      ensureSpace(ROW_H * 2); // never start the table at the very bottom
+      y = drawTableHeader(y);
 
       // Data rows
       items.forEach((item, idx) => {
@@ -336,6 +378,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         doc.font("Amiri").fontSize(FONT_SIZE);
         const descTextH = doc.heightOfString(descText, { width: descWidth });
         const rowH = Math.max(ROW_H, descTextH + ROW_PAD_V * 2);
+        ensureSpace(rowH);
 
         const bg = idx % 2 === 0 ? "#ffffff" : "#f4f7fb";
         doc.rect(M, y, CW, rowH).fill(bg).stroke("#d8e2ee");
@@ -448,6 +491,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         highlight: true,
       });
 
+      ensureSpace(totalRows.length * T_ROW_H + 8);
       for (const row of totalRows) {
         const bg = row.highlight ? BLUE : row.bold ? LGREY : "#ffffff";
         const fg = row.highlight ? "#ffffff" : row.bold ? BLUE : "#333333";
@@ -487,6 +531,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       if (opts.receiverName || opts.receiverPhone) {
         y += 8;
         const RH = 46;
+        ensureSpace(RH);
         doc.rect(M, y, CW, RH).fill("#f0f5fa");
         doc.rect(M + CW - 4, y, 4, RH).fill(GOLD);
 
@@ -521,6 +566,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       if (opts.notes?.trim()) {
         y += 10;
         const NH = 46;
+        ensureSpace(NH);
         doc.rect(M, y, CW, NH).fill("#f0f5fa");
         doc.rect(M + CW - 4, y, 4, NH).fill(BLUE);
         doc
@@ -547,46 +593,53 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       // ════════════════════════════════════════════════════════════════
       // FOOTER
       // ════════════════════════════════════════════════════════════════
-      const FY = Math.max(y + 20, doc.page.height - 58);
-      doc.rect(M, FY, CW, 1.5).fill(GOLD);
-
+      // Footer on every page, with the page number.
       const contactParts = [
         opts.employeeName ? rtl(opts.employeeName) : null,
         opts.employeePhone ?? null,
         "INFO@CORTOBA-SUPPLIES.COM",
       ].filter(Boolean);
+      const contact = contactParts.join("   |   ");
 
-      doc
-        .font("Amiri")
-        .fontSize(9.5)
-        .fillColor("#555555")
-        .text(contactParts.join("   |   "), M, FY + 8, {
-          width: CW,
-          align: "center",
-          lineBreak: false,
-        });
-
-      doc
-        .font("Amiri")
-        .fontSize(7.5)
-        .fillColor("#999999")
-        .text(
-          rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح") +
-            "   |   ت: 432-972-587   |   س-ت: 21618",
-          M,
-          FY + 24,
-          { width: CW, align: "center", lineBreak: false },
-        );
-
-      doc
-        .font("Amiri")
-        .fontSize(7)
-        .fillColor("#aaaaaa")
-        .text(rtl("قرطبة للتوريدات") + " — CORTOBA SUPPLIES", M, FY + 38, {
-          width: CW,
-          align: "center",
-          lineBreak: false,
-        });
+      const range = doc.bufferedPageRange();
+      for (let pi = 0; pi < range.count; pi++) {
+        doc.switchToPage(range.start + pi);
+        doc.rect(M, FOOTER_Y, CW, 1.5).fill(GOLD);
+        doc
+          .font("Amiri")
+          .fontSize(9.5)
+          .fillColor("#555555")
+          .text(contact, M, FOOTER_Y + 8, { width: CW, align: "center", lineBreak: false });
+        doc
+          .font("Amiri")
+          .fontSize(7.5)
+          .fillColor("#999999")
+          .text(
+            rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح") +
+              "   |   ت: 432-972-587   |   س-ت: 21618",
+            M,
+            FOOTER_Y + 24,
+            { width: CW, align: "center", lineBreak: false },
+          );
+        doc
+          .font("Amiri")
+          .fontSize(7)
+          .fillColor("#aaaaaa")
+          .text(rtl("قرطبة للتوريدات") + " — CORTOBA SUPPLIES", M, FOOTER_Y + 38, {
+            width: CW / 2,
+            align: "left",
+            lineBreak: false,
+          });
+        doc
+          .font("Amiri")
+          .fontSize(7)
+          .fillColor("#aaaaaa")
+          .text(`Page ${pi + 1} of ${range.count}`, M + CW / 2, FOOTER_Y + 38, {
+            width: CW / 2,
+            align: "right",
+            lineBreak: false,
+          });
+      }
 
       doc.end();
     } catch (err) {
