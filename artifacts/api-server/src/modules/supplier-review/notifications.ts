@@ -205,6 +205,21 @@ export const SUPPLIER_NOTIFY_TEMPLATES: Record<string, string> = {
   [REVIEW_STATUS.SUSPENDED]: "supplier_review_suspended_ar",
 };
 
+/**
+ * The name `communications/service.ts` actually provisions and sends.
+ *
+ * Kept as a lazily-resolved map rather than a top-level import: `service.ts`
+ * imports this module, so a static import here would be a cycle. The map is
+ * built from `reviewTemplateKey()` so the two files cannot disagree about
+ * WHICH template a status uses — the drift that turns a working feature into a
+ * «template does not exist» at send time.
+ */
+export async function resolveReviewTemplate(status: string): Promise<string | null> {
+  const svc = await import("../communications/service");
+  const key = svc.reviewTemplateKey(status);
+  return key ? (svc.SUPPLIER_REVIEW_TEMPLATES[key] ?? null) : null;
+}
+
 /** Is email configured? Host + user + pass are ALL required to authenticate. */
 export function isEmailConfigured(): boolean {
   return Boolean(
@@ -252,7 +267,7 @@ export async function deliverNotification(input: DeliverInput): Promise<NotifyRe
           error: "لا يوجد رقم هاتف للمورد",
         });
       } else {
-        const template = SUPPLIER_NOTIFY_TEMPLATES[status];
+        const template = (await resolveReviewTemplate(status)) ?? SUPPLIER_NOTIFY_TEMPLATES[status];
         const wamid = template
           ? await svc.sendSupplierReviewWhatsApp({
               to: input.phone,

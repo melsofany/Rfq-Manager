@@ -6,6 +6,11 @@ import {
   SUPPLIER_NOTIFY_TEMPLATES,
   statusLabel,
 } from "../modules/supplier-review/notifications";
+import {
+  SUPPLIER_REVIEW_BODIES,
+  SUPPLIER_REVIEW_TEMPLATES,
+  reviewTemplateKey,
+} from "../modules/communications/service";
 import { REVIEW_STATUS } from "../modules/supplier-review/workflow";
 
 /**
@@ -112,9 +117,48 @@ describe("supplier notifications — decision table", () => {
     }
   });
 
+  it("the notify map and the provisioning map name the same templates", () => {
+    // Two maps describing one fact. When they drift, the sender asks Meta for a
+    // template the provisioner never created and the decision silently fails.
+    for (const status of [
+      REVIEW_STATUS.APPROVED,
+      REVIEW_STATUS.REJECTED,
+      REVIEW_STATUS.NEEDS_INFORMATION,
+      REVIEW_STATUS.NEEDS_DOCUMENTS,
+      REVIEW_STATUS.SUSPENDED,
+    ]) {
+      const key = reviewTemplateKey(status);
+      expect(key, `${status} must map to a provisioning key`).not.toBeNull();
+      expect(SUPPLIER_NOTIFY_TEMPLATES[status]).toBe(SUPPLIER_REVIEW_TEMPLATES[key!]);
+    }
+  });
+
   it("labels the status for the reviewer's confirmation line", () => {
     expect(statusLabel(REVIEW_STATUS.APPROVED)).toBeTruthy();
     expect(statusLabel(REVIEW_STATUS.REJECTED)).toBeTruthy();
+  });
+
+  it("no template body starts or ends with a variable", () => {
+    // Meta refuses such a template (error_subcode 2388299: «لا يُسمَح بالمتغيرات
+    // في بداية القالب أو نهايته»). The first cut ended every body on {{4}}, so
+    // all five submissions were refused — and provisioning runs inside a boot
+    // try/catch, so the only trace was a warning. Measured against the live WABA
+    // before writing this guard.
+    for (const [key, body] of Object.entries(SUPPLIER_REVIEW_BODIES) as Array<[string, string]>) {
+      const trimmed = body.trim();
+      expect(trimmed.startsWith("{{"), `${key} must not START with a variable`).toBe(false);
+      expect(trimmed.endsWith("}}"), `${key} must not END with a variable`).toBe(false);
+    }
+  });
+
+  it("every body carries the four parameters the sender fills", () => {
+    // The sender passes exactly four BodyParameters; a body missing one is a
+    // template Meta accepts and a send that fails at runtime.
+    for (const [key, body] of Object.entries(SUPPLIER_REVIEW_BODIES) as Array<[string, string]>) {
+      for (const n of [1, 2, 3, 4]) {
+        expect(body, `${key} must use {{${n}}}`).toContain(`{{${n}}}`);
+      }
+    }
   });
 
   it("reports email as NOT configured when SMTP credentials are absent", () => {
