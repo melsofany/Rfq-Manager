@@ -182,4 +182,83 @@ describe("diagnose reports the account-level verification facts", () => {
     expect(res.body.sendingImpact.authenticationTemplatesInUse).toBe(true);
     expect(res.body.sendingImpact.summary).toContain("AUTHENTICATION");
   });
+  /**
+   * The green tick. Measured live: business verification is `verified`, but the
+   * display name is PENDING_REVIEW and the phone code is EXPIRED, and the badge
+   * is false. The route must report those prerequisites individually — a bare
+   * "no badge" leaves the operator guessing which condition to fix.
+   */
+  it("reports each green-badge prerequisite, not just the verdict", async () => {
+    graphReplies.length = 0;
+    graphReplies.push({
+      match: "fields=display_phone_number",
+      body: {
+        display_phone_number: "+20 11 13331703",
+        verified_name: "Cortoba supplies",
+        name_status: "PENDING_REVIEW",
+        code_verification_status: "EXPIRED",
+        is_official_business_account: false,
+        quality_rating: "GREEN",
+        status: "CONNECTED",
+      },
+    });
+    graphReplies.push({
+      match: "fields=id,name,account_review_status",
+      body: { account_review_status: "APPROVED", business_verification_status: "verified" },
+    });
+    graphReplies.push({ match: "fields=owner_business_info", body: {} });
+    graphReplies.push({ match: "/message_templates", body: { data: [] } });
+
+    const res = await request(app()).get("/api/whatsapp/diagnose");
+    const oa = res.body.officialAccount;
+
+    expect(oa.granted).toBe(false);
+    expect(oa.grantedKnown).toBe(true);
+    expect(oa.summary).toBe("missing_requirements");
+    const byKey = Object.fromEntries(
+      oa.requirements.map((r: { key: string; met: boolean }) => [r.key, r.met]),
+    );
+    // The two that really fail today, named rather than folded into one verdict.
+    expect(byKey.business_verified).toBe(true);
+    expect(byKey.display_name_approved).toBe(false);
+    expect(byKey.phone_code_verified).toBe(false);
+  });
+
+  it("says the badge is Meta's to award once every prerequisite is met", async () => {
+    graphReplies.length = 0;
+    graphReplies.push({
+      match: "fields=display_phone_number",
+      body: {
+        verified_name: "Cortoba supplies",
+        name_status: "APPROVED",
+        code_verification_status: "VERIFIED",
+        is_official_business_account: false,
+        status: "CONNECTED",
+      },
+    });
+    graphReplies.push({
+      match: "fields=id,name,account_review_status",
+      body: { account_review_status: "APPROVED", business_verification_status: "verified" },
+    });
+    graphReplies.push({ match: "fields=owner_business_info", body: {} });
+    graphReplies.push({ match: "/message_templates", body: { data: [] } });
+
+    const res = await request(app()).get("/api/whatsapp/diagnose");
+
+    expect(res.body.officialAccount.summary).toBe("eligible_pending_meta_review");
+    expect(res.body.officialAccount.requirements.every((r: { met: boolean }) => r.met)).toBe(true);
+  });
+
+  it("never reports an unread badge as a definite no", async () => {
+    graphReplies.length = 0;
+    graphReplies.push({ match: "fields=display_phone_number", body: { status: "CONNECTED" } });
+    graphReplies.push({ match: "fields=id,name,account_review_status", body: {} });
+    graphReplies.push({ match: "fields=owner_business_info", body: {} });
+    graphReplies.push({ match: "/message_templates", body: { data: [] } });
+
+    const res = await request(app()).get("/api/whatsapp/diagnose");
+
+    expect(res.body.officialAccount.grantedKnown).toBe(false);
+    expect(res.body.officialAccount.summary).toBe("unknown");
+  });
 });
