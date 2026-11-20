@@ -727,3 +727,97 @@ export async function sendQuotationEmail(opts: {
     transporter.close();
   }
 }
+
+// ─── Supplier review decision ────────────────────────────────────────────────
+
+export interface SupplierReviewEmailOpts {
+  to: string;
+  supplierName: string;
+  subject: string;
+  /** Arabic body already composed by `notificationFor()`. */
+  body: string;
+  reference: string;
+  statusLabel: string;
+}
+
+/**
+ * Email the supplier a review decision.
+ *
+ * The wording is the SAME body the WhatsApp template carries: a supplier may
+ * receive either channel first, and two different messages about the same
+ * decision read as two different decisions.
+ *
+ * Rendered with the Cortoba identity (red/maroon header, gold rule, beige
+ * panel) so a decision arriving by mail looks like the company that printed the
+ * card — not like an unconfigured script.
+ */
+export async function sendSupplierReviewEmail(opts: SupplierReviewEmailOpts): Promise<void> {
+  assertCanSend();
+  const transporter = await createTransporter();
+  const from = senderIdentity();
+
+  const paragraphs = opts.body
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map(
+      (p) =>
+        `<p style="margin:0 0 14px;font-size:15px;line-height:1.9;color:#171416">${escapeHtml(
+          p,
+        ).replace(/\n/g, "<br>")}</p>`,
+    )
+    .join("");
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(opts.subject)}</title></head>
+<body style="margin:0;padding:0;font-family:'Noto Kufi Arabic',Arial,Tahoma,sans-serif;background:#FBF7F7">
+  <div style="max-width:700px;margin:32px auto;background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #F2E9DD">
+    <div style="background:#641D29;padding:22px 32px">
+      <div style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:.5px">CORTOBA FOR SUPPLIES</div>
+      <div style="color:#C7A05B;font-size:13px;margin-top:6px">${COMPANY_NAME_AR} — ${escapeHtml(
+        opts.statusLabel,
+      )}</div>
+    </div>
+    <div style="height:3px;background:#C7A05B"></div>
+    <div style="padding:30px 32px">
+      <div style="background:#F2E9DD;border-right:4px solid #8B2029;padding:12px 16px;margin:0 0 22px;border-radius:4px">
+        <span style="font-size:13px;color:#641D29;font-weight:700">رقم الطلب:</span>
+        <span style="font-size:13px;color:#171416">${escapeHtml(opts.reference)}</span>
+      </div>
+      ${paragraphs}
+    </div>
+    <div style="background:#FBF7F7;border-top:1px solid #D7B77F;padding:18px 32px">
+      <p style="margin:0;font-size:12px;color:#641D29;font-weight:700">${COMPANY_NAME_AR}</p>
+      <p style="margin:4px 0 0;font-size:11px;color:#171416">
+        ${COMPANY_CITY} — ${COMPANY_PHONE} — ${COMPANY_EMAIL}
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  await transporter.sendMail({
+    from: `"${from.name}" <${from.email}>`,
+    replyTo: `"${from.replyToName}" <${from.replyTo}>`,
+    to: opts.to,
+    subject: opts.subject,
+    html,
+    text: opts.body,
+  });
+}
+
+const COMPANY_NAME_AR = "شركة قرطبة للتوريدات";
+const COMPANY_CITY = "مرسي مطروح";
+const COMPANY_PHONE = "432-972-587";
+const COMPANY_EMAIL = "info@cortoba-supplies.com";
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

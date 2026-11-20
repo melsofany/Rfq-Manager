@@ -13,6 +13,7 @@ import {
   ensurePoCancelItemTemplate,
   ensurePayslipTemplate,
   ensureSupplierRegistrationTemplate,
+  ensureSupplierReviewTemplates,
   ensureSupplierRegistrationMismatchTemplate,
   ensureSupplierGreetingTemplate,
   ensureSupplierGreetingPreliminaryTemplate,
@@ -123,6 +124,7 @@ initDb()
       ["supplier_greeting", ensureSupplierGreetingTemplate],
       ["supplier_greeting_preliminary", ensureSupplierGreetingPreliminaryTemplate],
       ["quotation", ensureQuotationTemplate],
+      ["supplier_review", ensureSupplierReviewTemplates],
     ] as const) {
       try {
         await ensure();
