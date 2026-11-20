@@ -44,6 +44,7 @@ import {
 import { createRegistrationRequest } from "../users/supplier-registration";
 import { guardFor } from "../../shared/permissions";
 import { loadFieldOpsSettings } from "../field-ops/service";
+import { isCancelledLine } from "./line-status";
 
 const router = Router();
 router.use("/po", guardFor("/po"));
@@ -751,7 +752,10 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   let mobileTasksCreated = 0;
   if (hasMobileRep && fieldOpsSettings.autoAssignOnDispatch) {
     const allPending = itemRows.filter(
-      (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
+      (r) =>
+        r.item.lineStatus !== "fulfilled" &&
+        r.item.lineStatus !== "rejected" &&
+        !isCancelledLine(r.item.lineStatus),
     );
     for (const r of allPending) {
       const [existing] = await db
@@ -853,7 +857,25 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       continue;
     }
 
-    const pdfItems = items.map((r) => ({
+    // A cancelled line must never be dispatched again: the supplier already
+    // received a cancellation notice for it, and the rep must not be sent to
+    // collect goods that are no longer ordered.
+    const activeItems = items.filter((r) => !isCancelledLine(r.item.lineStatus));
+    if (activeItems.length === 0) {
+      results.push({
+        supplierId,
+        supplierName: supplier.name,
+        emailSent: false,
+        emailError: "كل بنود المورد ملغاة — لم يُرسل أمر الشراء",
+        whatsappSent: false,
+        whatsappError: "كل بنود المورد ملغاة — لم يُرسل أمر الشراء",
+        registrationRequired: false,
+        missingFields: [],
+      });
+      continue;
+    }
+
+    const pdfItems = activeItems.map((r) => ({
       lineItem: r.item.lineItem,
       partNo: r.item.partNo,
       description: r.item.description,
@@ -1010,7 +1032,10 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         if (missingRegistrationFields(supplier).length > 0) continue;
 
         const pending = items.filter(
-          (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
+          (r) =>
+            r.item.lineStatus !== "fulfilled" &&
+            r.item.lineStatus !== "rejected" &&
+            !isCancelledLine(r.item.lineStatus),
         );
         if (pending.length === 0) continue;
 
@@ -1439,7 +1464,7 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
     return;
   }
 
-  const items = await db
+  const itemRows = await db
     .select({ item: purchaseOrderItemsTable })
     .from(purchaseOrderItemsTable)
     .where(
@@ -1448,6 +1473,19 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
         eq(purchaseOrderItemsTable.supplierId, supplierId),
       ),
     );
+
+  // A cancelled line is not an order. Printing it on the PO tells the supplier
+  // to supply goods we already told him (over WhatsApp) we do not want, and he
+  // invoices against it.
+  const items = itemRows.filter((r) => !isCancelledLine(r.item.lineStatus));
+  if (items.length === 0) {
+    res.status(409).json({
+      error: itemRows.length
+        ? "كل بنود هذا المورد على أمر الشراء ملغاة — لا يوجد ما يُطبع"
+        : "لا توجد بنود لهذا المورد على أمر الشراء",
+    });
+    return;
+  }
 
   let pdfBuffer: Buffer;
   try {
@@ -1890,10 +1928,13 @@ router.patch("/po/:id/representative", requireAuth, async (req, res): Promise<vo
       );
       const missing = (
         await db
-          .select({ id: purchaseOrderItemsTable.id })
+          .select({
+            id: purchaseOrderItemsTable.id,
+            lineStatus: purchaseOrderItemsTable.lineStatus,
+          })
           .from(purchaseOrderItemsTable)
           .where(eq(purchaseOrderItemsTable.poId, id))
-      ).filter((r) => !linked.has(r.id));
+      ).filter((r) => !linked.has(r.id) && !isCancelledLine(r.lineStatus));
 
       if (missing.length > 0) {
         await db.insert(workOrderAssignmentsTable).values(

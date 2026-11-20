@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
+import { activePoLines } from "./line-status";
 
 const VAT_RATE = 0.14; // Egyptian standard VAT 14%
 
@@ -23,6 +24,7 @@ export interface PoPdfOptions {
     uom?: string | null;
     unitPrice?: string | number | null;
     taxIncluded?: boolean;
+    lineStatus?: string | null;
   }>;
 }
 
@@ -62,17 +64,30 @@ function fmtMoney(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// The bundle resolves `assets/` beside the entry module; running from source
+// the module sits two levels deeper, so fall back to `src/assets`. Without this
+// a source run (tests, probes) throws ENOENT instead of rendering.
+function assetPath(rel: string): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const bundled = resolve(here, rel);
+  if (existsSync(bundled)) return bundled;
+  return resolve(here, "../..", rel);
+}
+
 function getFontPath(): string {
-  const dir = dirname(fileURLToPath(import.meta.url));
-  return resolve(dir, "assets/fonts/Amiri-Regular.ttf");
+  return assetPath("assets/fonts/Amiri-Regular.ttf");
 }
 
 function getLogoPath(): string {
-  const dir = dirname(fileURLToPath(import.meta.url));
-  return resolve(dir, "assets/logo.png");
+  return assetPath("assets/logo.png");
 }
 
 export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
+  // A cancelled line is not part of the order. Filtering HERE (not only at the
+  // call sites) means every current and future caller prints the same document:
+  // the row loop and the totals loop both read this one list, so a line can
+  // never appear in the table but be missing from the total (or vice versa).
+  const items = activePoLines(opts.items);
   return new Promise((resolvePromise, reject) => {
     try {
       const fontPath = getFontPath();
@@ -314,7 +329,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       y += ROW_H;
 
       // Data rows
-      opts.items.forEach((item, idx) => {
+      items.forEach((item, idx) => {
         const descText = rtl(item.description);
         const descWidth = colWArr[2] - 6;
 
@@ -399,7 +414,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       let grandTotal = 0;
       let totalVat = 0;
 
-      for (const item of opts.items) {
+      for (const item of items) {
         const qty = parseFloat(String(item.qty ?? 0)) || 0;
         const price = parseFloat(String(item.unitPrice ?? 0)) || 0;
         const lineTotal = qty * price;
