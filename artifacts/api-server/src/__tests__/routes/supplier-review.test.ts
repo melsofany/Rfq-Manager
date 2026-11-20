@@ -363,7 +363,6 @@ describe("POST /api/supplier-review/applications/:id/approve", () => {
   it("records the approval with the supplier it created", async () => {
     // The decision an auditor asks about must name WHAT it produced.
     state.application = application({ status: "verified" });
-    state.tradeCategories = [];
     await request(app).post("/api/supplier-review/applications/42/approve");
     const audit = state.queries.filter((q) => /INSERT INTO supplier_application_events/.test(q));
     expect(audit.length).toBeGreaterThan(0);
