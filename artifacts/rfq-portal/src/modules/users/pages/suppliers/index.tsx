@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import ImportSuppliersTab from "./import-tab";
 import { CategoriesTab } from "./CategoriesTab";
 import { SuppliersListTab } from "./list/SuppliersListTab";
-import { SupplierReviewTab } from "./ReviewTab";
+import { SupplierReviewCenter } from "./review-center";
 
 type Tab = "list" | "review" | "import" | "categories";
 
@@ -100,7 +100,7 @@ export default function SuppliersPage() {
       {activeTab === "list" && (
         <SuppliersListTab onOpenCategories={() => setActiveTab("categories")} />
       )}
-      {activeTab === "review" && <SupplierReviewTab />}
+      {activeTab === "review" && <SupplierReviewCenter />}
       {activeTab === "import" && <ImportSuppliersTab />}
       {activeTab === "categories" && <CategoriesTab canManage={canManage} />}
     </Layout>

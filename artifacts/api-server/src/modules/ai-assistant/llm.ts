@@ -960,6 +960,13 @@ export async function extractDocumentText(
   mimeType: string,
   baseUrl?: string | null,
   model?: string | null,
+  /**
+   * Overrides the generic "describe this file" instruction. The supplier
+   * review centre needs a STRUCTURED reply (JSON with named fields) rather
+   * than prose, and re-implementing the Gemini inline_data call to get it
+   * would duplicate the retry/fallback chain that lives here.
+   */
+  prompt?: string | null,
 ): Promise<string | null> {
   if (!AI_API_KEY) return null;
   // Documents are read by GEMINI for the same reason as voice notes: its native
@@ -967,7 +974,7 @@ export async function extractDocumentText(
   // API rejects PDFs. The chat provider is irrelevant here, so the media endpoint
   // is fixed to Gemini rather than derived from `baseUrl`.
   if (!isGeminiEndpoint(GEMINI_BASE_URL)) return null;
-  return extractWithGemini(buffer, mimeType, DOCUMENT_PROMPT, GEMINI_BASE_URL, model);
+  return extractWithGemini(buffer, mimeType, prompt || DOCUMENT_PROMPT, GEMINI_BASE_URL, model);
 }
 
 /** MIME types Gemini reads as inline document data. */

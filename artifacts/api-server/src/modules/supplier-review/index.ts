@@ -23,8 +23,24 @@ import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { saveSupplierCategoryLinks } from "../../shared/supplier-category-links";
 import { saveSupplierItemCategoryLinks } from "../../shared/supplier-item-category-links";
+import reviewRoutes from "./review-routes";
+import {
+  OPEN_STATUSES,
+  REVIEW_STATUS,
+  REVIEW_STATUS_LABELS,
+  canPerform,
+  normalizeStatus,
+  reviewRoleOf,
+  statusAliases,
+} from "./workflow";
+import { recordReviewEvent, REVIEW_EVENT } from "./audit";
 
 const router = Router();
+
+// Dashboard, workflow, OCR comparison, information requests, category verdicts,
+// audit trail and reports. Mounted BEFORE the :id routes below so a literal
+// path such as `/applications/:id/audit` cannot be shadowed by a broader match.
+router.use(reviewRoutes);
 
 /** The portal's application lifecycle — mirrors its own state machine. */
 type PortalStatus = "draft" | "submitted" | "under_review" | "needs_info" | "approved" | "rejected";
@@ -55,6 +71,19 @@ interface PortalApplicationRow {
   verification: Record<string, string> | null;
   supplier_id: number | null;
   created_at: Date;
+  // Review-centre columns (added by the migration in init-db.ts).
+  assigned_employee_id: number | null;
+  assigned_at: Date | null;
+  submitted_at: Date | null;
+  first_reviewed_at: Date | null;
+  decided_at: Date | null;
+  decided_by: number | null;
+  due_at: Date | null;
+  priority: string | null;
+  review_notes: string | null;
+  decision_reason: string | null;
+  category_verification: Record<string, string> | null;
+  info_request: Record<string, unknown> | null;
 }
 
 const SLOT_LABELS: Record<string, string> = {
@@ -95,6 +124,18 @@ function serialize(row: PortalApplicationRow) {
     verification: row.verification ?? {},
     supplierId: row.supplier_id,
     createdAt: row.created_at.toISOString(),
+    assignedEmployeeId: row.assigned_employee_id ?? null,
+    assignedAt: row.assigned_at ? row.assigned_at.toISOString() : null,
+    submittedAt: row.submitted_at ? row.submitted_at.toISOString() : null,
+    firstReviewedAt: row.first_reviewed_at ? row.first_reviewed_at.toISOString() : null,
+    decidedAt: row.decided_at ? row.decided_at.toISOString() : null,
+    decidedBy: row.decided_by ?? null,
+    dueAt: row.due_at ? row.due_at.toISOString() : null,
+    priority: row.priority ?? null,
+    reviewNotes: row.review_notes ?? null,
+    decisionReason: row.decision_reason ?? null,
+    categoryVerification: row.category_verification ?? {},
+    infoRequest: row.info_request ?? null,
   };
 }
 
@@ -102,7 +143,10 @@ const APPLICATION_COLUMNS = `id, reference, status, name, contact_person, email,
   commercial_register, tax_registration, bank_name, bank_account_holder,
   bank_account_number, iban, swift_code, bank_branch, trade_categories,
   item_category_ids, other_trade_category, supplied_items, brand_names,
-  notes, verification, supplier_id, created_at`;
+  notes, verification, supplier_id, created_at,
+  assigned_employee_id, assigned_at, submitted_at, first_reviewed_at, decided_at,
+  decided_by, due_at, priority, review_notes, decision_reason,
+  category_verification, info_request`;
 
 /**
  * GET /supplier-review/applications
@@ -114,12 +158,27 @@ const APPLICATION_COLUMNS = `id, reference, status, name, contact_person, email,
 router.get("/supplier-review/applications", requireAuth, async (req, res): Promise<void> => {
   const status = String(req.query.status ?? "").trim();
   const q = String(req.query.q ?? "").trim();
+  const assigned = Number(req.query.employeeId);
+  const late = String(req.query.late ?? "") === "1";
+  const slaDays = Math.max(1, Number(req.query.slaDays ?? 5) || 5);
 
   const where: string[] = [];
   const params: unknown[] = [];
   if (status) {
-    params.push(status);
-    where.push(`status = $${params.length}`);
+    // The filter speaks the REVIEW vocabulary; the table may still hold the
+    // portal's own names (`submitted`, `needs_info`). Matching only the literal
+    // value would return nothing for a queue that visibly has rows in it.
+    params.push(statusAliases(status));
+    where.push(`status = ANY($${params.length}::text[])`);
+  }
+  if (Number.isInteger(assigned) && assigned > 0) {
+    params.push(assigned);
+    where.push(`assigned_employee_id = $${params.length}`);
+  }
+  if (late) {
+    params.push(slaDays);
+    where.push(`status NOT IN ('approved','rejected')
+      AND COALESCE(due_at, COALESCE(submitted_at, created_at) + ($${params.length}::int || ' days')::interval) < now()`);
   }
   if (q) {
     params.push(`%${q}%`);
@@ -141,8 +200,41 @@ router.get("/supplier-review/applications", requireAuth, async (req, res): Promi
     `SELECT status, count(*)::text AS count FROM supplier_applications GROUP BY status`,
   );
 
+  // Resolve assignee names in ONE query — an N+1 over a 200-row queue is a
+  // page-load regression, and the reviewer sees the owner on every row.
+  const assigneeIds = [
+    ...new Set(
+      rows.map((r) => r.assigned_employee_id).filter((v): v is number => typeof v === "number"),
+    ),
+  ];
+  const assignees = assigneeIds.length
+    ? await pool.query<{ id: number; name: string }>(
+        `SELECT id, name FROM employees WHERE id = ANY($1::int[])`,
+        [assigneeIds],
+      )
+    : { rows: [] as Array<{ id: number; name: string }> };
+  const nameOf = new Map(assignees.rows.map((e) => [e.id, e.name]));
+
+  const now = Date.now();
   res.json({
-    applications: rows.map(serialize),
+    applications: rows.map((row) => {
+      const statusKey = normalizeStatus(row.status);
+      const anchor = row.submitted_at ?? row.created_at;
+      const dueMs = row.due_at
+        ? new Date(row.due_at).getTime()
+        : anchor
+          ? new Date(anchor).getTime() + slaDays * 86_400_000
+          : null;
+      const isOpen = OPEN_STATUSES.includes(statusKey);
+      return {
+        ...serialize(row),
+        statusKey,
+        statusLabel: REVIEW_STATUS_LABELS[statusKey] ?? row.status,
+        assignedEmployeeName:
+          row.assigned_employee_id != null ? (nameOf.get(row.assigned_employee_id) ?? null) : null,
+        isLate: isOpen && dueMs !== null && now > dueMs,
+      };
+    }),
     counts: Object.fromEntries(counts.rows.map((c) => [c.status, Number(c.count)])),
   });
 });
@@ -341,6 +433,45 @@ router.post(
       return;
     }
 
+    // ── The review gate ────────────────────────────────────────────────────
+    // Approval is a decision on a REVIEWED file. Reaching it from `submitted`
+    // would make the whole verification step optional, and the audit trail
+    // would then show a supplier created without anyone confirming a document.
+    const currentStatus = normalizeStatus(row.status);
+    if (currentStatus !== REVIEW_STATUS.VERIFIED) {
+      res.status(409).json({
+        error: `لا يمكن الاعتماد من حالة «${REVIEW_STATUS_LABELS[currentStatus]}» — انقل الطلب إلى «تم الفحص» أولًا`,
+        from: currentStatus,
+        requiredStatus: REVIEW_STATUS.VERIFIED,
+      });
+      return;
+    }
+
+    // Permission, not job title: an explicit grant of the approve key is what
+    // authorises the decision.
+    const session = (req as unknown as { session?: Record<string, unknown> }).session ?? {};
+    let permissions: Record<string, boolean> = {};
+    if (typeof session.employeeId === "number") {
+      const emp = await pool
+        .query<{ permissions: Record<string, boolean> | null }>(
+          `SELECT permissions FROM employees WHERE id = $1`,
+          [session.employeeId],
+        )
+        .catch(() => ({ rows: [] as Array<{ permissions: Record<string, boolean> | null }> }));
+      permissions = emp.rows[0]?.permissions ?? {};
+    }
+    const approverRole = reviewRoleOf(
+      typeof session.role === "string" ? session.role : "",
+      permissions,
+    );
+    if (!canPerform(approverRole, "approve")) {
+      res.status(403).json({
+        error: "صلاحيتك لا تسمح باعتماد الطلبات — الاعتماد يحتاج صلاحية «اعتماد»",
+        yourRole: approverRole,
+      });
+      return;
+    }
+
     // The trades the supplier is filed under. The sentinel is never a category:
     // filing under «__other__» would create a real catalogue row with that name.
     const trades = (row.trade_categories ?? []).filter((c) => c && c !== OTHER_SENTINEL);
@@ -434,6 +565,21 @@ router.post(
     } catch (err) {
       logger.warn({ err, supplierId }, "item category links failed after approval");
     }
+
+    // The approval is the decision an auditor asks about, so it is recorded with
+    // the supplier it created and the categories it filed him under.
+    await recordReviewEvent({
+      applicationId: id,
+      event: REVIEW_EVENT.APPROVED,
+      fromStatus: currentStatus,
+      toStatus: REVIEW_STATUS.APPROVED,
+      note: `أُنشئ المورد #${supplierId} تحت ${categories.length} تصنيف`,
+      actor: {
+        employeeId: typeof session.employeeId === "number" ? session.employeeId : null,
+        employeeName: typeof session.employeeName === "string" ? session.employeeName : null,
+      },
+      metadata: { supplierId, categories, itemCategoryIds: row.item_category_ids ?? [] },
+    });
 
     res.json({
       ok: true,

@@ -19,6 +19,8 @@
  * a short hint about the likely tool.
  */
 
+import { normalizeArabic } from "../../shared/arabic-text";
+
 /** What the question is about. Drives the prompt hint and the tool budget. */
 export type QueryIntent =
   | "document_lookup"
@@ -82,16 +84,7 @@ export const DEEP_MAX_ROUNDS = 8;
  * «تسعير» matches «تسعير» regardless of hamza/ya spelling. Without this the
  * router silently misses questions and sends everything down the deep path.
  */
-export function normalizeArabic(input: string): string {
-  return (input || "")
-    .replace(/[\u0617-\u061A\u064B-\u0652\u0670\u0640]/g, "") // harakat + tatweel
-    .replace(/[إأآٱا]/g, "ا")
-    .replace(/[ىي]/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/[ؤئء]/g, "ء")
-    .toLowerCase()
-    .trim();
-}
+export { normalizeArabic };
 
 // ─── Matchers ───────────────────────────────────────────────────────────────
 
