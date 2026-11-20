@@ -79,6 +79,9 @@ vi.mock("@workspace/db", () => {
           return { rows: state.document ? [state.document] : state.documents, rowCount: 1 };
         }
         if (/FROM item_categories/.test(sql)) return { rows: state.itemCategories, rowCount: 0 };
+        if (/SELECT permissions FROM employees/.test(sql)) {
+          return { rows: [{ permissions: null }], rowCount: 1 };
+        }
         if (/JOIN supplier_categories c/.test(sql)) return { rows: state.nonLeaf, rowCount: 0 };
         if (/UPDATE supplier_applications/.test(sql)) {
           return { rows: [], rowCount: state.application ? 1 : 0, params };
@@ -108,12 +111,28 @@ vi.mock("../../shared/logger", () => ({
 
 const app = express();
 app.use(express.json());
+// The approve gate reads the session (role + employeeId) to resolve the review
+// role, so the test app supplies one — an unauthenticated-looking request would
+// be refused by the permission check rather than exercised.
+app.use((req: any, _res, next) => {
+  // `x-test-role` lets a case act as a DIFFERENT job role without a second app —
+  // the permission gate is the thing under test, so the role must be steerable.
+  req.session = {
+    employeeId: 7,
+    employeeName: "مدير المشتريات",
+    role: (req.headers["x-test-role"] as string) || "manager",
+  };
+  next();
+});
 app.use("/api", supplierReviewRouter);
 
 const application = (over: Record<string, unknown> = {}) => ({
   id: 42,
   reference: "APP-2026-000042",
-  status: "submitted",
+  // `verified`: the approval gate refuses an unreviewed application, and that
+  // rule is the point of the two-role split — the fixture reflects a file that
+  // HAS been reviewed rather than bypassing the gate.
+  status: "verified",
   name: "شركة النور للتوريدات",
   contact_person: "أحمد محمد",
   email: "info@alnoor.com",
@@ -312,6 +331,41 @@ describe("POST /api/supplier-review/applications/:id/approve", () => {
     await request(app).post("/api/supplier-review/applications/42/approve");
     // A supplier created without the stamp would be approved twice on a retry.
     expect(state.txStatements).toEqual(["update"]);
+  });
+
+  it("refuses to approve an application that has NOT been reviewed", async () => {
+    // The two-role split is only real if approval is unreachable from the queue.
+    // Without this, a reviewer's verification step is optional and the audit
+    // trail shows a supplier created with no document ever confirmed.
+    state.application = application({ status: "submitted" });
+    const res = await request(app).post("/api/supplier-review/applications/42/approve");
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("تم الفحص");
+    expect(res.body.requiredStatus).toBe("verified");
+    // Nothing was created — a refused approval must not leave a supplier behind.
+    expect(state.insertedSupplier).toBeNull();
+    expect(state.txStatements).toEqual([]);
+  });
+
+  it("refuses to approve when the user has no approve permission", async () => {
+    // A purchasing employee is a reviewer, not an approver.
+    state.application = application({ status: "verified" });
+    const res = await request(app)
+      .post("/api/supplier-review/applications/42/approve")
+      .set("x-test-role", "purchasing");
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("صلاحيتك");
+    expect(state.insertedSupplier).toBeNull();
+  });
+
+  it("records the approval with the supplier it created", async () => {
+    // The decision an auditor asks about must name WHAT it produced.
+    state.application = application({ status: "verified" });
+    await request(app).post("/api/supplier-review/applications/42/approve");
+    const audit = state.queries.filter((q) => /INSERT INTO supplier_application_events/.test(q));
+    expect(audit.length).toBeGreaterThan(0);
   });
 });
 

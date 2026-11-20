@@ -3731,6 +3731,86 @@ export async function initDb(): Promise<void> {
     logger.error({ err }, "init-db: date repair FAILED — date queries will keep throwing");
   }
 
+  // ── Supplier review centre ──────────────────────────────────────────────
+  // The portal owns `supplier_applications`; we do NOT create it. These ALTERs
+  // only run when it exists, and each is its OWN statement: `client.query` with
+  // several statements shares one implicit transaction, so a sibling failure
+  // would silently roll the whole block back.
+  try {
+    const exists = await client.query(
+      `SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'supplier_applications'`,
+    );
+    if (exists.rowCount && exists.rowCount > 0) {
+      const alters = [
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS assigned_employee_id INTEGER`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS first_reviewed_at TIMESTAMPTZ`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS decided_by INTEGER`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS priority TEXT NOT NULL DEFAULT 'normal'`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS info_request JSONB`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS category_verification JSONB`,
+        `ALTER TABLE supplier_applications ADD COLUMN IF NOT EXISTS ocr_results JSONB`,
+      ];
+      for (const stmt of alters) {
+        try {
+          await client.query(stmt);
+        } catch (err) {
+          logger.error({ err, stmt }, "init-db: supplier review migration FAILED");
+        }
+      }
+      // The audit trail gains the structured context the console renders.
+      try {
+        await client.query(
+          `ALTER TABLE supplier_application_events ADD COLUMN IF NOT EXISTS metadata JSONB`,
+        );
+      } catch (err) {
+        logger.error({ err }, "init-db: audit metadata column FAILED");
+      }
+      // One row per uploaded file version, so a re-upload keeps its history.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS supplier_application_document_versions (
+          id SERIAL PRIMARY KEY,
+          document_id INTEGER NOT NULL,
+          application_id INTEGER NOT NULL,
+          slot TEXT,
+          original_name TEXT,
+          mime_type TEXT,
+          size_bytes INTEGER,
+          content TEXT,
+          replaced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          replaced_by INTEGER
+        )
+      `);
+      await client.query(
+        `CREATE INDEX IF NOT EXISTS supplier_doc_versions_doc_idx
+           ON supplier_application_document_versions (document_id)`,
+      );
+      // The reviewer's verdict per category/item — the «التحقق من النشاط» answer.
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS supplier_application_category_verdicts (
+          id SERIAL PRIMARY KEY,
+          application_id INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          ref_id INTEGER,
+          name TEXT NOT NULL,
+          verdict TEXT NOT NULL,
+          note TEXT,
+          employee_id INTEGER,
+          employee_name TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (application_id, kind, name)
+        )
+      `);
+    }
+  } catch (err) {
+    logger.error({ err }, "init-db: supplier review migration block FAILED");
+  }
+
   // A «يحتاج للمراجعة» placeholder is a working state, so one that holds nobody
   // is removed at boot — the case a crash between creating it and re-filing its
   // suppliers would otherwise leave behind. Best-effort: a boot must not fail
