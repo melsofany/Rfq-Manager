@@ -8,11 +8,13 @@ vi.mock("../../middlewares/auth", () => ({
   requireAdmin: (_req: any, _res: any, next: any) => next(),
 }));
 
+const sendPoEmailMock = vi.fn().mockResolvedValue({ ok: true });
+
 vi.mock("../../shared/email", () => ({
   verifyEmailConnection: vi.fn().mockResolvedValue({ ok: true }),
   sendRfqEmail: vi.fn().mockResolvedValue({ ok: true }),
   sendOfferConfirmation: vi.fn().mockResolvedValue({ ok: true }),
-  sendPoEmail: vi.fn().mockResolvedValue({ ok: true }),
+  sendPoEmail: sendPoEmailMock,
 }));
 
 vi.mock("../../shared/google-sheets", () => ({
@@ -409,6 +411,149 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
     const woaInserts = insertCalls.filter((c) => c.table === "woa");
     expect(woaInserts).toHaveLength(1);
     expect(woaInserts[0].vals).toMatchObject({ poItemId: 31 });
+  });
+
+  it("never dispatches a cancelled line to the supplier or the rep", async () => {
+    // Reported live on PO 93: a per-item cancellation left the line on the
+    // document and in the dispatch payload, so a re-dispatch re-ordered goods
+    // the supplier had already been told were cancelled.
+    const supplier = {
+      id: 7,
+      name: "Acme",
+      phone: "201111111111",
+      email: "acme@example.com",
+      contactPerson: "Hassan",
+      address: "Cairo",
+      commercialRegister: "12345",
+      taxRegistration: "67890",
+      bankName: "NBE",
+      bankAccountHolder: "Acme Co",
+      bankAccountNumber: "1234567890",
+      iban: "EG380019000500000000263180002",
+      swiftCode: "NBEGEGCX",
+      bankBranch: "Cairo",
+    };
+    selectQueue = [
+      [
+        {
+          po: {
+            id: 1,
+            internalPoNo: "PO-2026-000079",
+            createdAt: new Date("2026-11-02"),
+            receiverName: "Ahmed",
+            receiverPhone: "201000000000",
+            notes: null,
+            status: "sent",
+            employeeId: null,
+          },
+          employeeName: null,
+          employeePhone: null,
+        },
+      ],
+      [
+        {
+          item: {
+            id: 40,
+            lineItem: "1",
+            description: "Live line",
+            qty: "10",
+            uom: "Each",
+            lineStatus: "pending",
+            supplierId: 7,
+          },
+          supplier,
+        },
+        {
+          item: {
+            id: 41,
+            lineItem: "2",
+            description: "Cancelled line",
+            qty: "10",
+            uom: "Each",
+            lineStatus: "cancelled",
+            supplierId: 7,
+          },
+          supplier,
+        },
+      ],
+    ];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    // The supplier receives ONE order, listing only the live line.
+    expect(sendPoWhatsAppMock).toHaveBeenCalledTimes(1);
+    const sent = sendPoWhatsAppMock.mock.calls[0][0];
+    expect(sent.items).toHaveLength(1);
+    expect(sent.items[0]).toMatchObject({ description: "Live line" });
+    // The rep is asked to collect only the live line.
+    const repCall = sendRepDispatchMock.mock.calls[0][0];
+    expect(repCall.items).toHaveLength(1);
+    expect(repCall.items[0]).toMatchObject({ description: "Live line" });
+    // And no receipt task is created for the cancelled line.
+    const woaInserts = insertCalls.filter((c) => c.table === "woa");
+    expect(woaInserts.map((c) => c.vals.poItemId)).toEqual([40]);
+  });
+
+  it("does not dispatch a supplier whose every line is cancelled", async () => {
+    selectQueue = [
+      [
+        {
+          po: {
+            id: 1,
+            internalPoNo: "PO-2026-000079",
+            createdAt: new Date("2026-11-02"),
+            receiverName: null,
+            receiverPhone: null,
+            notes: null,
+            status: "sent",
+            employeeId: null,
+          },
+          employeeName: null,
+          employeePhone: null,
+        },
+      ],
+      [
+        {
+          item: {
+            id: 41,
+            lineItem: "2",
+            description: "Cancelled line",
+            qty: "10",
+            uom: "Each",
+            lineStatus: "cancelled",
+            supplierId: 7,
+          },
+          supplier: {
+            id: 7,
+            name: "Acme",
+            phone: "201111111111",
+            email: "acme@example.com",
+            contactPerson: null,
+            address: null,
+            commercialRegister: "12345",
+            taxRegistration: "67890",
+            bankName: "NBE",
+            bankAccountHolder: "Acme Co",
+            bankAccountNumber: "1234567890",
+            iban: "EG380019000500000000263180002",
+            swiftCode: "NBEGEGCX",
+            bankBranch: "Cairo",
+          },
+        },
+      ],
+    ];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    expect(sendPoWhatsAppMock).not.toHaveBeenCalled();
+    expect(sendPoEmailMock).not.toHaveBeenCalled();
+    expect(res.body.results[0].emailSent).toBe(false);
+    expect(res.body.results[0].whatsappSent).toBe(false);
+    expect(res.body.results[0].emailError).toMatch(/ملغاة/);
+    // A PO that delivered nothing must not be marked "sent".
+    expect(res.body.poDelivered).toBe(false);
   });
 
   it("returns 404 when the PO does not exist", async () => {

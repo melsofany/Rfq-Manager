@@ -37,15 +37,7 @@ function Stat({ title, views, visitors }: { title: string; views: number; visito
   );
 }
 
-function Table({
-  rows,
-  label,
-  keyName,
-}: {
-  rows: GroupRow[];
-  label: string;
-  keyName: string;
-}) {
+function Table({ rows, label, keyName }: { rows: GroupRow[]; label: string; keyName: string }) {
   const max = Math.max(1, ...rows.map((r) => r.views));
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -100,7 +92,10 @@ function Trend({ rows, title }: { rows: TrendRow[]; title: string }) {
               {r.period.slice(0, 10)}
             </span>
             <div className="h-3 rounded bg-muted">
-              <div className="h-3 rounded bg-primary" style={{ width: `${(r.views / max) * 100}%` }} />
+              <div
+                className="h-3 rounded bg-primary"
+                style={{ width: `${(r.views / max) * 100}%` }}
+              />
             </div>
             <span className="text-end whitespace-nowrap">
               {r.views.toLocaleString("ar-EG")} / {r.visitors.toLocaleString("ar-EG")}
@@ -141,8 +136,14 @@ export default function WebsiteAnalyticsPage() {
         {notConfigured ? (
           <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">
             التحليلات غير مفعلة بعد. لازم يتضاف على السيرفر متغيرات
-            <span dir="ltr" className="mx-1">POSTHOG_PERSONAL_API_KEY</span> و
-            <span dir="ltr" className="mx-1">POSTHOG_PROJECT_ID</span>.
+            <span dir="ltr" className="mx-1">
+              POSTHOG_PERSONAL_API_KEY
+            </span>{" "}
+            و
+            <span dir="ltr" className="mx-1">
+              POSTHOG_PROJECT_ID
+            </span>
+            .
           </div>
         ) : (
           <>
