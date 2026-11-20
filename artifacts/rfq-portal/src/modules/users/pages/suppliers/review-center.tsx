@@ -31,6 +31,8 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Printer,
+  Columns2,
   UserCheck,
   XCircle,
 } from "lucide-react";
@@ -63,6 +65,7 @@ import {
   KpiTile,
   StatusBadge,
 } from "./review-ui";
+import { SideBySideReview } from "./side-by-side-review";
 
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "", label: "الكل" },
@@ -326,7 +329,18 @@ function ApplicationWorkspace({
     setMessage(null);
     try {
       const r = await reviewApi.transition(app.id, { to, ...body });
-      setMessage({ tone: "ok", text: `تم نقل الطلب إلى «${r.label}»` });
+      // Report what really happened to the supplier. «تم النقل» alone would let
+      // a reviewer believe the supplier was told when the send may have failed.
+      const n = (r as { notification?: { delivered: boolean; summary: string } | null })
+        .notification;
+      if (n) {
+        setMessage({
+          tone: n.delivered ? "ok" : "err",
+          text: `تم نقل الطلب إلى «${r.label}» — ${n.summary}`,
+        });
+      } else {
+        setMessage({ tone: "ok", text: `تم نقل الطلب إلى «${r.label}»` });
+      }
       await refreshSide();
       onChanged();
     } catch (err) {
@@ -420,6 +434,16 @@ function ApplicationWorkspace({
               )}
               اقرأ المستندات وقارن
             </Button>
+            <a
+              href={reviewApi.fileUrl(app.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="ملف المورد للطباعة — غلاف + البيانات + المرفقات"
+            >
+              <Button size="sm" variant="outline">
+                <Printer className="ml-1 h-3.5 w-3.5" /> ملف المورد (PDF)
+              </Button>
+            </a>
             {app.supplierId ? (
               <Badge className="bg-emerald-100 text-emerald-700">
                 <BadgeCheck className="ml-1 h-3 w-3" /> مورد #{app.supplierId}
@@ -462,6 +486,9 @@ function ApplicationWorkspace({
             <TabsTrigger value="compare" className="gap-1 text-[12px]">
               <Sparkles className="h-3.5 w-3.5" /> المقارنة
             </TabsTrigger>
+            <TabsTrigger value="side" className="gap-1 text-[12px]">
+              <Columns2 className="h-3.5 w-3.5" /> مراجعة مقسومة
+            </TabsTrigger>
             <TabsTrigger value="activity" className="gap-1 text-[12px]">
               <History className="h-3.5 w-3.5" /> سجل الإجراءات ({audit.length})
             </TabsTrigger>
@@ -497,6 +524,41 @@ function ApplicationWorkspace({
                 }
               }}
             />
+          </TabsContent>
+          <TabsContent value="side" className="mt-0">
+            {reading ? (
+              <SideBySideReview
+                applicationId={app.id}
+                reading={reading}
+                documents={documents}
+                busy={busy}
+                onVerdict={async (row, verdict) => {
+                  setBusy(true);
+                  try {
+                    await reviewApi.saveCategoryVerdict(app.id, {
+                      kind: "trade",
+                      name: row.label,
+                      verdict,
+                      refId: row.sourceDocumentId,
+                    });
+                    await refreshSide();
+                  } catch (err) {
+                    setMessage({
+                      tone: "err",
+                      text: err instanceof Error ? err.message : "تعذّر حفظ الحكم",
+                    });
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            ) : (
+              <EmptyState
+                title="لم تُقرأ المستندات بعد"
+                hint="اضغط «اقرأ المستندات وقارن» أولًا، ثم افتح هذه المراجعة لعرض البيانات والمستند جنبًا إلى جنب."
+                icon={FileSearch}
+              />
+            )}
           </TabsContent>
           <TabsContent value="activity" className="mt-0">
             <AuditPane events={audit} />

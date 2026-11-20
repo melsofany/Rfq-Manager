@@ -252,6 +252,8 @@ export const reviewApi = {
 
   documentUrl: (applicationId: number, documentId: number) =>
     `/api/supplier-review/applications/${applicationId}/documents/${documentId}`,
+  /** The printable supplier file (cover + data + every attachment). */
+  fileUrl: (applicationId: number) => `/api/supplier-review/applications/${applicationId}/file.pdf`,
 };
 
 /** The status colour per stage — one map, used by the badge and the filters. */

@@ -232,6 +232,9 @@ importers:
       imapflow:
         specifier: ^2.0.5
         version: 2.0.5
+      jpeg-js:
+        specifier: ^0.4.4
+        version: 0.4.4
       mailparser:
         specifier: ^3.9.28
         version: 3.9.28
@@ -718,6 +721,7 @@ packages:
   '@chatscope/chat-ui-kit-react@2.1.1':
     resolution: {integrity: sha512-rCtE9abdmAbBDkAAUYBC1TDTBMZHquqFIZhADptAfHcJ8z8W3XH/z/ZuwBSJXtzi6h1mwCNc3tBmm1A2NLGhNg==}
     peerDependencies:
+      prop-types: ^15.7.2
       react: ^16.12.0 || ^17.0.0 || ^18.2.0 || ^19.0.0
       react-dom: ^16.12.0 || ^17.0.0 || ^18.2.0 || ^19.0.0
 
@@ -3153,6 +3157,9 @@ packages:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
     engines: {node: '>=10'}
 
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
+
   js-md5@0.8.3:
     resolution: {integrity: sha512-qR0HB5uP6wCuRMrWPTrkMaev7MJZwJuuw4fnwAzRgP4J4/F8RwtodOKpGp4XpqsLBFzzgqIO42efFAyz2Et6KQ==}
 
@@ -4326,6 +4333,7 @@ packages:
       '@vitest/ui': 4.1.10
       happy-dom: '*'
       jsdom: '*'
+      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -7183,6 +7191,8 @@ snapshots:
   jiti@2.7.0: {}
 
   joycon@3.1.1: {}
+
+  jpeg-js@0.4.4: {}
 
   js-md5@0.8.3: {}
 

@@ -2223,3 +2223,177 @@ export function normalizeIntlPhone(value: string): string {
   if (digits.length < 10 || digits.length > 15) return "";
   return `+${digits}`;
 }
+
+// ─── Supplier review decisions ───────────────────────────────────────────────
+// A decision the supplier never hears about leaves them waiting for an answer
+// that was already given. Each supplier-facing decision has its OWN template,
+// because Meta does not allow an approved body to be edited — one template with
+// a variable "decision" word would put «تم اعتماد» and «مرفوض» in one body.
+
+export const SUPPLIER_REVIEW_TEMPLATES = {
+  approved: "supplier_review_approved_ar",
+  rejected: "supplier_review_rejected_ar",
+  info: "supplier_review_info_request_ar",
+  docs: "supplier_review_docs_request_ar",
+  suspended: "supplier_review_suspended_ar",
+} as const;
+
+/**
+ * Bodies of the review templates. Exported so the required wording is directly
+ * testable — the operator approves this copy, and Meta cannot edit it later.
+ *
+ * {{1}} supplier name · {{2}} reference · {{3}} detail (reason / requested
+ * items / deadline) · {{4}} signer.
+ *
+ * EVERY body ends with literal text after {{4}}, and that is load-bearing:
+ * Meta rejects a template whose body starts or ends with a variable
+ * (`error_subcode 2388299`). The first cut ended on `{{4}}`, so all five
+ * submissions were refused — and because provisioning is wrapped in a
+ * try/catch at boot, the only trace was a warning nobody reads. Measured
+ * against the live WABA, then fixed and submitted.
+ */
+export const SUPPLIER_REVIEW_BODIES: Record<keyof typeof SUPPLIER_REVIEW_TEMPLATES, string> = {
+  approved:
+    "السادة {{1}}،\n\nيسرنا إبلاغكم بأنه تم اعتماد تسجيلكم كمورد لدى شركة قرطبة للتوريدات.\nرقم الطلب: {{2}}\n\nيمكنكم الآن استلام طلبات التسعير وأوامر التوريد من خلال القنوات المعتادة.\n\n{{3}}\n\nمع تحيات {{4}}\nشركة قرطبة للتوريدات",
+  rejected:
+    "السادة {{1}}،\n\nنأسف لإبلاغكم بأنه تعذّر اعتماد طلب تسجيلكم لدى شركة قرطبة للتوريدات.\nرقم الطلب: {{2}}\n\nالسبب: {{3}}\n\nيمكنكم التواصل معنا لمراجعة الموقف أو تقديم طلب جديد مستوفٍ للبيانات.\n\nمع تحيات {{4}}\nشركة قرطبة للتوريدات",
+  info: "السادة {{1}}،\n\nبرجاء استكمال البيانات التالية لاستكمال مراجعة تسجيلكم لدى شركة قرطبة للتوريدات.\nرقم الطلب: {{2}}\n\nالمطلوب:\n{{3}}\n\nنشكر لكم حسن تعاونكم.\n\nمع تحيات {{4}}\nشركة قرطبة للتوريدات",
+  docs: "السادة {{1}}،\n\nبرجاء إرسال المستندات التالية لاستكمال مراجعة تسجيلكم لدى شركة قرطبة للتوريدات.\nرقم الطلب: {{2}}\n\nالمطلوب:\n{{3}}\n\nنشكر لكم حسن تعاونكم.\n\nمع تحيات {{4}}\nشركة قرطبة للتوريدات",
+  suspended:
+    "السادة {{1}}،\n\nنفيدكم بأنه تم إيقاف حسابكم مؤقتًا لدى شركة قرطبة للتوريدات.\nرقم الطلب: {{2}}\n\nالسبب: {{3}}\n\nبرجاء التواصل معنا لمراجعة الموقف.\n\nمع تحيات {{4}}\nشركة قرطبة للتوريدات",
+};
+
+/** The template key for a review status, or null when the status is internal. */
+export function reviewTemplateKey(status: string): keyof typeof SUPPLIER_REVIEW_TEMPLATES | null {
+  switch (status) {
+    case "approved":
+      return "approved";
+    case "rejected":
+      return "rejected";
+    case "needs_information":
+      return "info";
+    case "needs_documents":
+      return "docs";
+    case "suspended":
+      return "suspended";
+    default:
+      return null;
+  }
+}
+
+export interface SendSupplierReviewOpts {
+  to: string;
+  template: string;
+  supplierName: string;
+  reference: string;
+  note?: string | null;
+  requestedItems?: string[];
+  deadline?: string | null;
+  signer?: string | null;
+}
+
+/**
+ * Send one review decision to the supplier.
+ *
+ * Returns the WhatsApp message id, or an empty string when nothing was sent —
+ * the caller must treat an empty id as NOT delivered (the false «✓ أُرسل» class).
+ */
+export async function sendSupplierReviewWhatsApp(opts: SendSupplierReviewOpts): Promise<string> {
+  requireConfigured();
+  const to = normalizePhone(opts.to);
+  if (!to) throw new Error("رقم هاتف المورد غير صالح");
+
+  const detailParts = [
+    ...(opts.requestedItems ?? []).map((s) => `• ${s.trim()}`).filter((s) => s !== "•"),
+    opts.note?.trim() ? `ملاحظات: ${opts.note.trim()}` : "",
+    opts.deadline?.trim() ? `مهلة الرد: ${opts.deadline.trim()}` : "",
+  ].filter(Boolean);
+  const detail = sanitizeWaParam(
+    detailParts.join("\n") || "لا توجد ملاحظات إضافية. ونحن على استعداد لأي استفسار.",
+  );
+  const signer = sanitizeWaParam(opts.signer?.trim() || "إدارة المشتريات — قرطبة للتوريدات");
+
+  const template = new Template(
+    opts.template,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(sanitizeWaParam(opts.supplierName)), // {{1}}
+      new BodyParameter(sanitizeWaParam(opts.reference)), // {{2}}
+      new BodyParameter(detail), // {{3}}
+      new BodyParameter(signer), // {{4}}
+    ),
+  );
+  const waId = await sendTemplate(
+    to,
+    template,
+    `[قرار مراجعة المورد: ${opts.supplierName} — ${opts.template}]`,
+  );
+  logger.info({ to, waId, template: opts.template }, "Supplier review decision sent via WhatsApp");
+  return waId || "";
+}
+
+/**
+ * Ensure the five review templates exist. Idempotent, best-effort: a template
+ * that Meta has not yet approved still lets the send path report the real
+ * outcome instead of failing the decision.
+ */
+export async function ensureSupplierReviewTemplates(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp supplier review template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  for (const [key, name] of Object.entries(SUPPLIER_REVIEW_TEMPLATES)) {
+    try {
+      const existing = await fetch(`${base}?name=${encodeURIComponent(name)}`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      if (!existing.ok) {
+        logger.warn({ template: name, status: existing.status }, "review template lookup failed");
+        continue;
+      }
+      const found = (await existing.json()) as { data?: Array<{ name?: string }> };
+      if (found.data?.some((t) => t.name === name)) {
+        logger.info({ template: name }, "WhatsApp review template already exists");
+        continue;
+      }
+      const response = await fetch(base, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          language: TEMPLATE_LANG,
+          category: "UTILITY",
+          components: [
+            {
+              type: "BODY",
+              text: SUPPLIER_REVIEW_BODIES[key as keyof typeof SUPPLIER_REVIEW_TEMPLATES],
+              example: {
+                body_text: [
+                  [
+                    "شركة النور للتوريدات",
+                    "APP-2026-000009",
+                    "صورة السجل التجاري سارية — مهلة الرد: 2026-11-30",
+                    "إدارة المشتريات — قرطبة للتوريدات",
+                  ],
+                ],
+              },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        logger.warn(
+          { template: name, status: response.status, body: await response.text() },
+          "review template creation failed",
+        );
+        continue;
+      }
+      logger.info({ template: name }, "WhatsApp review template submitted to Meta for approval");
+    } catch (err) {
+      logger.warn({ err, template: name }, "review template provisioning error");
+    }
+  }
+}

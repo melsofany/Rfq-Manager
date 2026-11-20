@@ -30,6 +30,7 @@ import {
 import { recordReviewEvent, loadAuditTrail, REVIEW_EVENT } from "./audit";
 import { buildBrandEvidence, buildComparison, type DocumentExtraction } from "./ocr";
 import { readApplicationDocuments, docLabel } from "./documents";
+import { deliverNotification, notificationFor, shouldNotify } from "./notifications";
 
 const router = Router();
 
@@ -395,7 +396,60 @@ router.post(
       metadata: assignTo ? { assignedTo: assignTo } : null,
     });
 
-    res.json({ ok: true, from, to: target, label: REVIEW_STATUS_LABELS[target] });
+    // ── Tell the supplier ──
+    // A decision the supplier never hears about leaves them waiting for an
+    // answer already given. Runs AFTER the state change and the audit row, and
+    // never throws: a messaging failure must not roll back a decision the
+    // reviewer took and the database already recorded. What actually happened
+    // is returned to the screen so it can say so.
+    let notification: Awaited<ReturnType<typeof deliverNotification>> | null = null;
+    if (shouldNotify(target) && (req.body ?? {}).notifySupplier !== false) {
+      const requestedItems = Array.isArray(requestItems)
+        ? (requestItems as Array<{ label?: string; name?: string; slot?: string }>)
+            .map((i) => i?.label ?? i?.name ?? i?.slot ?? "")
+            .filter(Boolean)
+        : [];
+      const input = {
+        phone: application.phone ?? "",
+        email: application.email ?? "",
+        status: target,
+        supplierName: application.name ?? "",
+        reference: application.reference ?? "",
+        note: note || null,
+        requestedItems,
+        deadline: (req.body ?? {}).deadline ?? null,
+        employeeName: actor.employeeName,
+      };
+      const message = notificationFor(input);
+      if (message) {
+        notification = await deliverNotification({ ...input, message });
+
+        // The audit trail must record the OUTCOME of the notification, not just
+        // that we decided. A row saying "notified" over a message that never
+        // left is the false-confirmation class this repo keeps removing.
+        await recordReviewEvent({
+          applicationId: id,
+          event: notification.delivered ? "supplier_notified" : "supplier_notify_failed",
+          fromStatus: target,
+          toStatus: target,
+          note: notification.summary,
+          actor,
+          metadata: { attempts: notification.attempts },
+        }).catch((err) => {
+          logger.warn({ err, applicationId: id }, "failed to record notification outcome");
+        });
+      }
+    }
+
+    res.json({
+      ok: true,
+      from,
+      to: target,
+      label: REVIEW_STATUS_LABELS[target],
+      notification: notification
+        ? { delivered: notification.delivered, summary: notification.summary }
+        : null,
+    });
   },
 );
 
@@ -803,3 +857,156 @@ router.get("/supplier-review/reports", requireAuth, async (req, res): Promise<vo
 });
 
 export default router;
+
+// ─── Printable supplier file ────────────────────────────────────────────────
+
+/**
+ * GET /supplier-review/applications/:id/file.pdf
+ *
+ * The printable supplier file: cover with the verdict, declared data, category
+ * verdicts, every attachment as its own page, and the signature/approval block.
+ *
+ * Deliberately available for ANY status, not only approved: an approver needs to
+ * read the file BEFORE deciding, and an auditor needs it after a rejection. The
+ * status is printed on the cover, so the document never implies an approval it
+ * does not have.
+ */
+router.get(
+  "/supplier-review/applications/:id/file.pdf",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const id = parseId(req.params.id);
+    if (!id) {
+      res.status(400).json({ error: "رقم الطلب غير صحيح" });
+      return;
+    }
+    const application = await loadApplication(id);
+    if (!application) {
+      res.status(404).json({ error: "الطلب غير موجود" });
+      return;
+    }
+
+    try {
+      // Attachments, including their bytes — the file reproduces what the
+      // supplier actually uploaded, not a description of it.
+      const { rows: docRows } = await pool.query<{
+        id: number;
+        slot: string;
+        original_name: string;
+        mime_type: string;
+        size_bytes: number;
+        /** base64 TEXT in this schema — NOT a bytea Buffer. Decoded below. */
+        content: string | null;
+      }>(
+        `SELECT id, slot, original_name, mime_type, size_bytes, content
+           FROM supplier_application_documents
+          WHERE application_id = $1
+          ORDER BY id`,
+        [id],
+      );
+
+      // Category verdicts the reviewer recorded (trade / item / brand).
+      const { rows: verdictRows } = await pool.query<{
+        kind: string;
+        name: string;
+        verdict: string;
+        note: string | null;
+      }>(
+        `SELECT kind, name, verdict, note
+           FROM supplier_application_category_verdicts
+          WHERE application_id = $1
+          ORDER BY kind, id`,
+        [id],
+      );
+
+      // Employee names for the signature block.
+      const nameOf = async (employeeId: number | null): Promise<string | null> => {
+        if (!employeeId) return null;
+        const { rows } = await pool.query<{ name: string; role: string | null }>(
+          `SELECT name, role FROM employees WHERE id = $1`,
+          [employeeId],
+        );
+        return rows[0]?.name ?? null;
+      };
+      const roleOf = async (employeeId: number | null): Promise<string | null> => {
+        if (!employeeId) return null;
+        const { rows } = await pool.query<{ role: string | null }>(
+          `SELECT role FROM employees WHERE id = $1`,
+          [employeeId],
+        );
+        return rows[0]?.role ?? null;
+      };
+
+      // `verified_by` is not part of ApplicationLite, so read it directly.
+      const { rows: sigRows } = await pool.query<{
+        verified_by: number | null;
+        verified_at: Date | null;
+        reviewed_by: number | null;
+        reviewed_at: Date | null;
+      }>(
+        `SELECT verified_by, verified_at, reviewed_by, reviewed_at
+           FROM supplier_applications WHERE id = $1`,
+        [id],
+      );
+      const sig = sigRows[0];
+
+      const categories = verdictRows.map((v) => ({
+        name: v.kind === "brand" ? `ماركة: ${v.name}` : v.name,
+        verdict: v.verdict,
+        note: v.note,
+        owner: null,
+      }));
+
+      const { generateSupplierFilePdf } = await import("./supplier-file-pdf");
+      const pdf = await generateSupplierFilePdf({
+        reference: application.reference,
+        statusLabel:
+          REVIEW_STATUS_LABELS[normalizeStatus(application.status)] ?? application.status,
+        supplier: {
+          name: application.name,
+          contactPerson: application.contact_person,
+          email: application.email,
+          phone: application.phone,
+          address: application.address,
+          commercialRegister: application.commercial_register,
+          taxRegistration: application.tax_registration,
+          suppliedItems: application.supplied_items,
+          brandNames: application.brand_names,
+        },
+        categories,
+        documents: docRows.map((d) => ({
+          id: d.id,
+          slot: d.slot,
+          label: docLabel(d.slot),
+          originalName: d.original_name,
+          mimeType: d.mime_type,
+          sizeBytes: d.size_bytes,
+          // `content` is base64 text in this schema. Passing the string straight
+          // to PDFKit throws inside `doc.image()` — which a try/catch then
+          // renders as "could not display", i.e. every attachment silently
+          // becomes a placeholder in an otherwise complete-looking file.
+          content: d.content ? Buffer.from(d.content, "base64") : null,
+        })),
+        signature: {
+          verifierName: await nameOf(sig?.verified_by ?? null),
+          verifierRole: await roleOf(sig?.verified_by ?? null),
+          verifiedAt: sig?.verified_at ? new Date(sig.verified_at).toISOString() : null,
+          approverName: await nameOf(application.decided_by),
+          approverRole: await roleOf(application.decided_by),
+          decidedAt: application.decided_at ? new Date(application.decided_at).toISOString() : null,
+        },
+        decisionReason: application.decision_reason ?? application.review_notes ?? null,
+        generatedAt: new Date().toISOString(),
+      });
+
+      const filename = `supplier-file-${application.reference || id}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", String(pdf.length));
+      res.send(pdf);
+    } catch (err) {
+      logger.error({ err, applicationId: id }, "supplier file generation failed");
+      res.status(500).json({ error: "تعذّر إنشاء ملف المورد" });
+    }
+  },
+);
