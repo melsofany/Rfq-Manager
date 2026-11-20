@@ -18,6 +18,7 @@ import dataEntryRouter from "./data-entry";
 import procurementKpisRouter from "./procurement-kpis";
 import itemKpisRouter from "./item-kpis";
 import rfqKpisRouter from "./rfq-kpis";
+import websiteAnalyticsRouter from "./website-analytics";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,7 @@ router.use(dataEntryRouter);
 router.use(procurementKpisRouter);
 router.use(itemKpisRouter);
 router.use(rfqKpisRouter);
+router.use(websiteAnalyticsRouter);
 router.use(auditRouter);
 router.use(syncRouter);
 

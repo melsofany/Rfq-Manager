@@ -263,6 +263,7 @@ export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> =
     write: ["finance", "accounts"],
   },
   "/analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
+  "/website-analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
   "/sync": { read: ["analytics"], write: ["analytics"] },
   "/audit": { read: ["audit"], write: ["audit"] },
   "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },

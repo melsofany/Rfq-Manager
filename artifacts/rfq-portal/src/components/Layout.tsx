@@ -6,6 +6,7 @@ import {
   FileText,
   Users,
   BarChart3,
+  Globe,
   UserCog,
   ClipboardList,
   Menu,
@@ -84,6 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     },
     { href: "/mailbox", label: t("nav.mailbox"), icon: Mail, nested: true },
     { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
+    { href: "/website-analytics", label: t("nav.websiteAnalytics"), icon: Globe, nested: true },
     {
       href: "/integrations",
       label: t("nav.integrations"),

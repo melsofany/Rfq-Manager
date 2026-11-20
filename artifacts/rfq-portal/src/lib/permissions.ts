@@ -120,6 +120,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     ],
   },
   { key: "analytics", href: "/analytics", labelKey: "nav.analytics" },
+  { key: "analytics", href: "/website-analytics", labelKey: "nav.websiteAnalytics" },
   {
     key: "whatsapp",
     href: "/whatsapp",

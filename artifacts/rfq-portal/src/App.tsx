@@ -36,6 +36,7 @@ import SupplierRegistrationPage from "@/modules/users/pages/supplier-registratio
 
 // ── Module: Reports — التقارير والتحليلات ─────────────────────────────────
 import AnalyticsPage from "@/modules/reports/pages/analytics";
+import WebsiteAnalyticsPage from "@/modules/reports/pages/website-analytics";
 import AuditPage from "@/modules/reports/pages/audit";
 import ItemsPage from "@/modules/reports/pages/items";
 
@@ -189,6 +190,9 @@ function Router() {
       {/* ── Module: Reports ────────────────────────────────────────────── */}
       <Route path="/analytics">
         <ProtectedRoute component={AnalyticsPage} />
+      </Route>
+      <Route path="/website-analytics">
+        <ProtectedRoute component={WebsiteAnalyticsPage} />
       </Route>
       <Route path="/audit">
         <ProtectedRoute component={AuditPage} />
