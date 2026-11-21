@@ -1732,7 +1732,9 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       maxPrice: null,
       avgPrice: null,
       fairPrice: null,
-      offers: [],
+      // No priced offer left (e.g. every price was rejected): keep the rows so
+      // they still show on screen, struck through and marked as rejected.
+      offers: offerDetails,
     };
   });
 
