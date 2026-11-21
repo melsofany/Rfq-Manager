@@ -29,6 +29,7 @@ vi.mock("drizzle-orm", () => ({
   or: (...args: any[]) => ({ __op: "or", args }),
   inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
   ilike: (left: any, right: any) => ({ __op: "ilike", left, right }),
+  isNull: (left: any) => ({ __op: "isNull", left }),
   sql: Object.assign((strings: any, ...values: any[]) => ({ __op: "sql", strings, values }), {
     raw: (s: string) => ({ __op: "sql.raw", s }),
   }),

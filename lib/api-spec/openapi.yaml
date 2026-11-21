@@ -1394,6 +1394,44 @@ paths:
                   isApproved:
                     type: boolean
 
+  /offers/items/{offerItemId}/reject:
+    patch:
+      operationId: rejectOfferItem
+      tags: [offers]
+      summary: Reject a supplier price for an rfq_item, with the reason. Rejecting withdraws its approval.
+      parameters:
+        - name: offerItemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rejected:
+                  type: boolean
+                reason:
+                  type: string
+                  minLength: 3
+      responses:
+        "200":
+          description: Rejection toggled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  isRejected:
+                    type: boolean
+                  rejectionReason:
+                    type: ["string", "null"]
+
   /rfq/lookup/{customerRfqNo}:
     get:
       operationId: lookupCustomerRfq
@@ -3616,6 +3654,10 @@ components:
                       type: boolean
                     isApproved:
                       type: boolean
+                    isRejected:
+                      type: boolean
+                    rejectionReason:
+                      type: ["string", "null"]
                     deliveryDays:
                       type: ["integer", "null"]
                     deviation:

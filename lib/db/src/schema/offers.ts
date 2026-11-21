@@ -39,6 +39,13 @@ export const offerItemsTable = pgTable("offer_items", {
   // the reference cost used by the customer-rfq margin check. Only one
   // offer_item per rfq_item may be approved at a time (enforced in the API).
   isApproved: boolean("is_approved").notNull().default(false),
+  // A purchasing employee may reject a supplier price for an rfq_item, with a
+  // stated reason. A rejected price is kept on record (for the audit trail and
+  // so the supplier's quote is not lost) but is excluded from the comparison
+  // and cannot be approved.
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  rejectedBy: integer("rejected_by").references(() => employeesTable.id),
+  rejectionReason: text("rejection_reason"),
   deliveryDays: integer("delivery_days"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

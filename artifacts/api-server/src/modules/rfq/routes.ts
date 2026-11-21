@@ -1644,6 +1644,8 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       priceWithVat: number;
       taxIncluded: boolean;
       isApproved: boolean;
+      isRejected: boolean;
+      rejectionReason: string | null;
       deliveryDays: number | null;
       notes: string | null;
       deviation: number;
@@ -1666,7 +1668,10 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
         // Normalize: if supplier did NOT include tax, add 14% VAT for fair comparison
         const priceWithVat = oi.item.taxIncluded ? price : price * (1 + VAT_RATE);
         const notPriced = price <= 0;
-        if (!notPriced) vatPrices.push(priceWithVat);
+        // A rejected price is shown for the record but takes no part in the
+        // comparison: it cannot be the lowest, and it does not move the average.
+        const isRejected = oi.item.rejectedAt != null;
+        if (!notPriced && !isRejected) vatPrices.push(priceWithVat);
         offerDetails.push({
           offerItemId: oi.item.id,
           supplierId: o.offer.supplierId,
@@ -1675,6 +1680,8 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           priceWithVat,
           taxIncluded: oi.item.taxIncluded,
           isApproved: oi.item.isApproved,
+          isRejected,
+          rejectionReason: oi.item.rejectionReason ?? null,
           deliveryDays: oi.item.deliveryDays,
           notes: oi.item.notes ?? null,
           deviation: 0,
@@ -1693,7 +1700,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       const fairPrice = avgPrice;
 
       for (const od of offerDetails) {
-        if (od.notPriced) continue;
+        if (od.notPriced || od.isRejected) continue;
         od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
         od.isLowest = od.priceWithVat === minPrice;
         od.isAnomaly = Math.abs(od.deviation) > 50;
@@ -1919,6 +1926,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         isLowest: boolean;
         isAnomaly: boolean;
         notPriced: boolean;
+        isRejected: boolean;
       }> = [];
 
       for (const o of offers) {
@@ -1928,7 +1936,9 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
           const price = parseFloat(oi.item.price);
           const priceWithVat = oi.item.taxIncluded ? price : price * (1 + PDF_VAT_RATE);
           const notPriced = price <= 0;
-          if (!notPriced) vatPrices.push(priceWithVat);
+          // Rejected prices stay on record but do not enter the comparison.
+          const isRejected = oi.item.rejectedAt != null;
+          if (!notPriced && !isRejected) vatPrices.push(priceWithVat);
           offerDetails.push({
             supplierName: o.supplierName || "",
             price,
@@ -1940,6 +1950,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
             isLowest: false,
             isAnomaly: false,
             notPriced,
+            isRejected,
           });
         }
       }
@@ -1949,7 +1960,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         const avgPrice = vatPrices.reduce((a, b) => a + b, 0) / vatPrices.length;
         const maxPrice = Math.max(...vatPrices);
         for (const od of offerDetails) {
-          if (od.notPriced) continue;
+          if (od.notPriced || od.isRejected) continue;
           od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
           od.isLowest = od.priceWithVat === minPrice;
           od.isAnomaly = Math.abs(od.deviation) > 50;

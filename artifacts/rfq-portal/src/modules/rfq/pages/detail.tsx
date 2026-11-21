@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import {
   useGetRfq,
@@ -8,6 +8,7 @@ import {
   useGetRfqOffers,
   useUpdateRfq,
   useApproveOfferItem,
+  customFetch,
   getGetRfqQueryKey,
   getListRfqItemsQueryKey,
   getGetRfqSentLogQueryKey,
@@ -17,6 +18,15 @@ import { Layout } from "@/components/Layout";
 import { AttachmentsPanel } from "../components/Attachments";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Send,
@@ -50,6 +60,8 @@ type OfferRow = {
   priceWithVat: number;
   taxIncluded: boolean;
   isApproved?: boolean;
+  isRejected?: boolean;
+  rejectionReason?: string | null;
   deliveryDays?: number | null;
   notes?: string | null;
   deviation: number;
@@ -91,6 +103,7 @@ function PriceCell({
   isLowest,
   isAnomaly,
   notPriced,
+  struck,
 }: {
   price: number;
   priceWithVat: number;
@@ -98,6 +111,7 @@ function PriceCell({
   isLowest: boolean;
   isAnomaly: boolean;
   notPriced?: boolean;
+  struck?: boolean;
 }) {
   return (
     <div className="text-right leading-tight">
@@ -105,7 +119,8 @@ function PriceCell({
       <div
         className={cn(
           "font-mono text-xs font-semibold",
-          !notPriced && isLowest && "text-green-700",
+          struck && "line-through text-red-600",
+          !struck && !notPriced && isLowest && "text-green-700",
           !notPriced && isAnomaly && !isLowest && "text-amber-600",
           (notPriced || (!isLowest && !isAnomaly)) && "text-foreground",
         )}
@@ -133,16 +148,20 @@ function PriceCell({
 }
 
 // ── Normalize offers: compute priceWithVat if missing from API response ────────
+// Rejected supplier prices are left out here so the Excel export and the printed
+// comparison match the server-side PDF, which also excludes them.
 function normalizeItems(offersData: OffersData): ItemAnalysis[] {
   return (offersData.analysis?.itemAnalysis ?? []).map((item) => ({
     ...item,
-    offers: (item.offers as OfferRow[]).map((o) => ({
-      ...o,
-      priceWithVat:
-        (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
-      attachments: (o as OfferRow).attachments ?? [],
-      notPriced: (o as OfferRow).notPriced ?? false,
-    })),
+    offers: (item.offers as OfferRow[])
+      .filter((o) => !(o as OfferRow).isRejected)
+      .map((o) => ({
+        ...o,
+        priceWithVat:
+          (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+        attachments: (o as OfferRow).attachments ?? [],
+        notPriced: (o as OfferRow).notPriced ?? false,
+      })),
   }));
 }
 
@@ -712,6 +731,34 @@ export default function RfqDetailPage() {
     },
   });
 
+  // ── Reject a supplier price, with the reason ─────────────────────────────
+  const [rejectTarget, setRejectTarget] = useState<{
+    offerItemId: number;
+    supplierName: string;
+    description: string;
+  } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const rejectMutation = useMutation({
+    mutationFn: (vars: { offerItemId: number; rejected: boolean; reason?: string }) =>
+      customFetch<{ id: number; isRejected: boolean }>(
+        `/api/offers/items/${vars.offerItemId}/reject`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rejected: vars.rejected, reason: vars.reason }),
+        },
+      ),
+    onSuccess: (_data, vars) => {
+      toast.success(vars.rejected ? "تم رفض العرض وتسجيل السبب" : "تم إلغاء الرفض");
+      setRejectTarget(null);
+      setRejectReason("");
+      void queryClient.invalidateQueries({ queryKey: getGetRfqOffersQueryKey(rfqId) });
+    },
+    onError: (err) => {
+      toast.error("تعذّر تحديث حالة العرض: " + (err as Error).message);
+    },
+  });
+
   const handleToggleApprove = (offerItemId: number, currentlyApproved: boolean) => {
     setApprovingId(offerItemId);
     approveMutation.mutate({ offerItemId, data: { approved: !currentlyApproved } });
@@ -1191,6 +1238,65 @@ export default function RfqDetailPage() {
               </div>
             )}
 
+            <Dialog
+              open={rejectTarget !== null}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setRejectTarget(null);
+                  setRejectReason("");
+                }
+              }}
+            >
+              <DialogContent dir="rtl" className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>رفض عرض {rejectTarget?.supplierName}</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    البند: {rejectTarget?.description}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground" htmlFor="reject-reason">
+                    سبب الرفض <span className="text-red-600">*</span>
+                  </label>
+                  <Textarea
+                    id="reject-reason"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="مثال: السعر أعلى من السعر المرجعي، أو المواصفات غير مطابقة"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    يُحفظ السبب مع العرض ويظهر لمراجعي الطلب.
+                  </p>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRejectTarget(null);
+                      setRejectReason("");
+                    }}
+                  >
+                    إلغاء
+                  </Button>
+                  <Button
+                    className="bg-red-700 hover:bg-red-800 text-white"
+                    disabled={rejectMutation.isPending || rejectReason.trim().length < 3}
+                    onClick={() =>
+                      rejectTarget &&
+                      rejectMutation.mutate({
+                        offerItemId: rejectTarget.offerItemId,
+                        rejected: true,
+                        reason: rejectReason.trim(),
+                      })
+                    }
+                  >
+                    {rejectMutation.isPending ? "جارٍ الحفظ..." : "تأكيد الرفض"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             {offersLoading ? (
               <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
                 <svg
@@ -1230,6 +1336,8 @@ export default function RfqDetailPage() {
                       (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
                     notes: (o as OfferRow).notes ?? null,
                     isApproved: (o as OfferRow).isApproved ?? false,
+                    isRejected: (o as OfferRow).isRejected ?? false,
+                    rejectionReason: (o as OfferRow).rejectionReason ?? null,
                     offerItemId: (o as OfferRow).offerItemId,
                   }));
 
@@ -1300,13 +1408,31 @@ export default function RfqDetailPage() {
                                 .map((o) => (
                                   <tr
                                     key={o.supplierId}
-                                    className="border-b border-border last:border-0 hover:bg-muted/5"
+                                    className={cn(
+                                      "border-b border-border last:border-0 hover:bg-muted/5",
+                                      o.isRejected && "opacity-60 bg-red-50/40",
+                                    )}
                                   >
-                                    <td className="px-4 py-2.5 text-foreground text-sm font-medium">
+                                    <td
+                                      className={cn(
+                                        "px-4 py-2.5 text-foreground text-sm font-medium",
+                                        o.isRejected && "line-through text-red-600",
+                                      )}
+                                    >
                                       {o.supplierName}
+                                      {o.isRejected && (
+                                        <p className="mt-1 text-xs font-normal text-red-700">
+                                          مرفوض: {o.rejectionReason}
+                                        </p>
+                                      )}
                                     </td>
                                     {/* Original price */}
-                                    <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                                    <td
+                                      className={cn(
+                                        "px-4 py-2.5 text-right font-mono text-xs text-muted-foreground",
+                                        o.isRejected && "line-through text-red-600",
+                                      )}
+                                    >
                                       {o.price.toLocaleString("en-EG", {
                                         minimumFractionDigits: 2,
                                       })}
@@ -1332,6 +1458,7 @@ export default function RfqDetailPage() {
                                         isLowest={o.isLowest}
                                         isAnomaly={o.isAnomaly}
                                         notPriced={o.notPriced}
+                                        struck={o.isRejected}
                                       />
                                     </td>
                                     {/* Delivery days */}
@@ -1359,33 +1486,65 @@ export default function RfqDetailPage() {
                                           o.deviation.toFixed(1) +
                                           "%"}
                                     </td>
-                                    {/* Approve supplier price (one per item) */}
+                                    {/* Approve / reject supplier price (per offer line) */}
                                     <td className="px-4 py-2.5 text-center">
-                                      {o.offerItemId != null && !o.notPriced ? (
-                                        <button
-                                          onClick={() =>
-                                            handleToggleApprove(o.offerItemId!, !!o.isApproved)
-                                          }
-                                          disabled={approvingId === o.offerItemId}
-                                          title={
-                                            o.isApproved
-                                              ? "إلغاء اعتماد هذا السعر"
-                                              : "اعتماد هذا السعر للبند (المرجع لفحص الهامش)"
-                                          }
-                                          className={cn(
-                                            "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                                            o.isApproved
-                                              ? "bg-green-100 text-green-800 border border-green-300 hover:bg-green-200"
-                                              : "bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-foreground",
-                                          )}
-                                        >
-                                          <BadgeCheck size={13} />
-                                          {approvingId === o.offerItemId
-                                            ? "..."
-                                            : o.isApproved
-                                              ? "معتمد"
-                                              : "اعتماد"}
-                                        </button>
+                                      {o.offerItemId != null && o.isRejected ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium bg-red-100 text-red-800 border border-red-300">
+                                            <XCircle size={13} /> مرفوض
+                                          </span>
+                                          <button
+                                            onClick={() =>
+                                              rejectMutation.mutate({
+                                                offerItemId: o.offerItemId!,
+                                                rejected: false,
+                                              })
+                                            }
+                                            disabled={rejectMutation.isPending}
+                                            className="text-xs text-blue-700 hover:underline disabled:opacity-50"
+                                          >
+                                            إلغاء الرفض
+                                          </button>
+                                        </div>
+                                      ) : o.offerItemId != null && !o.notPriced ? (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <button
+                                            onClick={() =>
+                                              handleToggleApprove(o.offerItemId!, !!o.isApproved)
+                                            }
+                                            disabled={approvingId === o.offerItemId}
+                                            title={
+                                              o.isApproved
+                                                ? "إلغاء اعتماد هذا السعر"
+                                                : "اعتماد هذا السعر للبند (المرجع لفحص الهامش)"
+                                            }
+                                            className={cn(
+                                              "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+                                              o.isApproved
+                                                ? "bg-green-100 text-green-800 border border-green-300 hover:bg-green-200"
+                                                : "bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-foreground",
+                                            )}
+                                          >
+                                            <BadgeCheck size={13} />
+                                            {approvingId === o.offerItemId
+                                              ? "..."
+                                              : o.isApproved
+                                                ? "معتمد"
+                                                : "اعتماد"}
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              setRejectTarget({
+                                                offerItemId: o.offerItemId!,
+                                                supplierName: o.supplierName,
+                                                description: item.description ?? "",
+                                              })
+                                            }
+                                            className="text-xs text-red-700 hover:underline"
+                                          >
+                                            رفض العرض
+                                          </button>
+                                        </div>
                                       ) : (
                                         <span className="text-xs text-muted-foreground">—</span>
                                       )}
