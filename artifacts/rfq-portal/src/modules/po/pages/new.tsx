@@ -11,7 +11,8 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, Scissors, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 import { applyTaxToggle, applyManualPrice, needsVatConfirm } from "../vat";
 import { VatPriceConfirm } from "../components/VatPriceConfirm";
@@ -275,6 +276,7 @@ export default function NewPurchaseOrderPage() {
           description: item.description,
           uom: item.uom,
           qty: item.qty != null ? String(item.qty) : "",
+          sheetQty: item.qty != null ? String(item.qty) : "",
           unitPrice: item.referencePrice != null ? String(item.referencePrice) : "",
           supplierId: "",
           taxIncluded: false,
@@ -309,6 +311,72 @@ export default function NewPurchaseOrderPage() {
       return next;
     });
   };
+
+  // ── Split one sheet line across several suppliers ─────────────────────────
+  // A split line is a copy of the original row with its own supplier and qty.
+  // All rows of one item share splitGroupId (the first row's id).
+  const groupKey = (i: PoItemRow) => i.splitGroupId ?? i.id;
+  const roundQty = (n: number) => Math.round(n * 10000) / 10000;
+
+  const splitItem = (id: string) => {
+    setItems((prev) => {
+      const row = prev.find((i) => i.id === id);
+      if (!row) return prev;
+      const gid = groupKey(row);
+      const group = prev.filter((i) => groupKey(i) === gid);
+      const total = parseFloat(row.sheetQty ?? row.qty) || 0;
+      const assigned = group.reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
+      const left = Math.max(0, roundQty(total - assigned));
+      const copy: PoItemRow = {
+        ...row,
+        id: `${gid}-s${Date.now()}`,
+        splitGroupId: gid,
+        supplierId: "",
+        unitPrice: "",
+        offerItemId: null,
+        quotedPrice: null,
+        quotedTaxIncluded: null,
+        taxIncluded: false,
+        promisedDeliveryDate: "",
+        qty: String(left),
+      };
+      let lastIdx = -1;
+      prev.forEach((i, k) => {
+        if (groupKey(i) === gid) lastIdx = k;
+      });
+      const next = [...prev];
+      next.splice(lastIdx + 1, 0, copy);
+      setSelectedIds((sel) => new Set(sel).add(copy.id));
+      return next;
+    });
+  };
+
+  const updateQty = (id: string, qty: string) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)));
+
+  // Groups with more than one line: selected lines must add up to the sheet qty.
+  const splitGroups = (() => {
+    const map = new Map<
+      string,
+      { description: string; total: number; sum: number; lines: number }
+    >();
+    for (const i of items) {
+      if (!selectedIds.has(i.id)) continue;
+      const k = groupKey(i);
+      const g = map.get(k) ?? {
+        description: i.description,
+        total: parseFloat(i.sheetQty ?? i.qty) || 0,
+        sum: 0,
+        lines: 0,
+      };
+      g.sum += parseFloat(i.qty) || 0;
+      g.lines += 1;
+      map.set(k, g);
+    }
+    return [...map.values()].filter((g) => g.lines > 1);
+  })();
+  const badSplits = splitGroups.filter((g) => roundQty(g.sum) !== roundQty(g.total));
+  const splitLineCount = (i: PoItemRow) => items.filter((x) => groupKey(x) === groupKey(i)).length;
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -430,6 +498,13 @@ export default function NewPurchaseOrderPage() {
     if (!sheetPoNo) return;
     const chosen = items.filter((i) => selectedIds.has(i.id));
     if (chosen.length === 0) return;
+    if (badSplits.length > 0) {
+      const g = badSplits[0];
+      toast.error(
+        `مجموع الكميات الموزعة على الموردين (${roundQty(g.sum)}) لازم يساوي كمية البند (${roundQty(g.total)}): ${g.description}`,
+      );
+      return;
+    }
     submittedDescriptionsRef.current = chosen.map((i) => i.description);
     createMutation.mutate({
       data: {
@@ -566,7 +641,21 @@ export default function NewPurchaseOrderPage() {
                           <td className="px-2 py-1.5 text-xs">{row.partNo || "—"}</td>
                           <td className="px-2 py-1.5 text-xs max-w-[220px]">{row.description}</td>
                           <td className="px-2 py-1.5 text-xs">{row.uom || "—"}</td>
-                          <td className="px-2 py-1.5 text-xs font-medium">{row.qty || "—"}</td>
+                          <td className="px-2 py-1.5 text-xs font-medium">
+                            {splitLineCount(row) > 1 ? (
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={row.qty}
+                                onChange={(e) => updateQty(row.id, e.target.value)}
+                                disabled={!selectedIds.has(row.id)}
+                                className="h-7 text-xs w-20 disabled:opacity-50"
+                              />
+                            ) : (
+                              row.qty || "—"
+                            )}
+                          </td>
                           <td className="px-2 py-1.5">
                             <Input
                               value={row.rfqNumber}
@@ -628,7 +717,16 @@ export default function NewPurchaseOrderPage() {
                               title="السعر شامل ضريبة القيمة المضافة 14%"
                             />
                           </td>
-                          <td className="px-2 py-1.5 text-center">
+                          <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => splitItem(row.id)}
+                              disabled={!selectedIds.has(row.id)}
+                              title="تقسيم الكمية على مورد آخر"
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 mr-2"
+                            >
+                              <Scissors size={14} />
+                            </button>
                             <button
                               type="button"
                               onClick={() => removeItem(row.id)}

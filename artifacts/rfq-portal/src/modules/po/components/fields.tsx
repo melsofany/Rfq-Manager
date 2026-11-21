@@ -27,6 +27,10 @@ export type RepresentativeOption = {
 
 export interface PoItemRow {
   id: string;
+  /** Id of the row this line was split from (the group's first row). Unset on the first row. */
+  splitGroupId?: string;
+  /** Quantity on the sheet for this item, before any split. Same on every row of a group. */
+  sheetQty?: string;
   itemId: string | null;
   customerPoItemId: number | null;
   /** Supplier offer line the price came from (price origin). */
