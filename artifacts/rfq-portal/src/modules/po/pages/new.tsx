@@ -351,8 +351,27 @@ export default function NewPurchaseOrderPage() {
     });
   };
 
-  const updateQty = (id: string, qty: string) =>
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, qty } : i)));
+  // The selected parts of one item can never add up to more than the item's
+  // total quantity: a value that would go over the total is capped at the room left.
+  const updateQty = (id: string, qty: string) => {
+    setItems((prev) => {
+      const row = prev.find((i) => i.id === id);
+      if (!row) return prev;
+      const gid = groupKey(row);
+      const total = parseFloat(row.sheetQty ?? row.qty) || 0;
+      const others = prev
+        .filter((i) => i.id !== id && groupKey(i) === gid && selectedIds.has(i.id))
+        .reduce((sum, i) => sum + (parseFloat(i.qty) || 0), 0);
+      const room = Math.max(0, roundQty(total - others));
+      const wanted = parseFloat(qty);
+      let value = qty;
+      if (!Number.isNaN(wanted) && wanted > room) {
+        value = String(room);
+        toast.error(`مجموع الكميات لا يمكن أن يتجاوز كمية البند (${roundQty(total)})`);
+      }
+      return prev.map((i) => (i.id === id ? { ...i, qty: value } : i));
+    });
+  };
 
   // Groups with more than one line: selected lines must add up to the sheet qty.
   const splitGroups = (() => {
