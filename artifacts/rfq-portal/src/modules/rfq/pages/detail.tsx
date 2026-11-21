@@ -148,8 +148,8 @@ function PriceCell({
 }
 
 // ── Normalize offers: compute priceWithVat if missing from API response ────────
-// Rejected supplier prices are left out here so the Excel export and the printed
-// comparison match the server-side PDF, which also excludes them.
+// Rejected offers are left out of the Excel and printed comparison. They stay
+// visible in the on-screen system (Offers & Analysis tab).
 function normalizeItems(offersData: OffersData): ItemAnalysis[] {
   return (offersData.analysis?.itemAnalysis ?? []).map((item) => ({
     ...item,
