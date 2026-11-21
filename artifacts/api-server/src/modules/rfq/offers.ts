@@ -66,6 +66,12 @@ router.patch("/offers/items/:offerItemId/approve", requireAuth, async (req, res)
 
   const target = approved === false ? false : true;
 
+  // A rejected price cannot be endorsed. Un-rejecting first is the only way back.
+  if (target && item.rejectedAt != null) {
+    res.status(409).json({ error: "هذا العرض مرفوض — ألغِ الرفض أولاً ثم اعتمده" });
+    return;
+  }
+
   if (target) {
     // Un-approve any previously approved offer_item for the same rfq_item.
     await db
@@ -96,6 +102,70 @@ router.patch("/offers/items/:offerItemId/approve", requireAuth, async (req, res)
   });
 
   res.json({ id: offerItemId, isApproved: target });
+});
+
+// Reject a supplier price for one rfq_item, with the reason. Rejecting also
+// withdraws the approval if this price was the approved one, so the margin check
+// never keeps using a price the buyer has refused.
+router.patch("/offers/items/:offerItemId/reject", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.offerItemId)
+    ? req.params.offerItemId[0]
+    : req.params.offerItemId;
+  const offerItemId = parseInt(raw, 10);
+  if (!Number.isInteger(offerItemId) || offerItemId <= 0) {
+    res.status(400).json({ error: "Invalid offer item id" });
+    return;
+  }
+  const { rejected, reason } = req.body as { rejected?: boolean; reason?: string | null };
+
+  const [item] = await db.select().from(offerItemsTable).where(eq(offerItemsTable.id, offerItemId));
+  if (!item) {
+    res.status(404).json({ error: "Offer item not found" });
+    return;
+  }
+
+  // Rejecting needs a reason the buyer actually wrote, so it can be defended later.
+  const trimmed = (reason ?? "").trim();
+  const target = rejected !== false;
+  if (target && trimmed.length < 3) {
+    res.status(400).json({ error: "يجب كتابة سبب الرفض" });
+    return;
+  }
+
+  if (target) {
+    await db
+      .update(offerItemsTable)
+      .set({
+        rejectedAt: new Date(),
+        rejectedBy: req.session.employeeId ?? null,
+        rejectionReason: trimmed,
+        isApproved: false,
+      })
+      .where(eq(offerItemsTable.id, offerItemId));
+  } else {
+    await db
+      .update(offerItemsTable)
+      .set({ rejectedAt: null, rejectedBy: null, rejectionReason: null })
+      .where(eq(offerItemsTable.id, offerItemId));
+  }
+
+  await db.insert(auditLogTable).values({
+    action: "offer_item.rejection_toggled",
+    entityType: "offer_item",
+    entityId: offerItemId,
+    employeeId: req.session.employeeId,
+    description: target
+      ? `Rejected supplier price for rfq_item ${item.rfqItemId}: ${trimmed}`
+      : `Restored supplier price for rfq_item ${item.rfqItemId}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  res.json({
+    id: offerItemId,
+    isRejected: target,
+    rejectionReason: target ? trimmed : null,
+  });
 });
 
 export default router;

@@ -53,7 +53,7 @@ import {
   purchaseOrderItemsTable,
   customerPoItemsTable,
 } from "@workspace/db";
-import { and, eq, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, ilike, isNull, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { canonicalDescription } from "../ai-assistant/sql-registry";
 import { canonicalPartNo, buildItemIdentity, itemsEquivalent } from "../ai-assistant/item-identity";
@@ -554,7 +554,8 @@ async function loadPricePoints(
     .leftJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
     .leftJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
     .leftJoin(rfqTable, eq(rfqItemsTable.rfqId, rfqTable.id))
-    .where(inArray(offerItemsTable.rfqItemId, ids));
+    // A rejected price is not a market price: it must not feed history or margins.
+    .where(and(inArray(offerItemsTable.rfqItemId, ids), isNull(offerItemsTable.rejectedAt)));
 
   const employeeIds = new Set<number>();
   for (const r of rows) {

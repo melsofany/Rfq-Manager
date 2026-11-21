@@ -327,6 +327,12 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS tax_included BOOLEAN NOT NULL DEFAULT false;
     `);
 
+    // Rejection of a supplier price, with its reason. Each column in its own
+    // statement: a sibling failure inside one query must not roll the others back.
+    await client.query(`ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS rejected_by INTEGER`);
+    await client.query(`ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+
     // Add description to customer_rfq_items (safe migration — skipped if already present)
     await client.query(`
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS description TEXT;
