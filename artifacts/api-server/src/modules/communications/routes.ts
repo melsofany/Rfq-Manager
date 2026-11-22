@@ -2641,7 +2641,7 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
   let phoneInfo: Record<string, unknown> = {};
   try {
     const r = await Whatsapp.$$apiFetch$$(
-      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}?fields=display_phone_number,verified_name,quality_rating,status,platform_type,name_status,code_verification_status,messaging_limit_tier`,
+      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}?fields=display_phone_number,verified_name,quality_rating,status,platform_type,name_status,code_verification_status,messaging_limit_tier,is_official_business_account`,
     );
     phoneInfo = (await r.json()) as Record<string, unknown>;
   } catch (e) {
@@ -2767,10 +2767,64 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
       "whatsapp-api-js v6 (open-source, official Meta Cloud API wrapper — github.com/Secreto31126/whatsapp-api-js)",
   };
 
+  // The green tick is ONE field on the phone number, and it is not something an
+  // API call can grant: Meta awards it, and only to an account that already
+  // meets every prerequisite. Reading the prerequisites individually is what
+  // turns "no badge yet" into a list of what is actually missing, instead of a
+  // guess — the same reason the mail census reports what it examined.
+  const p = phoneInfo as {
+    is_official_business_account?: boolean;
+    name_status?: string;
+    verified_name?: string;
+    code_verification_status?: string;
+    quality_rating?: string;
+  };
+  const officialAccount = {
+    granted: p.is_official_business_account === true,
+    // null (not false) when Meta did not answer — an unread value must never be
+    // reported as a negative fact.
+    grantedKnown: typeof p.is_official_business_account === "boolean",
+    displayName: p.verified_name ?? null,
+    displayNameStatus: p.name_status ?? null,
+    displayNameApproved: p.name_status === "APPROVED",
+    // An EXPIRED code blocks the display name from being reviewed at all, so it
+    // is a prerequisite of the badge rather than a separate cosmetic issue.
+    phoneCodeVerified: p.code_verification_status === "VERIFIED",
+    phoneCodeStatus: p.code_verification_status ?? null,
+    businessVerified: businessInfo.business_verification_status === "verified",
+    accountReviewStatus: businessInfo.account_review_status ?? null,
+    qualityRating: p.quality_rating ?? null,
+  };
+  const requirements = [
+    {
+      key: "business_verified",
+      met: officialAccount.businessVerified,
+      value: officialAccount.accountReviewStatus ?? "UNKNOWN",
+    },
+    {
+      key: "display_name_approved",
+      met: officialAccount.displayNameApproved,
+      value: officialAccount.displayNameStatus ?? "UNKNOWN",
+    },
+    {
+      key: "phone_code_verified",
+      met: officialAccount.phoneCodeVerified,
+      value: officialAccount.phoneCodeStatus ?? "UNKNOWN",
+    },
+  ];
+  const officialAccountSummary = officialAccount.granted
+    ? "granted"
+    : officialAccount.grantedKnown
+      ? requirements.every((r) => r.met)
+        ? "eligible_pending_meta_review"
+        : "missing_requirements"
+      : "unknown";
+
   res.json({
     configured: true,
     phone: phoneInfo,
     business: businessInfo,
+    officialAccount: { ...officialAccount, requirements, summary: officialAccountSummary },
     templates,
     // Plain-language reading of the facts above, so nobody has to infer whether
     // an unverified business blocks the channel. Sending works on UTILITY and

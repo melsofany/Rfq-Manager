@@ -38,6 +38,8 @@ import {
   Eye,
   Copy,
   CheckCircle,
+  BadgeCheck,
+  ShieldQuestion,
   XCircle,
   Loader2,
   ExternalLink,
@@ -118,6 +120,16 @@ interface DiagnoseResult {
     status?: string;
     platform_type?: string;
     error?: string;
+  };
+  officialAccount?: {
+    granted: boolean;
+    grantedKnown: boolean;
+    displayName: string | null;
+    displayNameStatus: string | null;
+    phoneCodeStatus: string | null;
+    qualityRating: string | null;
+    summary: "granted" | "eligible_pending_meta_review" | "missing_requirements" | "unknown";
+    requirements: Array<{ key: string; met: boolean; value: string }>;
   };
   templates?: {
     total?: number;
@@ -2346,6 +2358,70 @@ function SettingsTab() {
                       <span className="text-muted-foreground">
                         {t("whatsapp.settings.messageQuality")}
                       </span>
+                    </div>
+                  )}
+                  {diagnose.officialAccount && (
+                    <div className="border border-border rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-sm font-bold">
+                          {diagnose.officialAccount.granted ? (
+                            <BadgeCheck size={16} className="text-green-600" />
+                          ) : (
+                            <ShieldQuestion size={16} className="text-muted-foreground" />
+                          )}
+                          {t("whatsapp.settings.officialAccount")}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-xs font-bold px-2 py-0.5 rounded-full",
+                            diagnose.officialAccount.summary === "granted"
+                              ? "bg-green-100 text-green-700"
+                              : diagnose.officialAccount.summary === "eligible_pending_meta_review"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-slate-100 text-slate-600",
+                          )}
+                        >
+                          {t(`whatsapp.settings.official.${diagnose.officialAccount.summary}`)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("whatsapp.settings.official.displayName")}:{" "}
+                        <span className="font-bold text-foreground">
+                          {diagnose.officialAccount.displayName || "—"}
+                        </span>
+                      </div>
+                      <ul className="space-y-1">
+                        {diagnose.officialAccount.requirements.map((r) => (
+                          <li key={r.key} className="flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5">
+                              {r.met ? (
+                                <CheckCircle size={13} className="text-green-500" />
+                              ) : (
+                                <XCircle size={13} className="text-red-400" />
+                              )}
+                              {t(`whatsapp.settings.official.req.${r.key}`)}
+                            </span>
+                            <span
+                              className={cn(
+                                "font-mono text-[11px]",
+                                r.met ? "text-green-600" : "text-red-500",
+                              )}
+                            >
+                              {r.value}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      {diagnose.officialAccount.summary === "eligible_pending_meta_review" && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg p-2">
+                          {t("whatsapp.settings.official.awaitingMeta")}
+                        </p>
+                      )}
+                      {diagnose.officialAccount.summary === "missing_requirements" && (
+                        <p className="text-[11px] text-slate-600 bg-slate-50 rounded-lg p-2">
+                          {t("whatsapp.settings.official.notGrantable")}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
