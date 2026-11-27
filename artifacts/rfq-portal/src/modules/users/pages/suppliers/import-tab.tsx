@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { read as xlsxRead, utils as xlsxUtils } from "xlsx";
+import { readXlsxRows, parseCsvRows, downloadCsv } from "@/lib/spreadsheet";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useBulkImportSuppliers,
@@ -374,11 +374,11 @@ async function parseFile(file: File, t: Translate): Promise<ParsedSupplier[]> {
       .filter(Boolean) as ParsedSupplier[];
   }
 
-  if (ext === "csv" || ext === "xlsx" || ext === "xls") {
-    const buffer = await file.arrayBuffer();
-    const wb = xlsxRead(buffer, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  if (ext === "csv" || ext === "xlsx") {
+    const rows =
+      ext === "csv"
+        ? parseCsvRows(await file.text())
+        : await readXlsxRows(await file.arrayBuffer());
     return rows
       .map((row, i) => {
         const s = mapRow(row, t);
@@ -393,7 +393,6 @@ async function parseFile(file: File, t: Translate): Promise<ParsedSupplier[]> {
 // ─── Download Template ───────────────────────────────────────────────────────
 
 function downloadTemplate() {
-  const wb = xlsxUtils.book_new();
   const sampleData = [
     {
       name: "شركة المثال للتوريدات",
@@ -422,15 +421,12 @@ function downloadTemplate() {
       category: "general",
     },
   ];
-  const ws = xlsxUtils.json_to_sheet(sampleData);
-  xlsxUtils.book_append_sheet(wb, ws, "Suppliers");
-  const blob = new Blob([xlsxUtils.sheet_to_csv(ws)], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "suppliers-template.csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  const headers = Array.from(new Set(sampleData.flatMap((row) => Object.keys(row))));
+  const rows: unknown[][] = [
+    headers,
+    ...sampleData.map((row) => headers.map((h) => (row as Record<string, unknown>)[h] ?? "")),
+  ];
+  downloadCsv("suppliers-template.csv", rows);
 }
 
 // ─── ImportTab Component ──────────────────────────────────────────────────────
@@ -936,11 +932,11 @@ export default function ImportSuppliersTab() {
       >
         <FileSpreadsheet size={40} className="mx-auto text-muted-foreground/40 mb-3" />
         <p className="text-sm font-medium text-foreground">{t("supImp.dropHere")}</p>
-        <p className="text-xs text-muted-foreground mt-1">xlsx · xls · csv · json</p>
+        <p className="text-xs text-muted-foreground mt-1">xlsx · csv · json</p>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xlsx,.xls,.csv,.json"
+          accept=".xlsx,.csv,.json"
           className="hidden"
           onChange={handleFileChange}
         />

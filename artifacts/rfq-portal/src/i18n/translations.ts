@@ -1312,7 +1312,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "supImp.col.category": "Category",
     "supImp.second": "(second)",
     "supImp.uploadHeading": "Import suppliers from a file",
-    "supImp.supported": "Supports .xlsx, .xls, .csv, .json",
+    "supImp.supported": "Supports .xlsx, .csv, .json",
     "supImp.mobileOnly": "Mobile numbers only — WhatsApp format applied automatically",
     "supImp.mobileHint":
       "The system accepts Egyptian mobile numbers (010 / 011 / 012 / 015) and converts them automatically to the international WhatsApp format (+20…). Landlines are rejected. You can enter two mobile numbers in one cell separated by /.",
@@ -2623,7 +2623,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "supImp.col.category": "التصنيف",
     "supImp.second": "(ثاني)",
     "supImp.uploadHeading": "استيراد موردين من ملف",
-    "supImp.supported": "يدعم صيغ .xlsx ، .xls ، .csv ، .json",
+    "supImp.supported": "يدعم صيغ .xlsx ، .csv ، .json",
     "supImp.mobileOnly": "أرقام المحمول فقط — تنسيق واتساب تلقائي",
     "supImp.mobileHint":
       "يقبل النظام أرقام المحمول المصرية (010 / 011 / 012 / 015) ويحوّلها تلقائياً لتنسيق واتساب الدولي (+20...). الأرقام الأرضية مرفوضة. يمكنك إدخال رقمين محمول في نفس الخلية مفصولين بـ /.",

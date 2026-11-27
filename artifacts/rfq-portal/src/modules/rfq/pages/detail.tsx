@@ -167,8 +167,7 @@ function normalizeItems(offersData: OffersData): ItemAnalysis[] {
 
 // ── Excel export ─────────────────────────────────────────────────────────────
 async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: OffersData) {
-  const { utils, writeFile } = await import("xlsx");
-  const wb = utils.book_new();
+  const { downloadXlsx } = await import("@/lib/spreadsheet");
   const items = normalizeItems(offersData);
 
   const summaryRows: unknown[][] = [
@@ -249,24 +248,14 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
     }
   });
 
-  const ws = utils.aoa_to_sheet(summaryRows);
-  ws["!cols"] = [
-    { wch: 4 },
-    { wch: 14 },
-    { wch: 40 },
-    { wch: 8 },
-    { wch: 8 },
-    { wch: 16 },
-    { wch: 28 },
-    { wch: 16 },
-    { wch: 10 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 8 },
-  ];
-  utils.book_append_sheet(wb, ws, "Price Comparison");
-  writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
+  await downloadXlsx(`RFQ-Comparison-${rfqNo}.xlsx`, [
+    {
+      sheetName: "Price Comparison",
+      rows: summaryRows,
+      columnWidths: [4, 14, 40, 8, 8, 16, 28, 16, 10, 18, 12, 18, 8],
+      boldRows: [1, 6],
+    },
+  ]);
 }
 
 // ── Dispatch report PDF — rewritten from scratch ─────────────────────────────
