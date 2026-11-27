@@ -31,7 +31,20 @@ app.set("trust proxy", 1);
 
 // Security headers. CSP and COEP stay disabled: the SPA loads Google Fonts
 // and other cross-origin assets, so a strict policy needs a dedicated pass.
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        imgSrc: ["'self'", "data:", "blob:"],
+        frameSrc: ["'self'", "blob:"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
 
 app.use(
   pinoHttp({
